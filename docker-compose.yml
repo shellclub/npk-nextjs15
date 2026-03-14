@@ -1,0 +1,47 @@
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: npk-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: npk_db
+      POSTGRES_USER: npk_user
+      POSTGRES_PASSWORD: npk_secret_2024
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U npk_user -d npk_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Next.js Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: npk-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - DATABASE_URL=postgresql://npk_user:npk_secret_2024@postgres:5432/npk_db?schema=public
+      - NEXT_PUBLIC_BASE_URL=http://localhost:3000
+      - AUTH_URL=http://localhost:3000
+      - AUTH_SECRET=s55T4WnE0XHfkljb+Hqvib2M4QR4uETFP/R9vv0QwMo
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    command: sh -c "npx prisma migrate deploy && npm run dev"
+
+volumes:
+  postgres_data:
+    driver: local

@@ -64,3 +64,5 @@ amplifytools.xcconfig
 
 # Local Netlify folder
 .netlify
+
+/generated/prisma
