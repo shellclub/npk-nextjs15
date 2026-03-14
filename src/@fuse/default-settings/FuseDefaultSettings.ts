@@ -119,10 +119,20 @@ export const defaultThemeOptions: DefaultThemeOptions = {
 	cssVariables: true,
 	spacing: '0.5rem',
 	typography: {
-		fontFamily: ['Geist', 'Roboto', '"Helvetica"', 'Arial', 'sans-serif'].join(','),
+		fontFamily: ['Kanit', 'Roboto', '"Helvetica"', 'Arial', 'sans-serif'].join(','),
 		fontWeightLight: 300,
 		fontWeightRegular: 400,
-		fontWeightMedium: 500
+		fontWeightMedium: 500,
+		fontSize: 15,
+		body1: {
+			fontSize: '0.9375rem'
+		},
+		body2: {
+			fontSize: '0.875rem'
+		},
+		button: {
+			fontSize: '0.9375rem'
+		}
 	},
 	breakpoints: {
 		values: {
@@ -530,7 +540,7 @@ export const defaultThemeOptions: DefaultThemeOptions = {
 		MuiFormLabel: {
 			styleOverrides: {
 				root: {
-					fontSize: '0.75rem', // 12px
+					fontSize: '0.8125rem', // 13px - larger for readability
 					fontWeight: 500,
 					lineHeight: 2
 				}

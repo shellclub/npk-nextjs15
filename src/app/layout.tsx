@@ -12,12 +12,12 @@ import App from './App';
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const metadata = await generateMetadata({
-	title: 'Fuse React - NextJS',
-	description: 'Fuse React - NextJS by FuseTech',
+	title: 'NPK Service & Supply - ระบบจัดการเอกสารธุรกิจ',
+	description: 'ระบบจัดการเอกสารธุรกิจ NPK Service & Supply Co.,Ltd',
 	cardImage: '/card.png',
 	robots: 'follow, index',
 	favicon: '/favicon.ico',
-	url: 'https://react-material.fusetheme.com'
+	url: 'http://localhost:3000'
 });
 
 export default async function RootLayout({
@@ -28,7 +28,7 @@ export default async function RootLayout({
 	const session = await auth();
 
 	return (
-		<html lang="en">
+		<html lang="th">
 			<head>
 				<meta charSet="utf-8" />
 				<meta
@@ -40,6 +40,9 @@ export default async function RootLayout({
 					content="#000000"
 				/>
 				<base href="/" />
+				<link rel="preconnect" href="https://fonts.googleapis.com" />
+				<link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+				<link href="https://fonts.googleapis.com/css2?family=Kanit:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500&display=swap" rel="stylesheet" />
 				{/*
 					manifest.json provides metadata used when your web app is added to the
 					homescreen on Android. See https://developers.google.com/web/fundamentals/engage-and-retain/web-app-manifest/
