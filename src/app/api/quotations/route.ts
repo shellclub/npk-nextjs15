@@ -1,17 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import pg from 'pg';
-import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '@prisma/client';
-
-function getPrisma() {
-  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
-  const adapter = new PrismaPg(pool);
-  return { prisma: new PrismaClient({ adapter }), pool };
-}
+import prisma from '@/lib/prisma';
 
 // GET /api/quotations — List all quotations
 export async function GET(request: NextRequest) {
-  const { prisma, pool } = getPrisma();
   try {
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
@@ -44,15 +35,11 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('GET /api/quotations error:', error);
     return NextResponse.json({ error: 'Failed to fetch quotations' }, { status: 500 });
-  } finally {
-    await prisma.$disconnect();
-    await pool.end();
   }
 }
 
 // POST /api/quotations — Create a new quotation
 export async function POST(request: NextRequest) {
-  const { prisma, pool } = getPrisma();
   try {
     const body = await request.json();
 
@@ -90,6 +77,16 @@ export async function POST(request: NextRequest) {
     const vatAmount = (afterDiscount * vatPercent) / 100;
     const totalAmount = afterDiscount + vatAmount;
 
+    // Resolve creator ID — use provided or fallback to first admin
+    let createdById = body.createdById;
+    if (!createdById || createdById === 'system') {
+      const adminUser = await prisma.user.findFirst({ where: { role: 'ADMIN' } });
+      if (!adminUser) {
+        return NextResponse.json({ error: 'No admin user found' }, { status: 400 });
+      }
+      createdById = adminUser.id;
+    }
+
     const quotation = await prisma.quotation.create({
       data: {
         quotationNumber,
@@ -108,7 +105,7 @@ export async function POST(request: NextRequest) {
         notes: body.notes || null,
         validDays: body.validDays || 30,
         warranty: body.warranty || null,
-        createdById: body.createdById,
+        createdById,
         items: {
           createMany: {
             data: items.map(
@@ -143,8 +140,5 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('POST /api/quotations error:', error);
     return NextResponse.json({ error: 'Failed to create quotation' }, { status: 500 });
-  } finally {
-    await prisma.$disconnect();
-    await pool.end();
   }
 }
