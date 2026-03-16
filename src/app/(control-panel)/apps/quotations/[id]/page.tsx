@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, use, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Typography from '@mui/material/Typography';
 import Paper from '@mui/material/Paper';
@@ -20,6 +20,8 @@ import IconButton from '@mui/material/IconButton';
 import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
 import Alert from '@mui/material/Alert';
+import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -48,11 +50,18 @@ type CustomerGroup = { id: string; groupName: string; contactName?: string | nul
 type QuotationItem = { tempId: number; description: string; unit: string; quantity: number; unitPrice: number };
 type ItemSuggestion = { description: string; unit: string; unitPrice: number };
 
+const statusConfig: Record<string, { label: string; bgColor: string; textColor: string }> = {
+  DRAFT: { label: 'แบบร่าง', bgColor: '#F3F4F6', textColor: '#6B7280' },
+  SENT: { label: 'รออนุมัติ', bgColor: '#FEF3C7', textColor: '#D97706' },
+  APPROVED: { label: 'อนุมัติ', bgColor: '#D1FAE5', textColor: '#059669' },
+  REJECTED: { label: 'ปฏิเสธ', bgColor: '#FEE2E2', textColor: '#DC2626' },
+  CANCELLED: { label: 'ยกเลิก', bgColor: '#E5E7EB', textColor: '#9CA3AF' },
+};
+
 function formatCurrency(amount: number) {
   return amount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-// Section header icon component
 const SectionIcon = ({ gradient, icon }: { gradient: string; icon: string }) => (
   <Box sx={{
     width: 32, height: 32, borderRadius: '8px',
@@ -63,27 +72,29 @@ const SectionIcon = ({ gradient, icon }: { gradient: string; icon: string }) => 
   </Box>
 );
 
-function NewQuotationPage() {
+function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params);
   const router = useRouter();
   const [customers, setCustomers] = useState<CustomerGroup[]>([]);
   const [saving, setSaving] = useState(false);
+  const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState('');
+  const [quotationNumber, setQuotationNumber] = useState('');
+  const [currentStatus, setCurrentStatus] = useState('DRAFT');
 
   const [customerGroupId, setCustomerGroupId] = useState('');
   const [branchId, setBranchId] = useState('');
   const [contactPerson, setContactPerson] = useState('');
   const [projectName, setProjectName] = useState('');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState('');
   const [validDays, setValidDays] = useState(30);
   const [vatPercent, setVatPercent] = useState(7);
   const [discountPercent, setDiscountPercent] = useState(0);
   const [notes, setNotes] = useState('');
-  const [warranty, setWarranty] = useState('รับประกันงานติดตั้ง 1 ปี');
+  const [warranty, setWarranty] = useState('');
 
-  const [items, setItems] = useState<QuotationItem[]>([
-    { tempId: 1, description: '', unit: 'งาน', quantity: 1, unitPrice: 0 },
-  ]);
-  let nextTempId = items.length + 1;
+  const [items, setItems] = useState<QuotationItem[]>([]);
+  const [nextTempId, setNextTempId] = useState(1);
 
   // ── Add Customer Dialog State ──
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
@@ -134,6 +145,34 @@ function NewQuotationPage() {
     setItemSuggestions([]);
   };
 
+  useEffect(() => {
+    setLoadingData(true);
+    fetch(`/api/quotations/${id}`)
+      .then((res) => { if (!res.ok) throw new Error('Not found'); return res.json(); })
+      .then((q) => {
+        setQuotationNumber(q.quotationNumber);
+        setCurrentStatus(q.status);
+        setCustomerGroupId(q.customerGroupId || '');
+        setBranchId(q.branchId || '');
+        setContactPerson(q.contactPerson || '');
+        setProjectName(q.projectName || '');
+        setDate(new Date(q.date).toISOString().split('T')[0]);
+        setValidDays(q.validDays || 30);
+        setVatPercent(Number(q.vatPercent) || 7);
+        setDiscountPercent(Number(q.discountPercent) || 0);
+        setNotes(q.notes || '');
+        setWarranty(q.warranty || '');
+        const loadedItems = (q.items || []).map((item: { description: string; unit: string; quantity: number; unitPrice: number }, idx: number) => ({
+          tempId: idx + 1, description: item.description, unit: item.unit,
+          quantity: Number(item.quantity), unitPrice: Number(item.unitPrice),
+        }));
+        setItems(loadedItems.length > 0 ? loadedItems : [{ tempId: 1, description: '', unit: 'งาน', quantity: 1, unitPrice: 0 }]);
+        setNextTempId(loadedItems.length + 1);
+      })
+      .catch(() => setError('ไม่พบใบเสนอราคานี้'))
+      .finally(() => setLoadingData(false));
+  }, [id]);
+
   const selectedCustomer = customers.find((c) => c.id === customerGroupId);
   const branches = selectedCustomer?.branches || [];
   const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
@@ -143,7 +182,9 @@ function NewQuotationPage() {
   const totalAmount = afterDiscount + vatAmount;
 
   const addItem = () => {
-    setItems([...items, { tempId: nextTempId++, description: '', unit: 'งาน', quantity: 1, unitPrice: 0 }]);
+    const newId = nextTempId;
+    setNextTempId(newId + 1);
+    setItems([...items, { tempId: newId, description: '', unit: 'งาน', quantity: 1, unitPrice: 0 }]);
   };
   const removeItem = (tempId: number) => {
     if (items.length <= 1) return;
@@ -153,20 +194,20 @@ function NewQuotationPage() {
     setItems(items.map((item) => (item.tempId === tempId ? { ...item, [field]: value } : item)));
   };
 
-  const handleSubmit = async (status: 'DRAFT' | 'SENT') => {
+  const handleSubmit = async (status?: string) => {
     setError('');
     if (!customerGroupId) { setError('กรุณาเลือกลูกค้า'); return; }
     if (items.some((item) => !item.description)) { setError('กรุณากรอกรายละเอียดรายการให้ครบ'); return; }
 
     setSaving(true);
     try {
-      const res = await fetch('/api/quotations', {
-        method: 'POST',
+      const res = await fetch(`/api/quotations/${id}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customerGroupId, branchId: branchId || null, contactPerson, projectName, date,
-          validDays, vatPercent, discountPercent, notes, warranty, status,
-          createdById: 'system',
+          validDays, vatPercent, discountPercent, notes, warranty,
+          status: status || currentStatus,
           items: items.map((item) => ({
             description: item.description, unit: item.unit,
             quantity: Number(item.quantity), unitPrice: Number(item.unitPrice),
@@ -203,7 +244,6 @@ function NewQuotationPage() {
       });
       if (!res.ok) throw new Error('Failed');
       const created = await res.json();
-      // Refresh list & auto-select the new customer
       fetchCustomers();
       setCustomerGroupId(created.id);
       setBranchId('');
@@ -237,7 +277,6 @@ function NewQuotationPage() {
       });
       if (!res.ok) throw new Error('Failed');
       const created = await res.json();
-      // Refresh customer list to get updated branches
       fetchCustomers();
       setBranchId(created.id);
       setAddBranchOpen(false);
@@ -247,10 +286,21 @@ function NewQuotationPage() {
     setNewBranchSaving(false);
   };
 
+  if (loadingData) {
+    return (
+      <div className="w-full flex items-center justify-center py-80">
+        <CircularProgress />
+      </div>
+    );
+  }
+
+  const sc = statusConfig[currentStatus] || statusConfig['DRAFT'];
+  const isReadOnly = currentStatus === 'CANCELLED';
+
   const header = (
     <div className="flex flex-auto flex-col py-4">
       <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-        ใบเสนอราคา {'>'} สร้างใหม่
+        ใบเสนอราคา {'>'} แก้ไข {'>'} {quotationNumber}
       </Typography>
       <div className="flex flex-auto items-center gap-8">
         <IconButton onClick={() => router.back()}>
@@ -258,9 +308,15 @@ function NewQuotationPage() {
         </IconButton>
         <motion.span initial={{ x: -20 }} animate={{ x: 0, transition: { delay: 0.2 } }}>
           <Typography variant="h5" fontWeight={800}>
-            สร้างใบเสนอราคา
+            แก้ไขใบเสนอราคา
           </Typography>
         </motion.span>
+        <Chip label={sc.label} size="small" sx={{
+          bgcolor: sc.bgColor, color: sc.textColor, fontWeight: 600, ml: 1,
+        }} />
+        <Typography variant="body2" color="text.secondary" sx={{ ml: 1 }}>
+          เลขที่ {quotationNumber}
+        </Typography>
       </div>
     </div>
   );
@@ -268,8 +324,9 @@ function NewQuotationPage() {
   const content = (
     <Paper className="flex h-full w-full flex-auto flex-col overflow-auto rounded-b-none" elevation={0}>
       <Box sx={{ px: { xs: 2, md: 3 }, py: 2 }}>
-        {error && (
-          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>
+        {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
+        {isReadOnly && (
+          <Alert severity="warning" sx={{ mb: 2 }}>ใบเสนอราคานี้ถูกยกเลิกแล้ว ไม่สามารถแก้ไขได้</Alert>
         )}
 
         <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>
@@ -294,20 +351,23 @@ function NewQuotationPage() {
                     )}
                     slotProps={{ paper: { sx: { borderRadius: '10px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' } } }}
                     fullWidth
+                    disabled={isReadOnly}
                     noOptionsText="ไม่พบลูกค้า"
                   />
-                  <Tooltip title="เพิ่มลูกค้าใหม่" arrow>
-                    <IconButton onClick={handleOpenAddCustomer}
-                      sx={{
-                        mt: '1px',
-                        width: 44, height: 44, flexShrink: 0,
-                        bgcolor: 'primary.main', color: 'primary.contrastText',
-                        borderRadius: '10px',
-                        '&:hover': { bgcolor: 'primary.dark' },
-                      }}>
-                      <FuseSvgIcon size={22}>lucide:user-plus</FuseSvgIcon>
-                    </IconButton>
-                  </Tooltip>
+                  {!isReadOnly && (
+                    <Tooltip title="เพิ่มลูกค้าใหม่" arrow>
+                      <IconButton onClick={handleOpenAddCustomer}
+                        sx={{
+                          mt: '1px',
+                          width: 44, height: 44, flexShrink: 0,
+                          bgcolor: 'primary.main', color: 'primary.contrastText',
+                          borderRadius: '10px',
+                          '&:hover': { bgcolor: 'primary.dark' },
+                        }}>
+                        <FuseSvgIcon size={22}>lucide:user-plus</FuseSvgIcon>
+                      </IconButton>
+                    </Tooltip>
+                  )}
                 </Box>
                 {/* Branch searchable select with Add button */}
                 <Box sx={{ display: 'flex', gap: 1 }}>
@@ -321,10 +381,10 @@ function NewQuotationPage() {
                     )}
                     slotProps={{ paper: { sx: { borderRadius: '10px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' } } }}
                     fullWidth
-                    disabled={!customerGroupId}
+                    disabled={!customerGroupId || isReadOnly}
                     noOptionsText="ไม่มีสาขา"
                   />
-                  {customerGroupId && (
+                  {customerGroupId && !isReadOnly && (
                     <Tooltip title="เพิ่มสาขาใหม่" arrow>
                       <IconButton onClick={handleOpenAddBranch}
                         sx={{
@@ -340,14 +400,14 @@ function NewQuotationPage() {
                   )}
                 </Box>
                 <TextField label="ผู้ติดต่อ" value={contactPerson}
-                  onChange={(e) => setContactPerson(e.target.value)} fullWidth />
+                  onChange={(e) => setContactPerson(e.target.value)} fullWidth disabled={isReadOnly} />
                 <TextField label="ชื่อโครงการ / งาน" value={projectName}
-                  onChange={(e) => setProjectName(e.target.value)} fullWidth />
+                  onChange={(e) => setProjectName(e.target.value)} fullWidth disabled={isReadOnly} />
                 <TextField label="วันที่" type="date" value={date}
-                  onChange={(e) => setDate(e.target.value)} fullWidth
+                  onChange={(e) => setDate(e.target.value)} fullWidth disabled={isReadOnly}
                   InputLabelProps={{ shrink: true }} />
                 <TextField label="เสนอราคามีผล (วัน)" type="number" value={validDays}
-                  onChange={(e) => setValidDays(Number(e.target.value))} fullWidth />
+                  onChange={(e) => setValidDays(Number(e.target.value))} fullWidth disabled={isReadOnly} />
               </Box>
             </Box>
 
@@ -371,7 +431,7 @@ function NewQuotationPage() {
                       <TableCell align="right" sx={{ width: 100 }}>จำนวน</TableCell>
                       <TableCell align="right" sx={{ width: 140 }}>ราคา/หน่วย</TableCell>
                       <TableCell align="right" sx={{ width: 140 }}>จำนวนเงิน</TableCell>
-                      <TableCell sx={{ width: 50 }} />
+                      {!isReadOnly && <TableCell sx={{ width: 50 }} />}
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -379,93 +439,105 @@ function NewQuotationPage() {
                       <TableRow key={item.tempId} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
                         <TableCell align="center" sx={{ fontWeight: 600, color: 'text.secondary' }}>{index + 1}</TableCell>
                         <TableCell>
-                          <Autocomplete
-                            freeSolo
-                            options={itemSuggestions}
-                            getOptionLabel={(opt) => typeof opt === 'string' ? opt : opt.description}
-                            filterOptions={(x) => x}
-                            inputValue={item.description}
-                            onInputChange={(_, val, reason) => {
-                              if (reason === 'input') {
-                                updateItem(item.tempId, 'description', val);
-                                searchItems(val);
-                              }
-                            }}
-                            onChange={(_, val) => {
-                              if (val && typeof val !== 'string') {
-                                handleSelectSuggestion(item.tempId, val);
-                              }
-                            }}
-                            renderOption={(props, option) => {
-                              if (typeof option === 'string') return null;
-                              return (
-                                <ListItem {...props} key={option.description} sx={{ py: 0.5 }}>
-                                  <ListItemText
-                                    primary={option.description}
-                                    secondary={`${option.unit} — ฿${formatCurrency(option.unitPrice)}`}
-                                    primaryTypographyProps={{ fontSize: '14px', fontWeight: 500 }}
-                                    secondaryTypographyProps={{ fontSize: '12px', color: '#0284C7' }}
-                                  />
-                                </ListItem>
-                              );
-                            }}
-                            renderInput={(params) => (
-                              <TextField {...params} placeholder="พิมพ์เพื่อค้นหา..." size="small" fullWidth />
-                            )}
-                            slotProps={{ paper: { sx: { borderRadius: '10px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', mt: 0.5 } } }}
-                            size="small"
-                          />
+                          {isReadOnly ? (
+                            <TextField value={item.description} fullWidth size="small" disabled />
+                          ) : (
+                            <Autocomplete
+                              freeSolo
+                              options={itemSuggestions}
+                              getOptionLabel={(opt) => typeof opt === 'string' ? opt : opt.description}
+                              filterOptions={(x) => x}
+                              inputValue={item.description}
+                              onInputChange={(_, val, reason) => {
+                                if (reason === 'input') {
+                                  updateItem(item.tempId, 'description', val);
+                                  searchItems(val);
+                                }
+                              }}
+                              onChange={(_, val) => {
+                                if (val && typeof val !== 'string') {
+                                  handleSelectSuggestion(item.tempId, val);
+                                }
+                              }}
+                              renderOption={(props, option) => {
+                                if (typeof option === 'string') return null;
+                                return (
+                                  <ListItem {...props} key={option.description} sx={{ py: 0.5 }}>
+                                    <ListItemText
+                                      primary={option.description}
+                                      secondary={`${option.unit} — ฿${formatCurrency(option.unitPrice)}`}
+                                      primaryTypographyProps={{ fontSize: '14px', fontWeight: 500 }}
+                                      secondaryTypographyProps={{ fontSize: '12px', color: '#0284C7' }}
+                                    />
+                                  </ListItem>
+                                );
+                              }}
+                              renderInput={(params) => (
+                                <TextField {...params} placeholder="พิมพ์เพื่อค้นหา..." size="small" fullWidth />
+                              )}
+                              slotProps={{ paper: { sx: { borderRadius: '10px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', mt: 0.5 } } }}
+                              size="small"
+                            />
+                          )}
                         </TableCell>
                         <TableCell>
-                          <Autocomplete
-                            freeSolo
-                            options={unitOptions}
-                            value={item.unit}
-                            onChange={(_, val) => { if (val) updateItem(item.tempId, 'unit', val); }}
-                            onInputChange={(_, val, reason) => {
-                              if (reason === 'input') updateItem(item.tempId, 'unit', val);
-                            }}
-                            renderInput={(params) => (
-                              <TextField {...params} size="small" fullWidth />
-                            )}
-                            slotProps={{ paper: { sx: { borderRadius: '10px', mt: 0.5 } } }}
-                            size="small"
-                            disableClearable
-                          />
+                          {isReadOnly ? (
+                            <TextField value={item.unit} size="small" fullWidth disabled />
+                          ) : (
+                            <Autocomplete
+                              freeSolo
+                              options={unitOptions}
+                              value={item.unit}
+                              onChange={(_, val) => { if (val) updateItem(item.tempId, 'unit', val); }}
+                              onInputChange={(_, val, reason) => {
+                                if (reason === 'input') updateItem(item.tempId, 'unit', val);
+                              }}
+                              renderInput={(params) => (
+                                <TextField {...params} size="small" fullWidth />
+                              )}
+                              slotProps={{ paper: { sx: { borderRadius: '10px', mt: 0.5 } } }}
+                              size="small"
+                              disableClearable
+                            />
+                          )}
                         </TableCell>
                         <TableCell>
                           <TextField type="number" value={item.quantity}
                             onChange={(e) => updateItem(item.tempId, 'quantity', Number(e.target.value))}
-                            size="small" fullWidth
+                            size="small" fullWidth disabled={isReadOnly}
                             inputProps={{ min: 1, style: { textAlign: 'right' } }} />
                         </TableCell>
                         <TableCell>
                           <TextField type="number" value={item.unitPrice}
                             onChange={(e) => updateItem(item.tempId, 'unitPrice', Number(e.target.value))}
-                            size="small" fullWidth
+                            size="small" fullWidth disabled={isReadOnly}
                             inputProps={{ min: 0, step: 100, style: { textAlign: 'right' } }} />
                         </TableCell>
                         <TableCell align="right" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
                           {formatCurrency(item.quantity * item.unitPrice)}
                         </TableCell>
-                        <TableCell>
-                          <IconButton size="small" onClick={() => removeItem(item.tempId)} disabled={items.length <= 1}
-                            sx={{ color: 'error.main', '&:hover': { bgcolor: 'error.lighter' } }}>
-                            <FuseSvgIcon size={18}>lucide:trash-2</FuseSvgIcon>
-                          </IconButton>
-                        </TableCell>
+                        {!isReadOnly && (
+                          <TableCell>
+                            <IconButton size="small" onClick={() => removeItem(item.tempId)} disabled={items.length <= 1}
+                              sx={{ color: 'error.main', '&:hover': { bgcolor: 'error.lighter' } }}>
+                              <FuseSvgIcon size={18}>lucide:trash-2</FuseSvgIcon>
+                            </IconButton>
+                          </TableCell>
+                        )}
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
               </TableContainer>
 
-              <Button variant="outlined" color="success"
-                startIcon={<FuseSvgIcon size={18}>lucide:plus</FuseSvgIcon>}
-                onClick={addItem}
-                sx={{ mt: 1.5, textTransform: 'none', fontWeight: 600, borderStyle: 'dashed', borderWidth: 2 }}>
-                เพิ่มรายการ
-              </Button>
+              {!isReadOnly && (
+                <Button variant="outlined" color="success"
+                  startIcon={<FuseSvgIcon size={18}>lucide:plus</FuseSvgIcon>}
+                  onClick={addItem}
+                  sx={{ mt: 1.5, textTransform: 'none', fontWeight: 600, borderStyle: 'dashed', borderWidth: 2 }}>
+                  เพิ่มรายการ
+                </Button>
+              )}
 
               {/* Totals */}
               <Box sx={{ mt: 2.5, display: 'flex', justifyContent: 'flex-end' }}>
@@ -483,7 +555,7 @@ function NewQuotationPage() {
                       <Typography color="text.secondary">ส่วนลด</Typography>
                       <TextField type="number" value={discountPercent}
                         onChange={(e) => setDiscountPercent(Number(e.target.value))}
-                        size="small"
+                        size="small" disabled={isReadOnly}
                         inputProps={{ min: 0, max: 100, style: { textAlign: 'right', width: '48px' } }}
                         sx={{ '& .MuiOutlinedInput-root': { minHeight: '36px' } }} />
                       <Typography color="text.secondary">%</Typography>
@@ -497,7 +569,7 @@ function NewQuotationPage() {
                       <Typography color="text.secondary">VAT</Typography>
                       <TextField type="number" value={vatPercent}
                         onChange={(e) => setVatPercent(Number(e.target.value))}
-                        size="small"
+                        size="small" disabled={isReadOnly}
                         inputProps={{ min: 0, max: 100, style: { textAlign: 'right', width: '48px' } }}
                         sx={{ '& .MuiOutlinedInput-root': { minHeight: '36px' } }} />
                       <Typography color="text.secondary">%</Typography>
@@ -526,39 +598,41 @@ function NewQuotationPage() {
 
               <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
                 <TextField label="หมายเหตุ" value={notes}
-                  onChange={(e) => setNotes(e.target.value)} multiline rows={3} fullWidth />
+                  onChange={(e) => setNotes(e.target.value)} multiline rows={3} fullWidth disabled={isReadOnly} />
                 <TextField label="เงื่อนไขรับประกัน" value={warranty}
-                  onChange={(e) => setWarranty(e.target.value)} multiline rows={3} fullWidth />
+                  onChange={(e) => setWarranty(e.target.value)} multiline rows={3} fullWidth disabled={isReadOnly} />
               </Box>
             </Box>
 
             {/* ── Section 4: Action Buttons ── */}
-            <Box sx={{
-              px: { xs: 1, md: 2 }, py: 2,
-              display: 'flex', justifyContent: 'flex-end', gap: 1.5,
-            }}>
-              <Button variant="outlined" size="large" onClick={() => router.back()}
-                sx={{ textTransform: 'none', fontWeight: 600, borderColor: 'divider', color: 'text.secondary' }}>
-                ยกเลิก
-              </Button>
-              <Button variant="outlined" color="primary" size="large"
-                onClick={() => handleSubmit('DRAFT')} disabled={saving}
-                startIcon={<FuseSvgIcon size={18}>lucide:save</FuseSvgIcon>}
-                sx={{ textTransform: 'none', fontWeight: 600 }}>
-                บันทึกแบบร่าง
-              </Button>
-              <Button variant="contained" color="primary" size="large"
-                onClick={() => handleSubmit('SENT')} disabled={saving}
-                startIcon={<FuseSvgIcon size={18}>lucide:send</FuseSvgIcon>}
-                sx={{
-                  textTransform: 'none', fontWeight: 600,
-                  background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)',
-                  boxShadow: '0 4px 14px rgba(59,130,246,0.3)',
-                  '&:hover': { background: 'linear-gradient(135deg, #2563EB, #1E40AF)' },
-                }}>
-                {saving ? 'กำลังบันทึก...' : 'บันทึก & ส่ง'}
-              </Button>
-            </Box>
+            {!isReadOnly && (
+              <Box sx={{
+                px: { xs: 1, md: 2 }, py: 2,
+                display: 'flex', justifyContent: 'flex-end', gap: 1.5,
+              }}>
+                <Button variant="outlined" size="large" onClick={() => router.back()}
+                  sx={{ textTransform: 'none', fontWeight: 600, borderColor: 'divider', color: 'text.secondary' }}>
+                  ยกเลิก
+                </Button>
+                <Button variant="outlined" color="primary" size="large"
+                  onClick={() => handleSubmit('DRAFT')} disabled={saving}
+                  startIcon={<FuseSvgIcon size={18}>lucide:save</FuseSvgIcon>}
+                  sx={{ textTransform: 'none', fontWeight: 600 }}>
+                  บันทึกแบบร่าง
+                </Button>
+                <Button variant="contained" color="primary" size="large"
+                  onClick={() => handleSubmit('SENT')} disabled={saving}
+                  startIcon={<FuseSvgIcon size={18}>lucide:send</FuseSvgIcon>}
+                  sx={{
+                    textTransform: 'none', fontWeight: 600,
+                    background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)',
+                    boxShadow: '0 4px 14px rgba(59,130,246,0.3)',
+                    '&:hover': { background: 'linear-gradient(135deg, #2563EB, #1E40AF)' },
+                  }}>
+                  {saving ? 'กำลังบันทึก...' : 'บันทึก & ส่ง'}
+                </Button>
+              </Box>
+            )}
         </motion.div>
       </Box>
 
@@ -670,4 +744,4 @@ function NewQuotationPage() {
   return <Root header={header} content={content} />;
 }
 
-export default NewQuotationPage;
+export default EditQuotationPage;

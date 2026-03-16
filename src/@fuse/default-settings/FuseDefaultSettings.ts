@@ -125,13 +125,13 @@ export const defaultThemeOptions: DefaultThemeOptions = {
 		fontWeightMedium: 500,
 		fontSize: 15,
 		body1: {
-			fontSize: '0.9375rem'
+			fontSize: '0.9375rem' // 15px
 		},
 		body2: {
-			fontSize: '0.875rem'
+			fontSize: '0.875rem' // 14px
 		},
 		button: {
-			fontSize: '0.9375rem'
+			fontSize: '0.9375rem' // 15px
 		}
 	},
 	breakpoints: {
@@ -540,7 +540,7 @@ export const defaultThemeOptions: DefaultThemeOptions = {
 		MuiFormLabel: {
 			styleOverrides: {
 				root: {
-					fontSize: '0.8125rem', // 13px - larger for readability
+					fontSize: '0.9375rem', // 15px - large for readability
 					fontWeight: 500,
 					lineHeight: 2
 				}
@@ -577,7 +577,7 @@ export const defaultThemeOptions: DefaultThemeOptions = {
 		MuiSelect: {
 			defaultProps: {
 				color: 'secondary',
-				size: 'small'
+				size: 'medium'
 			},
 			styleOverrides: {
 				select: {
@@ -618,22 +618,25 @@ export const defaultThemeOptions: DefaultThemeOptions = {
 			styleOverrides: {
 				root: {
 					height: 'auto!important',
-					minHeight: spacing(32),
+					minHeight: spacing(44), // 44px — large for readability
+					borderRadius: spacing(10), // 10px — modern rounded
+					fontSize: '0.9375rem', // 15px
 					'&.MuiInputBase-sizeSmall': {
-						minHeight: spacing(28)
+						minHeight: spacing(36) // 36px
 					}
 				},
 				sizeSmall: {
-					minHeight: spacing(28)
+					minHeight: spacing(36)
 				},
 				input: {
-					padding: `${spacing(6)} ${spacing(12)}` // 6px 12px
+					padding: `${spacing(8)} ${spacing(12)}`, // 8px 12px
+					fontSize: '0.9375rem' // 15px
 				},
 				inputSizeSmall: {
-					padding: `${spacing(4)} ${spacing(12)}` // 4px 12px
+					padding: `${spacing(6)} ${spacing(12)}` // 6px 12px
 				},
 				multiline: {
-					padding: `${spacing(6)} ${spacing(12)}` // 6px 12px
+					padding: `${spacing(8)} ${spacing(12)}` // 8px 12px
 				},
 				adornedStart: {
 					paddingLeft: `${spacing(8)}`
@@ -923,12 +926,12 @@ export const defaultThemeOptions: DefaultThemeOptions = {
 export const mustHaveThemeOptions = {
 	typography: {
 		htmlFontSize: 16,
-		fontSize: 13,
+		fontSize: 15,
 		body1: {
-			fontSize: '0.8125rem'
+			fontSize: '0.9375rem' // 15px
 		},
 		body2: {
-			fontSize: '0.8125rem'
+			fontSize: '0.875rem' // 14px
 		}
 	}
 };

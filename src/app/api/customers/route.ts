@@ -15,3 +15,35 @@ export async function GET() {
     return NextResponse.json({ error: 'Failed to fetch customers' }, { status: 500 });
   }
 }
+
+// POST /api/customers — Create a new customer group
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { groupName, headOfficeAddress, taxId, contactName, contactPhone, contactEmail } = body;
+
+    if (!groupName || !headOfficeAddress) {
+      return NextResponse.json(
+        { error: 'กรุณากรอกชื่อลูกค้าและที่อยู่' },
+        { status: 400 }
+      );
+    }
+
+    const customer = await prisma.customerGroup.create({
+      data: {
+        groupName,
+        headOfficeAddress,
+        taxId: taxId || null,
+        contactName: contactName || null,
+        contactPhone: contactPhone || null,
+        contactEmail: contactEmail || null,
+      },
+      include: { branches: true },
+    });
+
+    return NextResponse.json(customer, { status: 201 });
+  } catch (error) {
+    console.error('POST /api/customers error:', error);
+    return NextResponse.json({ error: 'Failed to create customer' }, { status: 500 });
+  }
+}

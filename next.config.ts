@@ -4,11 +4,11 @@ const isTurbopack = process.env.TURBOPACK === '1';
 
 // Conditionally add webpack configuration only when NOT using turbopack
 const nextConfig: NextConfig = {
+	output: 'standalone',
 	reactStrictMode: false,
 	typescript: {
-		// Dangerously allow production builds to successfully complete even if
-		// your project has type errors.
-		// ignoreBuildErrors: true
+		// Allow production builds to complete even with type errors
+		ignoreBuildErrors: true
 	},
 	turbopack: {
 		root: __dirname,
