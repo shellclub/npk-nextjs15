@@ -6,7 +6,7 @@ import Box from '@mui/material/Box';
 import FuseSvgIcon from '@fuse/core/FuseSvgIcon';
 import { motion } from 'motion/react';
 
-function 0Page() {
+function ZeroPage() {
   return (
     <div className="flex flex-col items-center justify-center w-full min-h-[60vh]">
       <motion.div
@@ -33,4 +33,4 @@ function 0Page() {
   );
 }
 
-export default 0Page;
+export default ZeroPage;
