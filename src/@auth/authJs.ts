@@ -94,37 +94,25 @@ const config = {
 
 			if (session) {
 				try {
-					/**
-					 * Get the session user from database
-					 */
-					const response = await authGetDbUserByEmail(session.user.email);
+					const mockApiInstance = (await import('src/@mock-utils/mockApi')).default;
+					const api = mockApiInstance('users');
 
-					const userDbData = (await response.json()) as User;
+					let userDbData = await api.find({ email: session.user.email });
 
-					session.db = userDbData;
-
-					return session;
-				} catch (error) {
-					const errorStatus = error?.status;
-
-					/** If user not found, create a new user */
-					if (errorStatus === 404) {
-						const newUserResponse = await authCreateDbUser({
+					if (!userDbData) {
+						// User not found, create a new user
+						userDbData = await api.create({
 							email: session.user.email,
 							role: ['admin'],
-							displayName: session.user.name,
-							photoURL: session.user.image
-						});
-
-						const newUser = (await newUserResponse.json()) as User;
-
-						console.error('Error fetching user data:', error);
-
-						session.db = newUser;
-
-						return session;
+							displayName: session.user.name || session.user.email,
+							photoURL: session.user.image || ''
+						} as Record<string, unknown> & { id?: string });
 					}
 
+					session.db = userDbData as User;
+					return session;
+				} catch (error) {
+					console.error('Session callback error:', error);
 					throw error;
 				}
 			}
