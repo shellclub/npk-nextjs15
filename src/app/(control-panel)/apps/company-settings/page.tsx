@@ -10,8 +10,21 @@ import Divider from '@mui/material/Divider';
 import Card from '@mui/material/Card';
 import CardContent from '@mui/material/CardContent';
 import Chip from '@mui/material/Chip';
+import Grid from '@mui/material/Grid';
+import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
+import Snackbar from '@mui/material/Snackbar';
+import Alert from '@mui/material/Alert';
 import FuseSvgIcon from '@fuse/core/FuseSvgIcon';
+import FusePageCarded from '@fuse/core/FusePageCarded';
+import { styled } from '@mui/material/styles';
 import { motion } from 'motion/react';
+
+const Root = styled(FusePageCarded)(() => ({
+  '& .container': {
+    maxWidth: '100%!important',
+  },
+}));
 
 // Mock company data
 const companyData = {
@@ -43,133 +56,142 @@ const companyData = {
 };
 
 function CompanySettingsPage() {
+	const [saved, setSaved] = useState(false);
+
 	return (
-		<div className="flex flex-col w-full">
-			{/* Header */}
-			<div className="flex flex-col sm:flex-row space-y-16 sm:space-y-0 flex-1 items-center justify-between py-24 px-24 md:px-32">
-				<motion.div
-					initial={{ x: -20, opacity: 0 }}
-					animate={{ x: 0, opacity: 1 }}
-				>
-					<Typography className="text-24 md:text-32 font-extrabold tracking-tight">
-						ข้อมูลบริษัท
-					</Typography>
-					<Typography
-						className="text-14 font-medium"
-						color="text.secondary"
+		<Root
+			header={
+				<div className="flex flex-col sm:flex-row flex-1 w-full items-center justify-between py-24 px-24 md:px-32 gap-16">
+					<motion.div
+						initial={{ x: -20, opacity: 0 }}
+						animate={{ x: 0, opacity: 1 }}
 					>
-						ตั้งค่าข้อมูลบริษัทสำหรับเอกสาร
-					</Typography>
-				</motion.div>
-
-				<motion.div
-					initial={{ opacity: 0, x: 20 }}
-					animate={{ opacity: 1, x: 0 }}
-				>
-					<Button
-						variant="contained"
-						color="secondary"
-						startIcon={<FuseSvgIcon size={20}>lucide:save</FuseSvgIcon>}
-					>
-						บันทึก
-					</Button>
-				</motion.div>
-			</div>
-
-			<div className="grid grid-cols-1 lg:grid-cols-2 gap-24 px-24 md:px-32 pb-32">
-				{/* Company Info */}
-				<motion.div
-					initial={{ opacity: 0, y: 20 }}
-					animate={{ opacity: 1, y: 0 }}
-				>
-					<Paper className="rounded-xl shadow-sm p-24">
-						<Typography className="text-16 font-bold mb-16 flex items-center">
-							<FuseSvgIcon className="mr-8" size={20}>lucide:building-2</FuseSvgIcon>
+						<Typography className="text-24 md:text-32 font-extrabold tracking-tight leading-none">
 							ข้อมูลบริษัท
 						</Typography>
-						<div className="space-y-16">
+						<Typography className="text-14 font-medium mt-2" color="text.secondary">
+							ตั้งค่าข้อมูลบริษัทสำหรับเอกสาร
+						</Typography>
+					</motion.div>
+
+					<motion.div
+						initial={{ opacity: 0, x: 20 }}
+						animate={{ opacity: 1, x: 0 }}
+					>
+						<Button
+							variant="contained"
+							color="secondary"
+							startIcon={<FuseSvgIcon size={20}>lucide:save</FuseSvgIcon>}
+							onClick={() => setSaved(true)}
+							size="large"
+						>
+							บันทึกข้อมูล
+						</Button>
+					</motion.div>
+				</div>
+			}
+			content={
+				<div className="w-full px-24 md:px-32 pb-32">
+					{/* Company Information Section */}
+					<Paper className="w-full rounded-xl shadow-sm p-24 md:p-32 mb-24">
+						<div className="flex items-center gap-8 mb-24">
+							<FuseSvgIcon className="text-blue-500" size={24}>lucide:building-2</FuseSvgIcon>
+							<Typography className="text-18 font-bold">ข้อมูลบริษัท</Typography>
+						</div>
+						<div className="grid grid-cols-1 md:grid-cols-2 gap-20">
 							<TextField
 								label="ชื่อบริษัท (ภาษาไทย)"
 								fullWidth
 								defaultValue={companyData.nameTh}
 								variant="outlined"
+								size="medium"
 							/>
 							<TextField
 								label="ชื่อบริษัท (ภาษาอังกฤษ)"
 								fullWidth
 								defaultValue={companyData.nameEn}
 								variant="outlined"
+								size="medium"
 							/>
 							<TextField
 								label="ที่อยู่ (ภาษาไทย)"
 								fullWidth
 								multiline
-								rows={2}
+								rows={3}
 								defaultValue={companyData.addressTh}
 								variant="outlined"
+								className="md:col-span-2"
 							/>
 							<TextField
 								label="ที่อยู่ (ภาษาอังกฤษ)"
 								fullWidth
 								multiline
-								rows={2}
+								rows={3}
 								defaultValue={companyData.addressEn}
 								variant="outlined"
+								className="md:col-span-2"
 							/>
 							<TextField
-								label="เลขผู้เสียภาษี"
+								label="เลขประจำตัวผู้เสียภาษี"
 								fullWidth
 								defaultValue={companyData.taxId}
 								variant="outlined"
+								size="medium"
 							/>
-						</div>
-					</Paper>
-				</motion.div>
-
-				{/* Contact Info */}
-				<motion.div
-					initial={{ opacity: 0, y: 20 }}
-					animate={{ opacity: 1, y: 0 }}
-					transition={{ delay: 0.1 }}
-				>
-					<Paper className="rounded-xl shadow-sm p-24">
-						<Typography className="text-16 font-bold mb-16 flex items-center">
-							<FuseSvgIcon className="mr-8" size={20}>lucide:phone</FuseSvgIcon>
-							ข้อมูลติดต่อ
-						</Typography>
-						<div className="space-y-16">
-							{companyData.phones.map((phone, index) => (
-								<TextField
-									key={index}
-									label={`เบอร์โทร ${index + 1}`}
-									fullWidth
-									defaultValue={phone}
-									variant="outlined"
-								/>
-							))}
 							<TextField
-								label="E-mail"
+								label="อีเมล"
 								fullWidth
 								defaultValue={companyData.email}
 								variant="outlined"
+								size="medium"
 							/>
 						</div>
 					</Paper>
-				</motion.div>
 
-				{/* Bank Accounts */}
-				<motion.div
-					className="lg:col-span-2"
-					initial={{ opacity: 0, y: 20 }}
-					animate={{ opacity: 1, y: 0 }}
-					transition={{ delay: 0.2 }}
-				>
-					<Paper className="rounded-xl shadow-sm p-24">
-						<div className="flex items-center justify-between mb-16">
-							<Typography className="text-16 font-bold flex items-center">
-								<FuseSvgIcon className="mr-8" size={20}>lucide:landmark</FuseSvgIcon>
-								บัญชีธนาคาร
-							</Typography>
+					{/* Contact Information Section */}
+					<Paper className="w-full rounded-xl shadow-sm p-24 md:p-32 mb-24">
+						<div className="flex items-center justify-between mb-24">
+							<div className="flex items-center gap-8">
+								<FuseSvgIcon className="text-green-500" size={24}>lucide:phone</FuseSvgIcon>
+								<Typography className="text-18 font-bold">เบอร์ติดต่อ</Typography>
+							</div>
+							<Button
+								variant="outlined"
+								size="small"
+								startIcon={<FuseSvgIcon size={16}>lucide:plus</FuseSvgIcon>}
+							>
+								เพิ่มเบอร์
+							</Button>
+						</div>
+						<div className="grid grid-cols-1 md:grid-cols-3 gap-20">
+							{companyData.phones.map((phone, index) => (
+								<div key={index} className="flex items-start gap-8">
+									<TextField
+										label={`เบอร์โทร ${index + 1}`}
+										fullWidth
+										defaultValue={phone}
+										variant="outlined"
+										size="medium"
+									/>
+									{index > 0 && (
+										<Tooltip title="ลบเบอร์นี้">
+											<IconButton color="error" className="mt-8">
+												<FuseSvgIcon size={18}>lucide:x</FuseSvgIcon>
+											</IconButton>
+										</Tooltip>
+									)}
+								</div>
+							))}
+						</div>
+					</Paper>
+
+					{/* Bank Accounts Section */}
+					<Paper className="w-full rounded-xl shadow-sm p-24 md:p-32">
+						<div className="flex items-center justify-between mb-24">
+							<div className="flex items-center gap-8">
+								<FuseSvgIcon className="text-purple-500" size={24}>lucide:landmark</FuseSvgIcon>
+								<Typography className="text-18 font-bold">บัญชีธนาคาร</Typography>
+							</div>
 							<Button
 								variant="outlined"
 								size="small"
@@ -178,51 +200,76 @@ function CompanySettingsPage() {
 								เพิ่มบัญชี
 							</Button>
 						</div>
-						<div className="grid grid-cols-1 md:grid-cols-2 gap-16">
+						<div className="grid grid-cols-1 md:grid-cols-2 gap-20">
 							{companyData.bankAccounts.map((account) => (
 								<Card
 									key={account.id}
 									variant="outlined"
-									className="rounded-lg"
+									className="rounded-xl"
 								>
-									<CardContent>
-										<div className="flex items-center justify-between mb-8">
-											<Typography className="font-bold text-15">
-												{account.bank}
-											</Typography>
-											<Chip
-												label={account.type}
-												size="small"
-												color="primary"
-												variant="outlined"
-											/>
+									<CardContent className="p-20">
+										<div className="flex items-center justify-between mb-12">
+											<div className="flex items-center gap-8">
+												<FuseSvgIcon className="text-blue-500" size={20}>lucide:building</FuseSvgIcon>
+												<Typography className="font-bold text-16">
+													{account.bank}
+												</Typography>
+											</div>
+											<div className="flex items-center gap-4">
+												<Chip
+													label={account.type}
+													size="small"
+													color="primary"
+													variant="filled"
+												/>
+												<Tooltip title="แก้ไข">
+													<IconButton size="small" color="primary">
+														<FuseSvgIcon size={16}>lucide:pencil</FuseSvgIcon>
+													</IconButton>
+												</Tooltip>
+												<Tooltip title="ลบ">
+													<IconButton size="small" color="error">
+														<FuseSvgIcon size={16}>lucide:trash-2</FuseSvgIcon>
+													</IconButton>
+												</Tooltip>
+											</div>
 										</div>
-										<Typography
-											className="text-13 mb-4"
-											color="text.secondary"
-										>
-											สาขา: {account.branch}
-										</Typography>
-										<Typography
-											className="text-13 mb-4"
-											color="text.secondary"
-										>
-											ชื่อบัญชี: {account.accountName}
-										</Typography>
-										<Typography
-											className="text-13 font-medium"
-											color="primary"
-										>
-											เลขที่: {account.accountNumber}
-										</Typography>
+										<Divider className="mb-12" />
+										<div className="grid grid-cols-1 gap-8">
+											<div className="flex gap-8">
+												<Typography className="text-13 text-gray-500 w-80 shrink-0">สาขา:</Typography>
+												<Typography className="text-13 font-medium">{account.branch}</Typography>
+											</div>
+											<div className="flex gap-8">
+												<Typography className="text-13 text-gray-500 w-80 shrink-0">ชื่อบัญชี:</Typography>
+												<Typography className="text-13 font-medium">{account.accountName}</Typography>
+											</div>
+											<div className="flex gap-8">
+												<Typography className="text-13 text-gray-500 w-80 shrink-0">เลขที่:</Typography>
+												<Typography className="text-14 font-bold text-blue-600">{account.accountNumber}</Typography>
+											</div>
+										</div>
 									</CardContent>
 								</Card>
 							))}
 						</div>
 					</Paper>
-				</motion.div>
-			</div>
-		</div>
+
+					{/* Snackbar */}
+					<Snackbar
+						open={saved}
+						autoHideDuration={3000}
+						onClose={() => setSaved(false)}
+						anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+					>
+						<Alert severity="success" variant="filled" onClose={() => setSaved(false)}>
+							บันทึกข้อมูลบริษัทเรียบร้อยแล้ว
+						</Alert>
+					</Snackbar>
+				</div>
+			}
+			scroll="content"
+		/>
 	);
 }
 
