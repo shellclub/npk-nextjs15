@@ -20,8 +20,8 @@ jobs:
             git pull origin main
             docker compose down
             docker compose up -d --build
-            # Wait for DB to be healthy then run migrations + seed
-            sleep 10
-            docker exec npk-app sh -c "npx prisma migrate deploy --schema=./prisma/schema.prisma" || true
+            # Wait for containers to start
+            sleep 15
+            # Run seed
             docker exec npk-app sh -c "npx tsx prisma/seed.ts" || true
             echo "✅ Deploy complete!"

@@ -25,7 +25,14 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder /app/package.json ./package.json
 
+# Install dotenv + tsx for migrations/seed (lightweight)
+RUN npm install --no-save dotenv tsx typescript @types/node pg @prisma/adapter-pg
+
+# Create entrypoint that writes .env then starts server
+RUN printf '#!/bin/sh\necho "DATABASE_URL=$DATABASE_URL" > .env\necho "AUTH_SECRET=$AUTH_SECRET" >> .env\necho "AUTH_URL=$AUTH_URL" >> .env\necho "NEXT_PUBLIC_BASE_URL=$NEXT_PUBLIC_BASE_URL" >> .env\nnpx prisma migrate deploy --schema=./prisma/schema.prisma 2>&1 || true\nexec node server.js\n' > /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+
 EXPOSE 3000
-CMD ["node", "server.js"]
+CMD ["/app/entrypoint.sh"]
