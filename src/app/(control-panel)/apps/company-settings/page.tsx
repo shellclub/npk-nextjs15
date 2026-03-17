@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import Paper from '@mui/material/Paper';
@@ -20,6 +20,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import MenuItem from '@mui/material/MenuItem';
 import InputAdornment from '@mui/material/InputAdornment';
+import CircularProgress from '@mui/material/CircularProgress';
 import FuseSvgIcon from '@fuse/core/FuseSvgIcon';
 import FusePageCarded from '@fuse/core/FusePageCarded';
 import { styled } from '@mui/material/styles';
@@ -108,6 +109,12 @@ const fieldSx = { '& .MuiOutlinedInput-root': { borderRadius: '10px' } };
 function CompanySettingsPage() {
 	const [data, setData] = useState<CompanyData>(initialCompanyData);
 
+	// Logo upload
+	const fileInputRef = useRef<HTMLInputElement>(null);
+	const [logoUrl, setLogoUrl] = useState<string>('/assets/images/logo/npk-logo.png');
+	const [logoUploading, setLogoUploading] = useState(false);
+	const [dragOver, setDragOver] = useState(false);
+
 	// Bank dialog
 	const [bankDialogOpen, setBankDialogOpen] = useState(false);
 	const [bankDialogMode, setBankDialogMode] = useState<'create' | 'edit'>('create');
@@ -121,6 +128,48 @@ function CompanySettingsPage() {
 
 	// Snackbar
 	const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
+
+	// Logo upload handler
+	const handleLogoUpload = async (file: File) => {
+		if (!file.type.startsWith('image/png')) {
+			setSnackbar({ open: true, message: 'รองรับเฉพาะไฟล์ PNG เท่านั้น', severity: 'error' });
+			return;
+		}
+		if (file.size > 5 * 1024 * 1024) {
+			setSnackbar({ open: true, message: 'ขนาดไฟล์ต้องไม่เกิน 5 MB', severity: 'error' });
+			return;
+		}
+		setLogoUploading(true);
+		try {
+			const formData = new FormData();
+			formData.append('logo', file);
+			const res = await fetch('/api/company/logo', { method: 'POST', body: formData });
+			const result = await res.json();
+			if (res.ok && result.url) {
+				setLogoUrl(result.url);
+				setSnackbar({ open: true, message: 'อัปโหลดโลโก้สำเร็จ', severity: 'success' });
+			} else {
+				setSnackbar({ open: true, message: result.error || 'เกิดข้อผิดพลาด', severity: 'error' });
+			}
+		} catch {
+			setSnackbar({ open: true, message: 'เกิดข้อผิดพลาดในการอัปโหลด', severity: 'error' });
+		} finally {
+			setLogoUploading(false);
+		}
+	};
+
+	const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const file = e.target.files?.[0];
+		if (file) handleLogoUpload(file);
+		e.target.value = '';
+	};
+
+	const handleDrop = (e: React.DragEvent) => {
+		e.preventDefault();
+		setDragOver(false);
+		const file = e.dataTransfer.files?.[0];
+		if (file) handleLogoUpload(file);
+	};
 
 	// Field change
 	const handleChange = (field: keyof CompanyData, value: string) => {
@@ -238,6 +287,76 @@ function CompanySettingsPage() {
 	const content = (
 		<Paper className="flex h-full w-full flex-auto flex-col overflow-auto rounded-b-none" elevation={0}>
 			<Box sx={{ px: 3, py: 3, display: 'flex', flexDirection: 'column', gap: 3 }}>
+
+				{/* ===== Section 0: Company Logo ===== */}
+				<Paper sx={{ borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden' }} elevation={0}>
+					<Box sx={{ bgcolor: '#F8FAFC', px: 3, py: 2, display: 'flex', alignItems: 'center', gap: 1, borderBottom: '1px solid #E2E8F0' }}>
+						<FuseSvgIcon sx={{ color: '#F59E0B' }} size={22}>lucide:image</FuseSvgIcon>
+						<Typography sx={{ fontSize: '16px', fontWeight: 700, color: '#1E293B' }}>โลโก้บริษัท</Typography>
+						<Chip label="แสดงในหัวใบเสนอราคา" size="small" sx={{ ml: 1, fontSize: '11px', height: 22, bgcolor: '#FEF3C7', color: '#D97706' }} />
+					</Box>
+					<Box sx={{ p: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
+						{/* Logo Preview */}
+						<Box sx={{
+							width: 160, height: 160, borderRadius: '12px', border: '2px solid #E2E8F0',
+							display: 'flex', alignItems: 'center', justifyContent: 'center',
+							bgcolor: '#FAFAFA', overflow: 'hidden', flexShrink: 0,
+							position: 'relative',
+						}}>
+							{logoUploading ? (
+								<CircularProgress size={40} sx={{ color: '#0EA5E9' }} />
+							) : (
+								<Box
+									component="img"
+									src={logoUrl}
+									alt="Company Logo"
+									sx={{
+										maxWidth: '90%', maxHeight: '90%', objectFit: 'contain',
+									}}
+									onError={(e: React.SyntheticEvent<HTMLImageElement>) => {
+										e.currentTarget.style.display = 'none';
+									}}
+								/>
+							)}
+						</Box>
+
+						{/* Upload area */}
+						<Box
+							onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+							onDragLeave={() => setDragOver(false)}
+							onDrop={handleDrop}
+							onClick={() => fileInputRef.current?.click()}
+							sx={{
+								flex: 1, minHeight: 140, borderRadius: '12px',
+								border: dragOver ? '2px dashed #0EA5E9' : '2px dashed #CBD5E1',
+								bgcolor: dragOver ? '#F0F9FF' : '#FAFAFA',
+								display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+								cursor: 'pointer', transition: 'all 0.2s',
+								'&:hover': { bgcolor: '#F0F9FF', borderColor: '#0EA5E9' },
+							}}
+						>
+							<input
+								ref={fileInputRef}
+								type="file"
+								accept="image/png"
+								style={{ display: 'none' }}
+								onChange={handleFileSelect}
+							/>
+							<FuseSvgIcon sx={{ color: dragOver ? '#0EA5E9' : '#94A3B8', mb: 1 }} size={36}>lucide:upload-cloud</FuseSvgIcon>
+							<Typography sx={{ fontSize: '15px', fontWeight: 600, color: dragOver ? '#0284C7' : '#475569', mb: 0.5 }}>
+								{dragOver ? 'ปล่อยเพื่ออัปโหลด' : 'คลิกหรือลากไฟล์มาวาง'}
+							</Typography>
+							<Typography sx={{ fontSize: '13px', color: '#94A3B8' }}>
+								รองรับไฟล์ PNG เท่านั้น (ไม่เกิน 5 MB)
+							</Typography>
+							<Button variant="outlined" size="small" onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
+								startIcon={<FuseSvgIcon size={16}>lucide:upload</FuseSvgIcon>}
+								sx={{ mt: 1.5, borderRadius: '8px', textTransform: 'none', fontWeight: 600, fontSize: '13px', borderColor: '#E2E8F0', color: '#64748B' }}>
+								เลือกไฟล์
+							</Button>
+						</Box>
+					</Box>
+				</Paper>
 
 				{/* ===== Section 1: Company Identity ===== */}
 				<Paper sx={{ borderRadius: '12px', border: '1px solid #E2E8F0', overflow: 'hidden' }} elevation={0}>
