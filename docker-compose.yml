@@ -46,8 +46,9 @@ services:
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://npk_user:npk_secret_2024@postgres:5432/npk_db?schema=public
-      - NEXT_PUBLIC_BASE_URL=http://119.59.99.242:3000
-      - AUTH_URL=http://119.59.99.242:3000
+      - NEXT_PUBLIC_BASE_URL=https://erp.npk-serviceandsupply.com
+      - AUTH_URL=https://erp.npk-serviceandsupply.com
+      - AUTH_TRUST_HOST=true
       - AUTH_SECRET=s55T4WnE0XHfkljb+Hqvib2M4QR4uETFP/R9vv0QwMo
     depends_on:
       postgres:
