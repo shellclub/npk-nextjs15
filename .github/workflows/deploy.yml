@@ -20,8 +20,4 @@ jobs:
             git pull origin main
             docker compose down
             docker compose up -d --build
-            # Wait for containers to start
-            sleep 15
-            # Run seed
-            docker exec npk-app sh -c "npx tsx prisma/seed.ts" || true
             echo "✅ Deploy complete!"

@@ -18,6 +18,21 @@ services:
       timeout: 5s
       retries: 5
 
+  # Migration + Seed (runs once then exits)
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: migrator
+    container_name: npk-migrate
+    environment:
+      - DATABASE_URL=postgresql://npk_user:npk_secret_2024@postgres:5432/npk_db?schema=public
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: sh -c "npx prisma migrate deploy --schema=./prisma/schema.prisma && npx tsx prisma/seed.ts"
+    restart: "no"
+
   # Next.js Application (Production)
   app:
     build:
@@ -37,6 +52,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   postgres_data:
