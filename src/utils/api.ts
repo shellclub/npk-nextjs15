@@ -10,8 +10,8 @@ export const API_BASE_URL = (() => {
 		return 'http://localhost:3000';
 	}
 
-	// Client-side in production: use the public URL
-	return process.env.NEXT_PUBLIC_BASE_URL || '/';
+	// Client-side in production: use relative URL (works on any domain)
+	return '';
 })();
 
 let globalHeaders: Record<string, string> = {};

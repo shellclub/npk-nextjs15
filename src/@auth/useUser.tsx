@@ -59,7 +59,7 @@ function useUser(): useUser {
 	 * Sign out
 	 */
 	async function handleSignOut() {
-		return signOut();
+		return signOut({ callbackUrl: '/sign-in' });
 	}
 
 	return {
