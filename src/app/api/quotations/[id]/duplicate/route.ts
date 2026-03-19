@@ -19,12 +19,12 @@ export async function POST(
       return NextResponse.json({ error: 'Quotation not found' }, { status: 404 });
     }
 
-    // Generate new quotation number: Q-YYMMDD-XXX
+    // Generate new quotation number: npk-YYMMDD-XXX
     const now = new Date();
     const yy = String(now.getFullYear()).slice(-2);
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const dd = String(now.getDate()).padStart(2, '0');
-    const prefix = `Q-${yy}${mm}${dd}`;
+    const prefix = `npk-${yy}${mm}${dd}`;
 
     const lastQuotation = await prisma.quotation.findFirst({
       where: { quotationNumber: { startsWith: prefix } },

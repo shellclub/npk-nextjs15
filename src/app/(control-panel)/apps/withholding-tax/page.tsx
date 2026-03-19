@@ -18,6 +18,12 @@ import Tooltip from '@mui/material/Tooltip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Checkbox from '@mui/material/Checkbox';
 import Chip from '@mui/material/Chip';
+import MenuItem from '@mui/material/MenuItem';
+import Menu from '@mui/material/Menu';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemText from '@mui/material/ListItemText';
+import Snackbar from '@mui/material/Snackbar';
+import Alert from '@mui/material/Alert';
 import FuseSvgIcon from '@fuse/core/FuseSvgIcon';
 import FusePageCarded from '@fuse/core/FusePageCarded';
 import { styled } from '@mui/material/styles';
@@ -39,6 +45,15 @@ function WithholdingTaxPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
+
+  // Menu
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [menuItem, setMenuItem] = useState<WithholdingTax | null>(null);
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
+
+  const handleMenuOpen = (e: React.MouseEvent<HTMLElement>, item: WithholdingTax) => { e.stopPropagation(); setMenuAnchor(e.currentTarget); setMenuItem(item); };
+  const handleMenuClose = () => { setMenuAnchor(null); setMenuItem(null); };
+  const handlePrint = () => { if (menuItem) setSnackbar({ open: true, message: `กำลังพิมพ์ 50 ทวิ ${menuItem.whtNumber}...`, severity: 'success' }); handleMenuClose(); };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -123,7 +138,14 @@ function WithholdingTaxPage() {
                     <TableCell align="center"><Chip label={`${wht.taxRate}%`} size="small" sx={{ bgcolor: '#F3E8FF', color: '#7C3AED', fontWeight: 700, fontSize: '13px', borderRadius: '8px' }} /></TableCell>
                     <TableCell align="right" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', fontSize: '16px !important', color: '#DC2626' }}>{fmt(wht.taxAmount)}</TableCell>
                     <TableCell><Typography sx={{ fontSize: '14px', color: '#0284C7' }}>{wht.paymentVoucher?.voucherNumber || '-'}</Typography></TableCell>
-                    <TableCell align="center"><Tooltip title="พิมพ์ 50 ทวิ"><IconButton size="small"><FuseSvgIcon size={18}>lucide:printer</FuseSvgIcon></IconButton></Tooltip></TableCell>
+                    <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                      <Tooltip title="จัดการ" arrow>
+                        <IconButton size="small" onClick={(e) => handleMenuOpen(e, wht)}
+                          sx={{ color: '#64748B', borderRadius: '8px', '&:hover': { bgcolor: '#FAF5FF', color: '#7C3AED' } }}>
+                          <FuseSvgIcon size={20}>lucide:ellipsis-vertical</FuseSvgIcon>
+                        </IconButton>
+                      </Tooltip>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -135,6 +157,23 @@ function WithholdingTaxPage() {
           </Box>
         </>
       )}
+
+      {/* Action Menu */}
+      <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={handleMenuClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        slotProps={{ paper: { sx: { borderRadius: '12px', minWidth: 200, boxShadow: '0 8px 30px rgba(0,0,0,0.12)', py: 0.5 } } }}>
+        <MenuItem onClick={handlePrint} sx={{ py: 1.2, gap: 1.5 }}>
+          <ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#7C3AED' }}>lucide:printer</FuseSvgIcon></ListItemIcon>
+          <ListItemText>พิมพ์ 50 ทวิ</ListItemText>
+        </MenuItem>
+      </Menu>
+
+      <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(p => ({ ...p, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert severity={snackbar.severity} variant="filled" onClose={() => setSnackbar(p => ({ ...p, open: false }))} sx={{ borderRadius: '10px', fontSize: '14px', fontWeight: 500 }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Paper>
   );
 
