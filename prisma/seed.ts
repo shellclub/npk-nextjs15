@@ -229,7 +229,7 @@ async function main() {
   if (adminUser && allCustomers.length > 0) {
     const quotationsData = [
       {
-        quotationNumber: 'Q-260301-001',
+        quotationNumber: 'npk-260301-001',
         date: new Date('2026-03-01'),
         customer: allCustomers[0], // ศุภมิตร
         branchIndex: 0, // store036
@@ -251,7 +251,7 @@ async function main() {
         ],
       },
       {
-        quotationNumber: 'Q-260305-001',
+        quotationNumber: 'npk-260305-001',
         date: new Date('2026-03-05'),
         customer: allCustomers[1], // เซ็นทรัล พัฒนา
         branchIndex: 0, // Central World
@@ -273,13 +273,13 @@ async function main() {
         ],
       },
       {
-        quotationNumber: 'Q-260308-001',
+        quotationNumber: 'npk-260308-001',
         date: new Date('2026-03-08'),
         customer: allCustomers[2], // HomePro
         branchIndex: 0, // HomePro ราชพฤกษ์
         contactPerson: 'คุณวิชัย',
         projectName: 'ติดตั้งระบบ Access Control',
-        status: 'DRAFT' as const,
+        status: 'APPROVED' as const,
         validDays: 15,
         discountPercent: 0,
         vatPercent: 7,
@@ -294,7 +294,7 @@ async function main() {
         ],
       },
       {
-        quotationNumber: 'Q-260310-001',
+        quotationNumber: 'npk-260310-001',
         date: new Date('2026-03-10'),
         customer: allCustomers[3], // สยามพิวรรธน์
         branchIndex: 0, // Siam Paragon
@@ -314,7 +314,7 @@ async function main() {
         ],
       },
       {
-        quotationNumber: 'Q-260312-001',
+        quotationNumber: 'npk-260312-001',
         date: new Date('2026-03-12'),
         customer: allCustomers[4], // เดอะมอลล์กรุ๊ป
         branchIndex: 1, // The Mall งามวงศ์วาน
@@ -336,7 +336,7 @@ async function main() {
         ],
       },
       {
-        quotationNumber: 'Q-260315-001',
+        quotationNumber: 'npk-260315-001',
         date: new Date('2026-03-15'),
         customer: allCustomers[0], // ศุภมิตร
         branchIndex: 1, // store037 Chonburi
@@ -441,9 +441,9 @@ async function main() {
           date: new Date('2026-03-06'),
           startDate: new Date('2026-03-08'),
           endDate: new Date('2026-03-10'),
-          description: 'ปรับปรุงระบบ Network ชั้น 3-5 Central World',
+          description: 'ติดตั้ง WiFi Free WiFi Zone - เดอะมอลล์ งามวงศ์วาน',
           status: 'PAID' as const,
-          notes: 'จ่ายเงินเรียบร้อย',
+          notes: 'จ่ายเงินช่างเรียบร้อย',
         },
         {
           woNumber: 'WO-260308-001',
@@ -457,13 +457,13 @@ async function main() {
           notes: 'กำลังดำเนินการติดตั้ง คาดเสร็จ 15/03',
         },
         {
-          woNumber: 'WO-260310-001',
-          quotationIndex: 3,
+          woNumber: 'WO-260312-001',
+          quotationIndex: 0,
           teamIndex: 2,
-          date: new Date('2026-03-11'),
+          date: new Date('2026-03-13'),
           startDate: null,
           endDate: null,
-          description: 'ติดตั้งระบบ Free WiFi Tesco Lotus สาขาสุพรรณบุรี',
+          description: 'ติดตั้ง CCTV เพิ่มเติม สาขา Rayong (phase 2)',
           status: 'PENDING' as const,
           notes: 'รอทีมช่างยืนยันวันเริ่มงาน',
         },
@@ -473,10 +473,10 @@ async function main() {
           teamIndex: 1,
           date: new Date('2026-03-16'),
           startDate: new Date('2026-03-18'),
-          endDate: new Date('2026-03-20'),
-          description: 'เพิ่มกล้อง CCTV สาขา Chonburi ตามใบเสนอราคาล่าสุด',
-          status: 'PENDING' as const,
-          notes: null,
+          endDate: new Date('2026-03-19'),
+          description: 'ซ่อมแซมระบบกล้อง CCTV สาขา Rayong (กล้องชำรุด 3 ตัว)',
+          status: 'COMPLETED' as const,
+          notes: 'เปลี่ยนกล้องใหม่ 3 ตัว ตรวจสอบเรียบร้อย',
         },
       ];
 
@@ -504,6 +504,317 @@ async function main() {
     } else {
       console.log('⚠️ ข้ามการสร้าง Work Order (ไม่พบข้อมูลที่จำเป็น)');
     }
+  }
+
+  // ========================================
+  // 7. ใบสั่งซื้อ (Purchase Orders) - 3 รายการ
+  // ========================================
+  const existingPO = await prisma.purchaseOrder.count();
+  if (existingPO > 0) {
+    console.log('⏭️ Purchase Order มีอยู่แล้ว, ข้าม');
+  } else {
+    const allWO = await prisma.workOrder.findMany({ orderBy: { createdAt: 'asc' } });
+    const allTeams2 = await prisma.technicianTeam.findMany();
+    if (allWO.length > 0 && allTeams2.length > 0) {
+      const poList = [
+        {
+          poNumber: 'PO-260305-001', workOrderIndex: 0, teamIndex: 0,
+          date: new Date('2026-03-05'), status: 'APPROVED' as const,
+          notes: 'สั่งวัสดุติดตั้ง CCTV สาขา Rayong',
+          items: [
+            { description: 'กล้อง CCTV Hikvision 2MP', unit: 'ตัว', quantity: 16, unitPrice: 1800 },
+            { description: 'DVR 16CH Hikvision', unit: 'เครื่อง', quantity: 1, unitPrice: 8500 },
+            { description: 'HDD WD Purple 4TB', unit: 'ตัว', quantity: 2, unitPrice: 3200 },
+            { description: 'สาย RG6 + อุปกรณ์', unit: 'ล็อต', quantity: 1, unitPrice: 9500 },
+          ],
+        },
+        {
+          poNumber: 'PO-260308-001', workOrderIndex: 1, teamIndex: 1,
+          date: new Date('2026-03-08'), status: 'APPROVED' as const,
+          notes: 'สั่ง AP และ Switch สำหรับ Free WiFi Zone',
+          items: [
+            { description: 'Access Point UniFi U6 Pro', unit: 'ตัว', quantity: 20, unitPrice: 4800 },
+            { description: 'Switch USW-Pro-24-PoE', unit: 'เครื่อง', quantity: 2, unitPrice: 21000 },
+            { description: 'UniFi Cloud Gateway Ultra', unit: 'เครื่อง', quantity: 1, unitPrice: 6200 },
+            { description: 'สาย UTP Cat6 พร้อมอุปกรณ์', unit: 'ล็อต', quantity: 1, unitPrice: 7500 },
+          ],
+        },
+        {
+          poNumber: 'PO-260312-001', workOrderIndex: 2, teamIndex: 0,
+          date: new Date('2026-03-12'), status: 'DRAFT' as const,
+          notes: 'สั่งอุปกรณ์ Access Control',
+          items: [
+            { description: 'เครื่องสแกนลายนิ้วมือ ZKTeco', unit: 'เครื่อง', quantity: 4, unitPrice: 11000 },
+            { description: 'Magnetic Lock 600lbs', unit: 'ตัว', quantity: 4, unitPrice: 2500 },
+            { description: 'Power Supply 12V 5A', unit: 'ตัว', quantity: 4, unitPrice: 1800 },
+          ],
+        },
+      ];
+
+      for (const po of poList) {
+        const wo = allWO[po.workOrderIndex % allWO.length];
+        const team = allTeams2[po.teamIndex % allTeams2.length];
+        const totalAmount = po.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+        await prisma.purchaseOrder.create({
+          data: {
+            poNumber: po.poNumber,
+            workOrderId: wo.id,
+            teamId: team.id,
+            date: po.date,
+            totalAmount,
+            status: po.status,
+            notes: po.notes,
+            items: {
+              createMany: {
+                data: po.items.map((item, idx) => ({
+                  itemOrder: idx + 1,
+                  description: item.description,
+                  unit: item.unit,
+                  quantity: item.quantity,
+                  unitPrice: item.unitPrice,
+                  amount: item.quantity * item.unitPrice,
+                })),
+              },
+            },
+          },
+        });
+      }
+      console.log('✅ Purchase Order:', poList.length, 'รายการ');
+    }
+  }
+
+  // ========================================
+  // 8. ใบแจ้งหนี้ (Invoices) - 5 รายการ
+  // ========================================
+  const existingInv = await prisma.invoice.count();
+  if (existingInv > 0) {
+    console.log('⏭️ Invoice มีอยู่แล้ว, ข้าม');
+  } else {
+    const allWO2 = await prisma.workOrder.findMany({ orderBy: { createdAt: 'asc' } });
+    if (allWO2.length > 0) {
+      const invData = [
+        {
+          invoiceNumber: 'INV-260307-001', workOrderIndex: 0,
+          date: new Date('2026-03-07'), dueDate: new Date('2026-03-22'),
+          subtotal: 90250, vatPercent: 7, status: 'PAID' as const,
+          notes: 'ชำระเรียบร้อย โอนเงินวันที่ 20/03/26',
+        },
+        {
+          invoiceNumber: 'INV-260310-001', workOrderIndex: 1,
+          date: new Date('2026-03-10'), dueDate: new Date('2026-03-25'),
+          subtotal: 185400, vatPercent: 7, status: 'PAID' as const,
+          notes: 'ชำระเต็มจำนวน',
+        },
+        {
+          invoiceNumber: 'INV-260314-001', workOrderIndex: 2,
+          date: new Date('2026-03-14'), dueDate: new Date('2026-03-29'),
+          subtotal: 110000, vatPercent: 7, status: 'UNPAID' as const,
+          notes: 'รอชำระเงิน',
+        },
+        {
+          invoiceNumber: 'INV-260316-001', workOrderIndex: 4,
+          date: new Date('2026-03-16'), dueDate: new Date('2026-03-31'),
+          subtotal: 45000, vatPercent: 7, status: 'PARTIAL' as const,
+          notes: 'ชำระแล้วบางส่วน 20,000 บาท รอชำระส่วนที่เหลือ',
+        },
+        {
+          invoiceNumber: 'INV-260318-001', workOrderIndex: 3,
+          date: new Date('2026-03-18'), dueDate: new Date('2026-04-02'),
+          subtotal: 75000, vatPercent: 7, status: 'UNPAID' as const,
+          notes: null,
+        },
+      ];
+
+      for (const inv of invData) {
+        const wo = allWO2[inv.workOrderIndex % allWO2.length];
+        const vatAmount = (inv.subtotal * inv.vatPercent) / 100;
+        const totalAmount = inv.subtotal + vatAmount;
+        await prisma.invoice.create({
+          data: {
+            invoiceNumber: inv.invoiceNumber,
+            workOrderId: wo.id,
+            date: inv.date,
+            dueDate: inv.dueDate,
+            subtotal: inv.subtotal,
+            vatPercent: inv.vatPercent,
+            vatAmount,
+            totalAmount,
+            status: inv.status,
+            notes: inv.notes,
+          },
+        });
+      }
+      console.log('✅ Invoice:', invData.length, 'รายการ');
+    }
+  }
+
+  // ========================================
+  // 9. ใบกำกับภาษี (Tax Invoices) - 2 รายการ (สำหรับ Invoice ที่ PAID)
+  // ========================================
+  const existingTI = await prisma.taxInvoice.count();
+  if (existingTI > 0) {
+    console.log('⏭️ Tax Invoice มีอยู่แล้ว, ข้าม');
+  } else {
+    const paidInvoices = await prisma.invoice.findMany({ where: { status: 'PAID' } });
+    let tiCount = 0;
+    for (const inv of paidInvoices) {
+      tiCount++;
+      await prisma.taxInvoice.create({
+        data: {
+          taxInvoiceNumber: `TI-260320-${String(tiCount).padStart(3, '0')}`,
+          invoiceId: inv.id,
+          date: new Date('2026-03-20'),
+          subtotal: Number(inv.subtotal),
+          vatAmount: Number(inv.vatAmount),
+          totalAmount: Number(inv.totalAmount),
+          notes: 'ออกใบกำกับภาษีเมื่อชำระเงินครบ',
+        },
+      });
+    }
+    console.log('✅ Tax Invoice:', tiCount, 'รายการ');
+  }
+
+  // ========================================
+  // 10. ใบสำคัญรับ (Receipt Vouchers) - รับเงินจากลูกค้า
+  // ========================================
+  const existingRV = await prisma.receiptVoucher.count();
+  if (existingRV > 0) {
+    console.log('⏭️ Receipt Voucher มีอยู่แล้ว, ข้าม');
+  } else {
+    const paidInvoicesForRV = await prisma.invoice.findMany({
+      where: { status: 'PAID' },
+      orderBy: { date: 'asc' },
+    });
+    const rvData = [
+      ...paidInvoicesForRV.map((inv, idx) => ({
+        voucherNumber: `RV-260320-${String(idx + 1).padStart(3, '0')}`,
+        invoiceId: inv.id,
+        date: new Date('2026-03-20'),
+        amount: Number(inv.totalAmount),
+        paymentMethod: 'TRANSFER' as const,
+        bankName: 'ธนาคารกสิกรไทย',
+        notes: `รับชำระค่างาน INV ${inv.invoiceNumber}`,
+      })),
+      // เพิ่มใบสำคัญรับที่ไม่ผูก invoice (เงินสด)
+      {
+        voucherNumber: 'RV-260315-001',
+        invoiceId: null,
+        date: new Date('2026-03-15'),
+        amount: 25000,
+        paymentMethod: 'CASH' as const,
+        bankName: null,
+        notes: 'รับเงินมัดจำงานซ่อม',
+      },
+    ];
+
+    for (const rv of rvData) {
+      await prisma.receiptVoucher.create({
+        data: {
+          voucherNumber: rv.voucherNumber,
+          invoiceId: rv.invoiceId,
+          date: rv.date,
+          amount: rv.amount,
+          paymentMethod: rv.paymentMethod,
+          bankName: rv.bankName,
+          notes: rv.notes,
+        },
+      });
+    }
+    console.log('✅ Receipt Voucher:', rvData.length, 'รายการ');
+  }
+
+  // ========================================
+  // 11. ใบสำคัญจ่าย (Payment Vouchers) - จ่ายเงินให้ช่าง/ผู้ขาย
+  // ========================================
+  const existingPV = await prisma.paymentVoucher.count();
+  if (existingPV > 0) {
+    console.log('⏭️ Payment Voucher มีอยู่แล้ว, ข้าม');
+  } else {
+    const pvData = [
+      {
+        voucherNumber: 'PV-260310-001', date: new Date('2026-03-10'),
+        payeeName: 'นายสุชาติ วิเศษกุล (ทีม A)', amount: 35000,
+        paymentMethod: 'TRANSFER' as const, bankName: 'ธนาคารกรุงไทย',
+        description: 'ค่าจ้างทีมช่าง A - งานติดตั้ง CCTV สาขา Rayong',
+        notes: 'โอนเงินเข้าบัญชีหัวหน้าทีม',
+      },
+      {
+        voucherNumber: 'PV-260312-001', date: new Date('2026-03-12'),
+        payeeName: 'นายวิชัย เจริญสุข (ทีม B)', amount: 42000,
+        paymentMethod: 'TRANSFER' as const, bankName: 'ธนาคารกสิกรไทย',
+        description: 'ค่าจ้างทีมช่าง B - งานติดตั้ง WiFi Free WiFi Zone',
+        notes: null,
+      },
+      {
+        voucherNumber: 'PV-260315-001', date: new Date('2026-03-15'),
+        payeeName: 'บริษัท ไอที ซัพพลาย จำกัด', amount: 125000,
+        paymentMethod: 'CHEQUE' as const, bankName: 'ธนาคารกรุงเทพ',
+        description: 'ค่าอุปกรณ์ CCTV + สาย RG6 (จากใบสั่งซื้อ PO-260305-001)',
+        notes: 'เช็คเลขที่ 012345',
+      },
+      {
+        voucherNumber: 'PV-260318-001', date: new Date('2026-03-18'),
+        payeeName: 'บริษัท เน็ตเวิร์ค โปร จำกัด', amount: 158000,
+        paymentMethod: 'TRANSFER' as const, bankName: 'ธนาคารกสิกรไทย',
+        description: 'ค่าอุปกรณ์ WiFi AP + Switch (จากใบสั่งซื้อ PO-260308-001)',
+        notes: 'โอนเงินผ่าน Internet Banking',
+      },
+    ];
+
+    const createdPVs = [];
+    for (const pv of pvData) {
+      const created = await prisma.paymentVoucher.create({
+        data: {
+          voucherNumber: pv.voucherNumber,
+          date: pv.date,
+          payeeName: pv.payeeName,
+          amount: pv.amount,
+          paymentMethod: pv.paymentMethod,
+          bankName: pv.bankName,
+          description: pv.description,
+          notes: pv.notes,
+        },
+      });
+      createdPVs.push(created);
+    }
+    console.log('✅ Payment Voucher:', pvData.length, 'รายการ');
+
+    // ========================================
+    // 12. หนังสือรับรองหัก ณ ที่จ่าย (50 ทวิ) - 2 รายการ (สำหรับค่าจ้างทีมช่าง)
+    // ========================================
+    const whtData = [
+      {
+        whtNumber: 'WHT-260310-001',
+        paymentVoucherId: createdPVs[0].id,
+        payeeName: 'นายสุชาติ วิเศษกุล',
+        payeeTaxId: '1-1234-56789-01-2',
+        payeeAddress: '123/45 หมู่ 3 ต.สนามชัย อ.เมือง จ.สุพรรณบุรี 72000',
+        incomeType: 'ค่าจ้างทำของ (มาตรา 40(7))',
+        taxRate: 3,
+        incomeAmount: 35000,
+        taxAmount: 1050,
+        date: new Date('2026-03-10'),
+        notes: 'หัก ณ ที่จ่าย 3% ค่าจ้างทีมช่าง',
+      },
+      {
+        whtNumber: 'WHT-260312-001',
+        paymentVoucherId: createdPVs[1].id,
+        payeeName: 'นายวิชัย เจริญสุข',
+        payeeTaxId: '1-9876-54321-98-7',
+        payeeAddress: '456/78 หมู่ 5 ต.ท่าพี่เลี้ยง อ.เมือง จ.สุพรรณบุรี 72000',
+        incomeType: 'ค่าจ้างทำของ (มาตรา 40(7))',
+        taxRate: 3,
+        incomeAmount: 42000,
+        taxAmount: 1260,
+        date: new Date('2026-03-12'),
+        notes: 'หัก ณ ที่จ่าย 3% ค่าจ้างทีมช่าง',
+      },
+    ];
+
+    for (const wht of whtData) {
+      await prisma.withholdingTax.create({ data: wht });
+    }
+    console.log('✅ Withholding Tax (50 ทวิ):', whtData.length, 'รายการ');
   }
 
   console.log('\n🎉 Seed ข้อมูลเสร็จสมบูรณ์!');
