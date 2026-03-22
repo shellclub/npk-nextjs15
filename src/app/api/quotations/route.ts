@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
         customerGroup: true,
         branch: true,
         createdBy: { select: { name: true } },
-        items: true,
+        items: { orderBy: { itemOrder: 'asc' } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -43,12 +43,12 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    // Generate quotation number: npk-YYMMDD-XXX
+    // Generate quotation number: Npk-YYMMDD-XXX
     const now = new Date();
     const yy = String(now.getFullYear()).slice(-2);
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const dd = String(now.getDate()).padStart(2, '0');
-    const prefix = `npk-${yy}${mm}${dd}`;
+    const prefix = `Npk-${yy}${mm}${dd}`;
 
     const lastQuotation = await prisma.quotation.findFirst({
       where: { quotationNumber: { startsWith: prefix } },
@@ -62,16 +62,18 @@ export async function POST(request: NextRequest) {
     }
     const quotationNumber = `${prefix}-${String(seq).padStart(3, '0')}`;
 
-    // Calculate totals
+    // Calculate totals from items (only ITEM type, not HEADER)
     const items = body.items || [];
     const subtotal = items.reduce(
-      (sum: number, item: { quantity: number; unitPrice: number }) =>
-        sum + item.quantity * item.unitPrice,
+      (sum: number, item: { itemType?: string; quantity: number; materialPrice?: number; labourPrice?: number; unitPrice?: number }) => {
+        if (item.itemType === 'HEADER') return sum;
+        const matTotal = (item.quantity || 0) * (item.materialPrice || 0);
+        const labTotal = (item.quantity || 0) * (item.labourPrice || 0);
+        return sum + matTotal + labTotal;
+      },
       0
     );
-    const discountAmount = body.discountPercent
-      ? (subtotal * body.discountPercent) / 100
-      : body.discountAmount || 0;
+    const discountAmount = body.discountAmount || 0;
     const afterDiscount = subtotal - discountAmount;
     const vatPercent = body.vatPercent ?? 7;
     const vatAmount = (afterDiscount * vatPercent) / 100;
@@ -94,37 +96,54 @@ export async function POST(request: NextRequest) {
         customerGroupId: body.customerGroupId,
         branchId: body.branchId || null,
         contactPerson: body.contactPerson || null,
+        contactPhone: body.contactPhone || null,
         projectName: body.projectName || null,
         subtotal,
-        discountPercent: body.discountPercent || 0,
+        discountPercent: 0,
         discountAmount,
         vatPercent,
         vatAmount,
         totalAmount,
         status: body.status || 'DRAFT',
         notes: body.notes || null,
+        conditions: body.conditions || null,
         validDays: body.validDays || 30,
-        warranty: body.warranty || null,
+        warranty: body.conditions || body.warranty || null,
         createdById,
         items: {
           createMany: {
             data: items.map(
               (
                 item: {
+                  itemType?: string;
+                  parentIndex?: number;
                   description: string;
                   unit: string;
                   quantity: number;
-                  unitPrice: number;
+                  unitPrice?: number;
+                  materialPrice?: number;
+                  labourPrice?: number;
                 },
                 index: number
-              ) => ({
-                itemOrder: index + 1,
-                description: item.description,
-                unit: item.unit,
-                quantity: item.quantity,
-                unitPrice: item.unitPrice,
-                amount: item.quantity * item.unitPrice,
-              })
+              ) => {
+                const isHeader = item.itemType === 'HEADER';
+                const matPrice = item.materialPrice || 0;
+                const labPrice = item.labourPrice || 0;
+                const qty = isHeader ? 0 : (item.quantity || 0);
+                const amount = isHeader ? 0 : (qty * matPrice + qty * labPrice);
+                return {
+                  itemOrder: index + 1,
+                  itemType: item.itemType || 'ITEM',
+                  parentIndex: item.parentIndex ?? null,
+                  description: item.description,
+                  unit: isHeader ? '' : (item.unit || ''),
+                  quantity: qty,
+                  unitPrice: matPrice + labPrice,
+                  materialPrice: matPrice,
+                  labourPrice: labPrice,
+                  amount,
+                };
+              }
             ),
           },
         },
@@ -132,7 +151,7 @@ export async function POST(request: NextRequest) {
       include: {
         customerGroup: true,
         branch: true,
-        items: true,
+        items: { orderBy: { itemOrder: 'asc' } },
       },
     });
 

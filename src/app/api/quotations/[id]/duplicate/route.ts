@@ -24,7 +24,7 @@ export async function POST(
     const yy = String(now.getFullYear()).slice(-2);
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const dd = String(now.getDate()).padStart(2, '0');
-    const prefix = `npk-${yy}${mm}${dd}`;
+    const prefix = `Npk-${yy}${mm}${dd}`;
 
     const lastQuotation = await prisma.quotation.findFirst({
       where: { quotationNumber: { startsWith: prefix } },
@@ -53,6 +53,7 @@ export async function POST(
         customerGroupId: original.customerGroupId,
         branchId: original.branchId,
         contactPerson: original.contactPerson,
+        contactPhone: original.contactPhone,
         projectName: original.projectName,
         subtotal: original.subtotal,
         discountPercent: original.discountPercent,
@@ -62,6 +63,7 @@ export async function POST(
         totalAmount: original.totalAmount,
         status: 'DRAFT', // Always start as draft
         notes: original.notes,
+        conditions: original.conditions,
         validDays: original.validDays,
         warranty: original.warranty,
         createdById: createdById!,
@@ -69,10 +71,14 @@ export async function POST(
           createMany: {
             data: original.items.map((item) => ({
               itemOrder: item.itemOrder,
+              itemType: item.itemType || 'ITEM',
+              parentIndex: item.parentIndex,
               description: item.description,
               unit: item.unit,
               quantity: item.quantity,
               unitPrice: item.unitPrice,
+              materialPrice: item.materialPrice,
+              labourPrice: item.labourPrice,
               amount: item.amount,
             })),
           },

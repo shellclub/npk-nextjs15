@@ -47,20 +47,29 @@ export async function PATCH(
       return NextResponse.json({ error: 'Quotation not found' }, { status: 404 });
     }
 
-    // Calculate totals from items
+    // Calculate totals from items (only ITEM type, not HEADER)
     const items = body.items || [];
     const subtotal = items.reduce(
-      (sum: number, item: { quantity: number; unitPrice: number }) =>
-        sum + item.quantity * item.unitPrice,
+      (sum: number, item: { itemType?: string; quantity: number; materialPrice?: number; labourPrice?: number }) => {
+        if (item.itemType === 'HEADER') return sum;
+        const matTotal = (item.quantity || 0) * (item.materialPrice || 0);
+        const labTotal = (item.quantity || 0) * (item.labourPrice || 0);
+        return sum + matTotal + labTotal;
+      },
       0
     );
-    const discountAmount = body.discountPercent
-      ? (subtotal * body.discountPercent) / 100
-      : body.discountAmount || 0;
+
+    const discountAmount = body.discountAmount ?? Number(existing.discountAmount) ?? 0;
     const afterDiscount = subtotal - discountAmount;
     const vatPercent = body.vatPercent ?? existing.vatPercent ?? 7;
     const vatAmount = (afterDiscount * Number(vatPercent)) / 100;
     const totalAmount = afterDiscount + vatAmount;
+
+    // Determine if we need to bump revision (when discount is changed)
+    let revisionNumber = existing.revisionNumber || 0;
+    if (body.discountAmount !== undefined && Number(body.discountAmount) !== Number(existing.discountAmount)) {
+      revisionNumber += 1;
+    }
 
     // Delete old items then re-create
     await prisma.quotationItem.deleteMany({ where: { quotationId: id } });
@@ -72,36 +81,54 @@ export async function PATCH(
         customerGroupId: body.customerGroupId || undefined,
         branchId: body.branchId ?? undefined,
         contactPerson: body.contactPerson ?? undefined,
+        contactPhone: body.contactPhone ?? undefined,
         projectName: body.projectName ?? undefined,
         subtotal,
-        discountPercent: body.discountPercent ?? 0,
+        discountPercent: 0,
         discountAmount,
         vatPercent: Number(vatPercent),
         vatAmount,
         totalAmount,
+        revisionNumber,
         status: body.status || undefined,
         notes: body.notes ?? undefined,
+        conditions: body.conditions ?? undefined,
         validDays: body.validDays ?? undefined,
-        warranty: body.warranty ?? undefined,
+        warranty: body.conditions ?? body.warranty ?? undefined,
         items: {
           createMany: {
             data: items.map(
               (
                 item: {
+                  itemType?: string;
+                  parentIndex?: number;
                   description: string;
                   unit: string;
                   quantity: number;
-                  unitPrice: number;
+                  unitPrice?: number;
+                  materialPrice?: number;
+                  labourPrice?: number;
                 },
                 index: number
-              ) => ({
-                itemOrder: index + 1,
-                description: item.description,
-                unit: item.unit,
-                quantity: item.quantity,
-                unitPrice: item.unitPrice,
-                amount: item.quantity * item.unitPrice,
-              })
+              ) => {
+                const isHeader = item.itemType === 'HEADER';
+                const matPrice = item.materialPrice || 0;
+                const labPrice = item.labourPrice || 0;
+                const qty = isHeader ? 0 : (item.quantity || 0);
+                const amount = isHeader ? 0 : (qty * matPrice + qty * labPrice);
+                return {
+                  itemOrder: index + 1,
+                  itemType: item.itemType || 'ITEM',
+                  parentIndex: item.parentIndex ?? null,
+                  description: item.description,
+                  unit: isHeader ? '' : (item.unit || ''),
+                  quantity: qty,
+                  unitPrice: matPrice + labPrice,
+                  materialPrice: matPrice,
+                  labourPrice: labPrice,
+                  amount,
+                };
+              }
             ),
           },
         },

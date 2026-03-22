@@ -6,10 +6,6 @@ import Typography from '@mui/material/Typography';
 import Paper from '@mui/material/Paper';
 import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
-import Select from '@mui/material/Select';
-import MenuItem from '@mui/material/MenuItem';
-import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -44,8 +40,17 @@ const Root = styled(FusePageCarded)(() => ({
 }));
 
 type Branch = { id: string; code: string; name: string };
-type CustomerGroup = { id: string; groupName: string; contactName?: string | null; taxId?: string | null; branches: Branch[] };
-type QuotationItem = { tempId: number; description: string; unit: string; quantity: number; unitPrice: number };
+type CustomerGroup = { id: string; groupName: string; contactName?: string | null; contactPhone?: string | null; taxId?: string | null; branches: Branch[] };
+type QuotationItem = {
+  tempId: number;
+  itemType: 'HEADER' | 'ITEM';
+  parentIndex?: number;
+  description: string;
+  unit: string;
+  quantity: number;
+  materialPrice: number;
+  labourPrice: number;
+};
 type ItemSuggestion = { description: string; unit: string; unitPrice: number };
 
 function formatCurrency(amount: number) {
@@ -72,18 +77,19 @@ function NewQuotationPage() {
   const [customerGroupId, setCustomerGroupId] = useState('');
   const [branchId, setBranchId] = useState('');
   const [contactPerson, setContactPerson] = useState('');
+  const [contactPhone, setContactPhone] = useState('');
   const [projectName, setProjectName] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [validDays, setValidDays] = useState(30);
   const [vatPercent, setVatPercent] = useState(7);
-  const [discountPercent, setDiscountPercent] = useState(0);
-  const [notes, setNotes] = useState('');
-  const [warranty, setWarranty] = useState('รับประกันงานติดตั้ง 1 ปี');
+  const [discountAmount, setDiscountAmount] = useState(0);
+  const [conditions, setConditions] = useState('');
 
   const [items, setItems] = useState<QuotationItem[]>([
-    { tempId: 1, description: '', unit: 'งาน', quantity: 1, unitPrice: 0 },
+    { tempId: 1, itemType: 'HEADER', description: '', unit: '', quantity: 0, materialPrice: 0, labourPrice: 0 },
+    { tempId: 2, itemType: 'ITEM', parentIndex: 0, description: '', unit: 'งาน', quantity: 1, materialPrice: 0, labourPrice: 0 },
   ]);
-  let nextTempId = items.length + 1;
+  const [nextTempId, setNextTempId] = useState(3);
 
   // ── Add Customer Dialog State ──
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
@@ -108,6 +114,17 @@ function NewQuotationPage() {
 
   useEffect(() => { fetchCustomers(); }, []);
 
+  // Auto-fill contact info when customer is selected
+  useEffect(() => {
+    if (customerGroupId) {
+      const customer = customers.find(c => c.id === customerGroupId);
+      if (customer) {
+        if (customer.contactName) setContactPerson(customer.contactName);
+        if (customer.contactPhone) setContactPhone(customer.contactPhone);
+      }
+    }
+  }, [customerGroupId, customers]);
+
   // ── Item Autocomplete ──
   const [itemSuggestions, setItemSuggestions] = useState<ItemSuggestion[]>([]);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -128,7 +145,7 @@ function NewQuotationPage() {
   const handleSelectSuggestion = (tempId: number, suggestion: ItemSuggestion) => {
     setItems(prev => prev.map(item =>
       item.tempId === tempId
-        ? { ...item, description: suggestion.description, unit: suggestion.unit, unitPrice: suggestion.unitPrice }
+        ? { ...item, description: suggestion.description, unit: suggestion.unit, materialPrice: suggestion.unitPrice }
         : item
     ));
     setItemSuggestions([]);
@@ -136,41 +153,143 @@ function NewQuotationPage() {
 
   const selectedCustomer = customers.find((c) => c.id === customerGroupId);
   const branches = selectedCustomer?.branches || [];
-  const subtotal = items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
-  const discountAmount = (subtotal * discountPercent) / 100;
+
+  // Calculate subtotal from ITEM rows only
+  const subtotal = items.reduce((sum, item) => {
+    if (item.itemType === 'HEADER') return sum;
+    return sum + item.quantity * item.materialPrice + item.quantity * item.labourPrice;
+  }, 0);
+  // discountAmount is entered directly as a fixed amount (Baht)
   const afterDiscount = subtotal - discountAmount;
   const vatAmount = (afterDiscount * vatPercent) / 100;
   const totalAmount = afterDiscount + vatAmount;
 
-  const addItem = () => {
-    setItems([...items, { tempId: nextTempId++, description: '', unit: 'งาน', quantity: 1, unitPrice: 0 }]);
+  const addHeader = () => {
+    const newId = nextTempId;
+    setNextTempId(newId + 1);
+    setItems([...items, { tempId: newId, itemType: 'HEADER', description: '', unit: '', quantity: 0, materialPrice: 0, labourPrice: 0 }]);
   };
+
+  const addSubItem = (headerIndex: number) => {
+    const newId = nextTempId;
+    setNextTempId(newId + 1);
+    // Find the last sub-item of this header and insert after it
+    let insertAt = headerIndex + 1;
+    for (let i = headerIndex + 1; i < items.length; i++) {
+      if (items[i].itemType === 'ITEM' && items[i].parentIndex === headerIndex) {
+        insertAt = i + 1;
+      } else if (items[i].itemType === 'HEADER') {
+        break;
+      }
+    }
+    const newItem: QuotationItem = { tempId: newId, itemType: 'ITEM', parentIndex: headerIndex, description: '', unit: 'งาน', quantity: 1, materialPrice: 0, labourPrice: 0 };
+    const newItems = [...items];
+    newItems.splice(insertAt, 0, newItem);
+    setItems(newItems);
+  };
+
   const removeItem = (tempId: number) => {
-    if (items.length <= 1) return;
-    setItems(items.filter((item) => item.tempId !== tempId));
+    const item = items.find(i => i.tempId === tempId);
+    if (!item) return;
+
+    if (item.itemType === 'HEADER') {
+      // Remove header and all its sub-items
+      const headerIdx = items.indexOf(item);
+      setItems(items.filter(i => i.tempId !== tempId && !(i.itemType === 'ITEM' && i.parentIndex === headerIdx)));
+    } else {
+      setItems(items.filter(i => i.tempId !== tempId));
+    }
   };
+
   const updateItem = (tempId: number, field: keyof QuotationItem, value: string | number) => {
     setItems(items.map((item) => (item.tempId === tempId ? { ...item, [field]: value } : item)));
+  };
+
+  // Get display number for items (1, 1.1, 1.2, 2, 2.1, etc.)
+  const getItemDisplayNumbers = () => {
+    let headerCount = 0;
+    const subCounts: Record<number, number> = {};
+    return items.map((item, idx) => {
+      if (item.itemType === 'HEADER') {
+        headerCount++;
+        subCounts[idx] = 0;
+        return `${headerCount}`;
+      } else {
+        // Find parent header index
+        const parentIdx = item.parentIndex ?? -1;
+        if (parentIdx >= 0 && subCounts[parentIdx] !== undefined) {
+          subCounts[parentIdx]++;
+          // Find the header number
+          let hNum = 0;
+          for (let i = 0; i <= parentIdx; i++) {
+            if (items[i].itemType === 'HEADER') hNum++;
+          }
+          return `${hNum}.${subCounts[parentIdx]}`;
+        }
+        return `${headerCount}.${++subCounts[Object.keys(subCounts).pop() as unknown as number] || 1}`;
+      }
+    });
+  };
+
+  const displayNumbers = getItemDisplayNumbers();
+
+  // Force date change when discount is modified
+  const handleDiscountChange = (val: number) => {
+    setDiscountAmount(val);
+    if (val > 0) {
+      setDate(new Date().toISOString().split('T')[0]);
+    }
   };
 
   const handleSubmit = async (status: 'DRAFT' | 'SENT') => {
     setError('');
     if (!customerGroupId) { setError('กรุณาเลือกลูกค้า'); return; }
-    if (items.some((item) => !item.description)) { setError('กรุณากรอกรายละเอียดรายการให้ครบ'); return; }
+    if (items.filter(i => i.itemType === 'ITEM').some((item) => !item.description)) {
+      setError('กรุณากรอกรายละเอียดรายการให้ครบ'); return;
+    }
 
     setSaving(true);
     try {
+      // Recalculate parentIndex based on current positions
+      const processedItems = items.map((item, idx) => {
+        if (item.itemType === 'HEADER') {
+          return {
+            itemType: item.itemType,
+            description: item.description,
+            unit: '',
+            quantity: 0,
+            materialPrice: 0,
+            labourPrice: 0,
+            parentIndex: undefined,
+          };
+        }
+        // Find closest header before this item
+        let parentIdx: number | undefined;
+        for (let i = idx - 1; i >= 0; i--) {
+          if (items[i].itemType === 'HEADER') {
+            parentIdx = i;
+            break;
+          }
+        }
+        return {
+          itemType: item.itemType,
+          parentIndex: parentIdx,
+          description: item.description,
+          unit: item.unit,
+          quantity: Number(item.quantity),
+          materialPrice: Number(item.materialPrice),
+          labourPrice: Number(item.labourPrice),
+        };
+      });
+
       const res = await fetch('/api/quotations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          customerGroupId, branchId: branchId || null, contactPerson, projectName, date,
-          validDays, vatPercent, discountPercent, notes, warranty, status,
+          customerGroupId, branchId: branchId || null, contactPerson, contactPhone, projectName, date,
+          validDays, vatPercent, discountAmount, conditions, status,
           createdById: 'system',
-          items: items.map((item) => ({
-            description: item.description, unit: item.unit,
-            quantity: Number(item.quantity), unitPrice: Number(item.unitPrice),
-          })),
+          items: processedItems,
         }),
       });
       if (!res.ok) throw new Error('Failed to save');
@@ -226,7 +345,6 @@ function NewQuotationPage() {
   const handleSaveNewBranch = async () => {
     setNewBranchError('');
     if (!newBranch.code.trim()) { setNewBranchError('กรุณากรอกรหัสสาขา'); return; }
-    if (!newBranch.name.trim()) { setNewBranchError('กรุณากรอกชื่อสาขา'); return; }
 
     setNewBranchSaving(true);
     try {
@@ -339,14 +457,17 @@ function NewQuotationPage() {
                     </Tooltip>
                   )}
                 </Box>
-                <TextField label="ผู้ติดต่อ" value={contactPerson}
+                <TextField label="ชื่อผู้ติดต่อ" value={contactPerson}
                   onChange={(e) => setContactPerson(e.target.value)} fullWidth />
+                <TextField label="เบอร์โทร" value={contactPhone}
+                  onChange={(e) => setContactPhone(e.target.value)} fullWidth />
                 <TextField label="ชื่อโครงการ / งาน" value={projectName}
-                  onChange={(e) => setProjectName(e.target.value)} fullWidth />
+                  onChange={(e) => setProjectName(e.target.value)} fullWidth
+                  InputProps={{ sx: { color: '#1D4ED8', fontWeight: 600 } }} />
                 <TextField label="วันที่" type="date" value={date}
                   onChange={(e) => setDate(e.target.value)} fullWidth
                   InputLabelProps={{ shrink: true }} />
-                <TextField label="เสนอราคามีผล (วัน)" type="number" value={validDays}
+                <TextField label="ยืนยันราคา (วัน)" type="number" value={validDays}
                   onChange={(e) => setValidDays(Number(e.target.value))} fullWidth />
               </Box>
             </Box>
@@ -355,117 +476,182 @@ function NewQuotationPage() {
             <Box sx={{ px: { xs: 1, md: 2 }, pt: 2, pb: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
               <Typography variant="h6" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                 <SectionIcon gradient="linear-gradient(135deg, #22C55E, #16A34A)" icon="lucide:list" />
-                รายการสินค้า/บริการ
+                รายละเอียดสินค้า/บริการ
               </Typography>
 
               <TableContainer sx={{ borderRadius: '10px', border: '1px solid', borderColor: 'divider', overflow: 'hidden' }}>
-                <Table>
+                <Table size="small">
                   <TableHead>
                     <TableRow sx={{
                       bgcolor: 'action.hover',
-                      '& th': { fontWeight: 700, color: 'text.secondary', py: 1.5, borderBottom: '2px solid', borderColor: 'divider' },
+                      '& th': { fontWeight: 700, color: 'text.secondary', py: 1, borderBottom: '2px solid', borderColor: 'divider', fontSize: '12px' },
                     }}>
-                      <TableCell align="center" sx={{ width: 50 }}>#</TableCell>
-                      <TableCell>รายละเอียด</TableCell>
-                      <TableCell sx={{ width: 110 }}>หน่วย</TableCell>
-                      <TableCell align="right" sx={{ width: 100 }}>จำนวน</TableCell>
-                      <TableCell align="right" sx={{ width: 140 }}>ราคา/หน่วย</TableCell>
-                      <TableCell align="right" sx={{ width: 140 }}>จำนวนเงิน</TableCell>
-                      <TableCell sx={{ width: 50 }} />
+                      <TableCell align="center" sx={{ width: 50 }} rowSpan={2}>Item</TableCell>
+                      <TableCell rowSpan={2}>Description</TableCell>
+                      <TableCell align="center" sx={{ width: 60 }} rowSpan={2}>Qty</TableCell>
+                      <TableCell align="center" sx={{ width: 70 }} rowSpan={2}>Unit</TableCell>
+                      <TableCell align="center" colSpan={2} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>Price Unit/Baht</TableCell>
+                      <TableCell align="center" colSpan={2} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>Total Price/Baht</TableCell>
+                      <TableCell align="right" sx={{ width: 100 }} rowSpan={2}>Amount Baht</TableCell>
+                      <TableCell sx={{ width: 80 }} rowSpan={2} />
+                    </TableRow>
+                    <TableRow sx={{
+                      bgcolor: 'action.hover',
+                      '& th': { fontWeight: 600, color: 'text.secondary', py: 0.5, fontSize: '11px', borderBottom: '2px solid', borderColor: 'divider' },
+                    }}>
+                      <TableCell align="center" sx={{ width: 100 }}>Material</TableCell>
+                      <TableCell align="center" sx={{ width: 100 }}>Labour</TableCell>
+                      <TableCell align="center" sx={{ width: 100 }}>Material</TableCell>
+                      <TableCell align="center" sx={{ width: 100 }}>Labour</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {items.map((item, index) => (
-                      <TableRow key={item.tempId} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
-                        <TableCell align="center" sx={{ fontWeight: 600, color: 'text.secondary' }}>{index + 1}</TableCell>
-                        <TableCell>
-                          <Autocomplete
-                            freeSolo
-                            options={itemSuggestions}
-                            getOptionLabel={(opt) => typeof opt === 'string' ? opt : opt.description}
-                            filterOptions={(x) => x}
-                            inputValue={item.description}
-                            onInputChange={(_, val, reason) => {
-                              if (reason === 'input') {
-                                updateItem(item.tempId, 'description', val);
-                                searchItems(val);
-                              }
-                            }}
-                            onChange={(_, val) => {
-                              if (val && typeof val !== 'string') {
-                                handleSelectSuggestion(item.tempId, val);
-                              }
-                            }}
-                            renderOption={(props, option) => {
-                              if (typeof option === 'string') return null;
-                              return (
-                                <ListItem {...props} key={option.description} sx={{ py: 0.5 }}>
-                                  <ListItemText
-                                    primary={option.description}
-                                    secondary={`${option.unit} — ฿${formatCurrency(option.unitPrice)}`}
-                                    primaryTypographyProps={{ fontSize: '14px', fontWeight: 500 }}
-                                    secondaryTypographyProps={{ fontSize: '12px', color: '#0284C7' }}
-                                  />
-                                </ListItem>
-                              );
-                            }}
-                            renderInput={(params) => (
-                              <TextField {...params} placeholder="พิมพ์เพื่อค้นหา..." size="small" fullWidth />
-                            )}
-                            slotProps={{ paper: { sx: { borderRadius: '10px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', mt: 0.5 } } }}
-                            size="small"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Autocomplete
-                            freeSolo
-                            options={unitOptions}
-                            value={item.unit}
-                            onChange={(_, val) => { if (val) updateItem(item.tempId, 'unit', val); }}
-                            onInputChange={(_, val, reason) => {
-                              if (reason === 'input') updateItem(item.tempId, 'unit', val);
-                            }}
-                            renderInput={(params) => (
-                              <TextField {...params} size="small" fullWidth />
-                            )}
-                            slotProps={{ paper: { sx: { borderRadius: '10px', mt: 0.5 } } }}
-                            size="small"
-                            disableClearable
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <TextField type="number" value={item.quantity}
-                            onChange={(e) => updateItem(item.tempId, 'quantity', Number(e.target.value))}
-                            size="small" fullWidth
-                            inputProps={{ min: 1, style: { textAlign: 'right' } }} />
-                        </TableCell>
-                        <TableCell>
-                          <TextField type="number" value={item.unitPrice}
-                            onChange={(e) => updateItem(item.tempId, 'unitPrice', Number(e.target.value))}
-                            size="small" fullWidth
-                            inputProps={{ min: 0, step: 100, style: { textAlign: 'right' } }} />
-                        </TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                          {formatCurrency(item.quantity * item.unitPrice)}
-                        </TableCell>
-                        <TableCell>
-                          <IconButton size="small" onClick={() => removeItem(item.tempId)} disabled={items.length <= 1}
-                            sx={{ color: 'error.main', '&:hover': { bgcolor: 'error.lighter' } }}>
-                            <FuseSvgIcon size={18}>lucide:trash-2</FuseSvgIcon>
-                          </IconButton>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {items.map((item, index) => {
+                      const isHeader = item.itemType === 'HEADER';
+                      const matTotal = item.quantity * item.materialPrice;
+                      const labTotal = item.quantity * item.labourPrice;
+                      const amountTotal = matTotal + labTotal;
+
+                      if (isHeader) {
+                        return (
+                          <TableRow key={item.tempId} sx={{ bgcolor: '#FFF8E1', '&:hover': { bgcolor: '#FFF3C4' } }}>
+                            <TableCell align="center" sx={{ fontWeight: 700, color: '#D97706' }}>{displayNumbers[index]}</TableCell>
+                            <TableCell colSpan={7}>
+                              <TextField
+                                value={item.description}
+                                onChange={(e) => updateItem(item.tempId, 'description', e.target.value)}
+                                placeholder="ชื่อหัวข้อหลัก เช่น ชั้นที่ 1 (ฝั่งขวา)"
+                                size="small" fullWidth
+                                sx={{ '& .MuiOutlinedInput-root': { fontWeight: 700 } }}
+                              />
+                            </TableCell>
+                            <TableCell />
+                            <TableCell>
+                              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                <Tooltip title="เพิ่มรายการย่อย" arrow>
+                                  <IconButton size="small" onClick={() => addSubItem(index)}
+                                    sx={{ color: '#059669', '&:hover': { bgcolor: '#D1FAE5' } }}>
+                                    <FuseSvgIcon size={16}>lucide:plus</FuseSvgIcon>
+                                  </IconButton>
+                                </Tooltip>
+                                <IconButton size="small" onClick={() => removeItem(item.tempId)}
+                                  sx={{ color: 'error.main', '&:hover': { bgcolor: 'error.lighter' } }}>
+                                  <FuseSvgIcon size={16}>lucide:trash-2</FuseSvgIcon>
+                                </IconButton>
+                              </Box>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      }
+
+                      return (
+                        <TableRow key={item.tempId} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
+                          <TableCell align="center" sx={{ fontWeight: 600, color: 'text.secondary', fontSize: '12px' }}>
+                            {displayNumbers[index]}
+                          </TableCell>
+                          <TableCell>
+                            <Autocomplete
+                              freeSolo
+                              options={itemSuggestions}
+                              getOptionLabel={(opt) => typeof opt === 'string' ? opt : opt.description}
+                              filterOptions={(x) => x}
+                              inputValue={item.description}
+                              onInputChange={(_, val, reason) => {
+                                if (reason === 'input') {
+                                  updateItem(item.tempId, 'description', val);
+                                  searchItems(val);
+                                }
+                              }}
+                              onChange={(_, val) => {
+                                if (val && typeof val !== 'string') {
+                                  handleSelectSuggestion(item.tempId, val);
+                                }
+                              }}
+                              renderOption={(props, option) => {
+                                if (typeof option === 'string') return null;
+                                return (
+                                  <ListItem {...props} key={option.description} sx={{ py: 0.5 }}>
+                                    <ListItemText
+                                      primary={option.description}
+                                      secondary={`${option.unit} — ฿${formatCurrency(option.unitPrice)}`}
+                                      primaryTypographyProps={{ fontSize: '13px', fontWeight: 500 }}
+                                      secondaryTypographyProps={{ fontSize: '11px', color: '#0284C7' }}
+                                    />
+                                  </ListItem>
+                                );
+                              }}
+                              renderInput={(params) => (
+                                <TextField {...params} placeholder="พิมพ์เพื่อค้นหา..." size="small" fullWidth />
+                              )}
+                              slotProps={{ paper: { sx: { borderRadius: '10px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)', mt: 0.5 } } }}
+                              size="small"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <TextField type="number" value={item.quantity}
+                              onChange={(e) => updateItem(item.tempId, 'quantity', Number(e.target.value))}
+                              size="small" fullWidth
+                              inputProps={{ min: 1, style: { textAlign: 'right', fontSize: '12px' } }} />
+                          </TableCell>
+                          <TableCell>
+                            <Autocomplete
+                              freeSolo
+                              options={unitOptions}
+                              value={item.unit}
+                              onChange={(_, val) => { if (val) updateItem(item.tempId, 'unit', val); }}
+                              onInputChange={(_, val, reason) => {
+                                if (reason === 'input') updateItem(item.tempId, 'unit', val);
+                              }}
+                              renderInput={(params) => (
+                                <TextField {...params} size="small" fullWidth />
+                              )}
+                              slotProps={{ paper: { sx: { borderRadius: '10px', mt: 0.5 } } }}
+                              size="small"
+                              disableClearable
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <TextField type="number" value={item.materialPrice}
+                              onChange={(e) => updateItem(item.tempId, 'materialPrice', Number(e.target.value))}
+                              size="small" fullWidth
+                              inputProps={{ min: 0, step: 100, style: { textAlign: 'right', fontSize: '12px' } }} />
+                          </TableCell>
+                          <TableCell>
+                            <TextField type="number" value={item.labourPrice}
+                              onChange={(e) => updateItem(item.tempId, 'labourPrice', Number(e.target.value))}
+                              size="small" fullWidth
+                              inputProps={{ min: 0, step: 100, style: { textAlign: 'right', fontSize: '12px' } }} />
+                          </TableCell>
+                          <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', fontSize: '12px' }}>
+                            {formatCurrency(matTotal)}
+                          </TableCell>
+                          <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', fontSize: '12px' }}>
+                            {formatCurrency(labTotal)}
+                          </TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: '12px' }}>
+                            {formatCurrency(amountTotal)}
+                          </TableCell>
+                          <TableCell>
+                            <IconButton size="small" onClick={() => removeItem(item.tempId)}
+                              sx={{ color: 'error.main', '&:hover': { bgcolor: 'error.lighter' } }}>
+                              <FuseSvgIcon size={16}>lucide:trash-2</FuseSvgIcon>
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </TableContainer>
 
-              <Button variant="outlined" color="success"
-                startIcon={<FuseSvgIcon size={18}>lucide:plus</FuseSvgIcon>}
-                onClick={addItem}
-                sx={{ mt: 1.5, textTransform: 'none', fontWeight: 600, borderStyle: 'dashed', borderWidth: 2 }}>
-                เพิ่มรายการ
-              </Button>
+              <Box sx={{ mt: 1.5, display: 'flex', gap: 1 }}>
+                <Button variant="outlined" color="warning"
+                  startIcon={<FuseSvgIcon size={16}>lucide:folder-plus</FuseSvgIcon>}
+                  onClick={addHeader}
+                  sx={{ textTransform: 'none', fontWeight: 600, borderStyle: 'dashed', borderWidth: 2 }}>
+                  เพิ่มหัวข้อหลัก
+                </Button>
+              </Box>
 
               {/* Totals */}
               <Box sx={{ mt: 2.5, display: 'flex', justifyContent: 'flex-end' }}>
@@ -481,16 +667,15 @@ function NewQuotationPage() {
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Typography color="text.secondary">ส่วนลด</Typography>
-                      <TextField type="number" value={discountPercent}
-                        onChange={(e) => setDiscountPercent(Number(e.target.value))}
-                        size="small"
-                        inputProps={{ min: 0, max: 100, style: { textAlign: 'right', width: '48px' } }}
-                        sx={{ '& .MuiOutlinedInput-root': { minHeight: '36px' } }} />
-                      <Typography color="text.secondary">%</Typography>
                     </Box>
-                    <Typography fontWeight={600} color="error.main" sx={{ fontVariantNumeric: 'tabular-nums' }}>
-                      -{formatCurrency(discountAmount)}
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <TextField type="number" value={discountAmount}
+                        onChange={(e) => handleDiscountChange(Number(e.target.value))}
+                        size="small"
+                        inputProps={{ min: 0, step: 100, style: { textAlign: 'right', width: '100px' } }}
+                        sx={{ '& .MuiOutlinedInput-root': { minHeight: '36px' } }} />
+                      <Typography color="text.secondary">บาท</Typography>
+                    </Box>
                   </Box>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -517,19 +702,16 @@ function NewQuotationPage() {
               </Box>
             </Box>
 
-            {/* ── Section 3: หมายเหตุ & เงื่อนไข ── */}
+            {/* ── Section 3: เงื่อนไข ── */}
             <Box sx={{ px: { xs: 1, md: 2 }, pt: 2, pb: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
               <Typography variant="h6" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
                 <SectionIcon gradient="linear-gradient(135deg, #F59E0B, #D97706)" icon="lucide:message-square" />
-                หมายเหตุ & เงื่อนไข
+                เงื่อนไข
               </Typography>
 
-              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
-                <TextField label="หมายเหตุ" value={notes}
-                  onChange={(e) => setNotes(e.target.value)} multiline rows={3} fullWidth />
-                <TextField label="เงื่อนไขรับประกัน" value={warranty}
-                  onChange={(e) => setWarranty(e.target.value)} multiline rows={3} fullWidth />
-              </Box>
+              <TextField label="เงื่อนไข" value={conditions}
+                onChange={(e) => setConditions(e.target.value)} multiline rows={4} fullWidth
+                placeholder="ระบุเงื่อนไขการทำงาน เช่น เงื่อนไขการชำระเงิน, การรับประกัน, ระยะเวลาดำเนินการ" />
             </Box>
 
             {/* ── Section 4: Action Buttons ── */}
@@ -637,7 +819,7 @@ function NewQuotationPage() {
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
             <TextField label="รหัสสาขา *" value={newBranch.code}
               onChange={(e) => setNewBranch({ ...newBranch, code: e.target.value })} fullWidth />
-            <TextField label="ชื่อสาขา *" value={newBranch.name}
+            <TextField label="ชื่อสาขา" value={newBranch.name}
               onChange={(e) => setNewBranch({ ...newBranch, name: e.target.value })} fullWidth />
             <TextField label="ที่อยู่" value={newBranch.address}
               onChange={(e) => setNewBranch({ ...newBranch, address: e.target.value })}
