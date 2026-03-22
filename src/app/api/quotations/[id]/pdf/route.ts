@@ -307,14 +307,14 @@ export async function GET(
         <td class="value-blue" style="text-align:right;">${displayQN}</td>
       </tr>
       <tr>
-        <td class="label">ที่อยู่ :</td>
-        <td class="value">${q.customerGroup?.headOfficeAddress || '-'}</td>
+        <td class="label">รหัสสาขา /สาขา :</td>
+        <td class="value">${q.branch ? `${q.branch.code || ''} ${q.branch.name}` : '-'}</td>
         <td class="label" style="text-align:right;">วันที่ :</td>
         <td class="value" style="text-align:right;">${thaiDate(new Date(q.date))}</td>
       </tr>
       <tr>
-        <td class="label">รหัสสาขา /สาขา :</td>
-        <td class="value">${q.branch ? `${q.branch.code || ''} ${q.branch.name}` : '-'}</td>
+        <td class="label">ที่อยู่ :</td>
+        <td class="value">${q.customerGroup?.headOfficeAddress || '-'}</td>
         <td class="label" style="text-align:right;">ชื่อผู้ติดต่อ :</td>
         <td class="value" style="text-align:right;">${q.contactPerson || '-'}</td>
       </tr>

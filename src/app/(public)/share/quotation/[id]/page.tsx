@@ -198,14 +198,14 @@ export default function SharedQuotationPage() {
                 <td style={{ ...infoValueStyle, textAlign: 'right', color: '#0066cc', fontWeight: 600 }}>{data.quotationNumber}</td>
               </tr>
               <tr>
-                <td style={infoLabelStyle}>ที่อยู่ :</td>
-                <td style={infoValueStyle}>{data.customerAddress || '-'}</td>
+                <td style={infoLabelStyle}>รหัสสาขา /สาขา :</td>
+                <td style={infoValueStyle}>{data.branchName || '-'}</td>
                 <td style={{ ...infoLabelStyle, textAlign: 'right' }}>วันที่ :</td>
                 <td style={{ ...infoValueStyle, textAlign: 'right' }}>{thaiDate(data.date)}</td>
               </tr>
               <tr>
-                <td style={infoLabelStyle}>รหัสสาขา /สาขา :</td>
-                <td style={infoValueStyle}>{data.branchName || '-'}</td>
+                <td style={infoLabelStyle}>ที่อยู่ :</td>
+                <td style={infoValueStyle}>{data.customerAddress || '-'}</td>
                 <td style={{ ...infoLabelStyle, textAlign: 'right' }}>ชื่อผู้ติดต่อ :</td>
                 <td style={{ ...infoValueStyle, textAlign: 'right' }}>{data.contactPerson || '-'}</td>
               </tr>
