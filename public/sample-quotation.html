@@ -1,110 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function fmt(n: any) {
-  return Number(n).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function thaiDate(d: Date) {
-  const months = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
-    'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
-  const day = d.getDate();
-  const month = months[d.getMonth()];
-  const year = d.getFullYear() + 543;
-  return `${day} ${month} ${year}`;
-}
-
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params;
-    const q = await prisma.quotation.findUnique({
-      where: { id },
-      include: {
-        customerGroup: true,
-        branch: true,
-        createdBy: { select: { name: true } },
-        items: { orderBy: { itemOrder: 'asc' } },
-      },
-    });
-
-    if (!q) {
-      return NextResponse.json({ error: 'Quotation not found' }, { status: 404 });
-    }
-
-    const origin = request.nextUrl.origin;
-    const logoUrl = `${origin}/assets/images/logo/npk-logo.png`;
-
-    // Display quotation number with Rev
-    const displayQN = (q.revisionNumber || 0) > 0
-      ? `${q.quotationNumber} Rev.${q.revisionNumber}`
-      : q.quotationNumber;
-
-    // Build items HTML with header/sub-item support
-    let headerCount = 0;
-    const subCountMap: Record<number, number> = {};
-
-    const itemsHtml = q.items.map((item, i) => {
-      const isHeader = (item.itemType || 'ITEM') === 'HEADER';
-
-      if (isHeader) {
-        headerCount++;
-        subCountMap[i] = 0;
-        return `
-          <tr class="header-row">
-            <td class="center" style="font-weight:700; color:#333;">${headerCount}</td>
-            <td colspan="8" style="font-weight:700; color:#333;">${item.description.replace(/\n/g, '<br/>')}</td>
-          </tr>`;
-      }
-
-      // Sub-item
-      const parentIdx = item.parentIndex ?? -1;
-      let displayNum = '';
-      if (parentIdx >= 0 && subCountMap[parentIdx] !== undefined) {
-        subCountMap[parentIdx]++;
-        let hNum = 0;
-        for (let j = 0; j <= parentIdx; j++) {
-          if ((q.items[j].itemType || 'ITEM') === 'HEADER') hNum++;
-        }
-        displayNum = `${hNum}.${subCountMap[parentIdx]}`;
-      } else {
-        displayNum = `${i + 1}`;
-      }
-
-      const matPrice = Number(item.materialPrice || 0);
-      const labPrice = Number(item.labourPrice || 0);
-      const qty = Number(item.quantity);
-      const matTotal = qty * matPrice;
-      const labTotal = qty * labPrice;
-      const amount = matTotal + labTotal;
-
-      return `
-        <tr>
-          <td class="center">${displayNum}</td>
-          <td class="desc">${item.description.replace(/\n/g, '<br/>')}</td>
-          <td class="center">${qty}</td>
-          <td class="center">${item.unit || ''}</td>
-          <td class="right">${matPrice > 0 ? fmt(matPrice) : ''}</td>
-          <td class="right">${labPrice > 0 ? fmt(labPrice) : ''}</td>
-          <td class="right">${matTotal > 0 ? fmt(matTotal) : ''}</td>
-          <td class="right">${labTotal > 0 ? fmt(labTotal) : ''}</td>
-          <td class="right">${fmt(amount)}</td>
-        </tr>`;
-    }).join('');
-
-    // Conditions text (use conditions first, fallback to warranty + notes)
-    const conditionsText = q.conditions || q.warranty || '';
-    const notesText = q.notes || '';
-
-    const html = `<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="th">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ใบเสนอราคา ${displayQN}</title>
+  <title>ใบเสนอราคา Npk-260322-001</title>
   <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -122,8 +21,6 @@ export async function GET(
       padding: 12mm 12mm 15mm 12mm;
       position: relative;
     }
-
-    /* ── Header ── */
     .header {
       display: flex;
       align-items: flex-start;
@@ -143,8 +40,6 @@ export async function GET(
     .header-info .addr {
       font-size: 10px; color: #555; line-height: 1.5;
     }
-
-    /* ── Title ── */
     .title {
       text-align: center;
       font-size: 18px;
@@ -154,8 +49,6 @@ export async function GET(
       border-bottom: 2px solid #0066cc;
       padding-bottom: 4px;
     }
-
-    /* ── Customer Info Table ── */
     .info-table {
       width: 100%;
       border-collapse: collapse;
@@ -172,24 +65,9 @@ export async function GET(
       white-space: nowrap;
       width: 100px;
     }
-    .info-table .value {
-      color: #1a1a1a;
-    }
-    .info-table .value-right {
-      text-align: right;
-      color: #1a1a1a;
-    }
-    .info-table .value-blue {
-      color: #0066cc;
-      font-weight: 600;
-    }
-    .info-table .value-green {
-      color: #059669;
-      font-weight: 700;
-      font-size: 15px;
-    }
-
-    /* ── Items Table ── */
+    .info-table .value { color: #1a1a1a; }
+    .info-table .value-right { text-align: right; color: #1a1a1a; }
+    .info-table .value-blue { color: #0066cc; font-weight: 600; }
     .items-table {
       width: 100%;
       border-collapse: collapse;
@@ -222,8 +100,6 @@ export async function GET(
       background: #fffde7;
       border: 1px solid #bbb;
     }
-
-    /* ── Totals ── */
     .totals-section {
       display: flex;
       justify-content: flex-end;
@@ -254,16 +130,12 @@ export async function GET(
       font-size: 13px;
       font-weight: 700;
     }
-
-    /* ── Conditions ── */
     .conditions-section {
       margin-top: 15px;
       font-size: 11px;
       line-height: 1.7;
     }
     .conditions-section .label { font-weight: 700; color: #333; margin-bottom: 3px; }
-
-    /* ── Signature ── */
     .signature-section {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -277,7 +149,6 @@ export async function GET(
       padding-top: 6px;
       margin-top: 40px;
     }
-
     @media print {
       body { padding: 0; }
       .page { padding: 8mm; margin: 0; width: 100%; min-height: auto; }
@@ -288,7 +159,7 @@ export async function GET(
   <div class="page">
     <!-- Header -->
     <div class="header">
-      <img src="${logoUrl}" alt="NPK Logo" class="header-logo" />
+      <img src="http://localhost:3000/assets/images/logo/npk-logo.png" alt="NPK Logo" class="header-logo" />
       <div class="header-info">
         <div class="company-th">บริษัท เอ็นพีเค เซอร์วิส แอนด์ ซัพพลาย จำกัด</div>
         <div class="company-en">NPK SERVICE & SUPPLY CO.,LTD.</div>
@@ -307,32 +178,32 @@ export async function GET(
     <table class="info-table">
       <tr>
         <td class="label">ชื่อลูกค้า :</td>
-        <td class="value" style="font-weight:600;">${q.customerGroup?.groupName || '-'}</td>
+        <td class="value" style="font-weight:600;">บริษัท ซีพี ออลล์ จำกัด (มหาชน)</td>
         <td class="label" style="text-align:right;">เลขที่ :</td>
-        <td class="value-blue" style="text-align:right;">${displayQN}</td>
+        <td class="value-blue" style="text-align:right;">Npk-260322-001</td>
       </tr>
       <tr>
         <td class="label">รหัสสาขา /สาขา :</td>
-        <td class="value">${q.branch ? `${q.branch.code || ''} ${q.branch.name}` : '-'}</td>
+        <td class="value">00001 สาขาสำนักงานใหญ่</td>
         <td class="label" style="text-align:right;">วันที่ :</td>
-        <td class="value" style="text-align:right;">${thaiDate(new Date(q.date))}</td>
+        <td class="value" style="text-align:right;">22 มีนาคม 2569</td>
       </tr>
       <tr>
         <td class="label">ที่อยู่ :</td>
-        <td class="value">${q.address || q.customerGroup?.headOfficeAddress || '-'}</td>
+        <td class="value">313 อาคารซีพี ทาวเวอร์ ถ.สีลม แขวงสีลม เขตบางรัก กรุงเทพฯ 10500</td>
         <td class="label" style="text-align:right;">ชื่อผู้ติดต่อ :</td>
-        <td class="value" style="text-align:right;">${q.contactPerson || '-'}</td>
+        <td class="value" style="text-align:right;">คุณสมศักดิ์ รักดี</td>
       </tr>
       <tr>
         <td class="label">ยืนยันราคา :</td>
-        <td class="value">${q.validDays} วันนับจากวันที่เสนอราคา</td>
+        <td class="value">30 วันนับจากวันที่เสนอราคา</td>
         <td class="label" style="text-align:right;">โทร :</td>
-        <td class="value" style="text-align:right;">${q.contactPhone || '-'}</td>
+        <td class="value" style="text-align:right;">098-765-4321</td>
       </tr>
-      ${q.projectName ? `<tr>
+      <tr>
         <td class="label">ชื่อโครงการ/ชื่องาน :</td>
-        <td class="value-green" colspan="3">${q.projectName}</td>
-      </tr>` : ''}
+        <td class="value-blue" colspan="3">โครงการปรับปรุงระบบชั้นวางสินค้า DC สุพรรณบุรี</td>
+      </tr>
     </table>
 
     <!-- Items Table -->
@@ -355,7 +226,119 @@ export async function GET(
         </tr>
       </thead>
       <tbody>
-        ${itemsHtml}
+        <!-- Header 1 -->
+        <tr class="header-row">
+          <td class="center" style="font-weight:700; color:#333;">1</td>
+          <td colspan="8" style="font-weight:700; color:#333;">งานรื้อถอนชั้นวางเดิม ชั้น 1 (ฝั่งขวา)</td>
+        </tr>
+        <!-- Sub-item 1.1 -->
+        <tr>
+          <td class="center">1.1</td>
+          <td class="desc">ถอดประกอบชั้นวางสินค้าเดิม พร้อมจัดเก็บ</td>
+          <td class="center">1</td>
+          <td class="center">งาน</td>
+          <td class="right">15,000.00</td>
+          <td class="right">8,000.00</td>
+          <td class="right">15,000.00</td>
+          <td class="right">8,000.00</td>
+          <td class="right">23,000.00</td>
+        </tr>
+        <!-- Sub-item 1.2 -->
+        <tr>
+          <td class="center">1.2</td>
+          <td class="desc">รื้อถอนตะปู+ขอแขวนสินค้าเดิม</td>
+          <td class="center">1</td>
+          <td class="center">งาน</td>
+          <td class="right">2,500.00</td>
+          <td class="right">3,500.00</td>
+          <td class="right">2,500.00</td>
+          <td class="right">3,500.00</td>
+          <td class="right">6,000.00</td>
+        </tr>
+        <!-- Sub-item 1.3 -->
+        <tr>
+          <td class="center">1.3</td>
+          <td class="desc">ขนย้ายชั้นวางสินค้าเดิมไปจัดเก็บ</td>
+          <td class="center">1</td>
+          <td class="center">งาน</td>
+          <td class="right"></td>
+          <td class="right">5,000.00</td>
+          <td class="right"></td>
+          <td class="right">5,000.00</td>
+          <td class="right">5,000.00</td>
+        </tr>
+
+        <!-- Header 2 -->
+        <tr class="header-row">
+          <td class="center" style="font-weight:700; color:#333;">2</td>
+          <td colspan="8" style="font-weight:700; color:#333;">งานติดตั้งชั้นวางใหม่ ชั้น 1 (ฝั่งขวา)</td>
+        </tr>
+        <!-- Sub-item 2.1 -->
+        <tr>
+          <td class="center">2.1</td>
+          <td class="desc">ชั้นวางสินค้า Selective Rack สูง 6 เมตร พร้อมอุปกรณ์</td>
+          <td class="center">4</td>
+          <td class="center">ชุด</td>
+          <td class="right">45,000.00</td>
+          <td class="right">12,000.00</td>
+          <td class="right">180,000.00</td>
+          <td class="right">48,000.00</td>
+          <td class="right">228,000.00</td>
+        </tr>
+        <!-- Sub-item 2.2 -->
+        <tr>
+          <td class="center">2.2</td>
+          <td class="desc">เสาป้องกันการชน (Column Protector) สีเหลือง</td>
+          <td class="center">8</td>
+          <td class="center">ตัว</td>
+          <td class="right">2,800.00</td>
+          <td class="right">500.00</td>
+          <td class="right">22,400.00</td>
+          <td class="right">4,000.00</td>
+          <td class="right">26,400.00</td>
+        </tr>
+        <!-- Sub-item 2.3 -->
+        <tr>
+          <td class="center">2.3</td>
+          <td class="desc">ป้ายบอกตำแหน่ง Location Tag</td>
+          <td class="center">24</td>
+          <td class="center">ชิ้น</td>
+          <td class="right">150.00</td>
+          <td class="right">50.00</td>
+          <td class="right">3,600.00</td>
+          <td class="right">1,200.00</td>
+          <td class="right">4,800.00</td>
+        </tr>
+
+        <!-- Header 3 -->
+        <tr class="header-row">
+          <td class="center" style="font-weight:700; color:#333;">3</td>
+          <td colspan="8" style="font-weight:700; color:#333;">งานระบบไฟฟ้าและอื่นๆ</td>
+        </tr>
+        <!-- Sub-item 3.1 -->
+        <tr>
+          <td class="center">3.1</td>
+          <td class="desc">ย้ายจุดไฟส่องสว่าง LED พร้อมเดินสายใหม่</td>
+          <td class="center">6</td>
+          <td class="center">จุด</td>
+          <td class="right">3,500.00</td>
+          <td class="right">2,000.00</td>
+          <td class="right">21,000.00</td>
+          <td class="right">12,000.00</td>
+          <td class="right">33,000.00</td>
+        </tr>
+        <!-- Sub-item 3.2 -->
+        <tr>
+          <td class="center">3.2</td>
+          <td class="desc">ทำความสะอาดพื้นที่หลังงานแล้วเสร็จ</td>
+          <td class="center">1</td>
+          <td class="center">งาน</td>
+          <td class="right"></td>
+          <td class="right">3,500.00</td>
+          <td class="right"></td>
+          <td class="right">3,500.00</td>
+          <td class="right">3,500.00</td>
+        </tr>
       </tbody>
     </table>
 
@@ -364,34 +347,35 @@ export async function GET(
       <table class="totals-table">
         <tr>
           <td class="label-cell">ราคาเป็นเงิน</td>
-          <td class="amount-cell">${fmt(q.subtotal)}</td>
+          <td class="amount-cell">329,700.00</td>
           <td style="min-width:40px; text-align:center; border:1px solid #bbb;">บาท</td>
         </tr>
-        ${Number(q.discountAmount) > 0 ? `
         <tr>
           <td class="label-cell">ส่วนลด</td>
-          <td class="amount-cell" style="color:#dc2626;">-${fmt(q.discountAmount)}</td>
+          <td class="amount-cell" style="color:#dc2626;">-9,700.00</td>
           <td style="text-align:center; border:1px solid #bbb;">บาท</td>
-        </tr>` : ''}
+        </tr>
         <tr>
-          <td class="label-cell" style="color:#dc2626;">ภาษีมูลค่าเพิ่ม ${Number(q.vatPercent)}%</td>
-          <td class="amount-cell">${fmt(q.vatAmount)}</td>
+          <td class="label-cell" style="color:#dc2626;">ภาษีมูลค่าเพิ่ม 7%</td>
+          <td class="amount-cell">22,400.00</td>
           <td style="text-align:center; border:1px solid #bbb;">บาท</td>
         </tr>
         <tr class="grand-total">
           <td class="label-cell">จำนวนเงินทั้งสิ้น</td>
-          <td class="amount-cell">${fmt(q.totalAmount)}</td>
+          <td class="amount-cell">342,400.00</td>
           <td style="text-align:center; border:1px solid #bbb; font-weight:700;">บาท</td>
         </tr>
       </table>
     </div>
 
     <!-- Conditions -->
-    ${conditionsText || notesText ? `
     <div class="conditions-section">
-      ${conditionsText ? `<div><span class="label">เงื่อนไข :</span> ${conditionsText.replace(/\n/g, '<br/>')}</div>` : ''}
-      ${notesText && !conditionsText ? `<div><span class="label">หมายเหตุ :</span> ${notesText.replace(/\n/g, '<br/>')}</div>` : ''}
-    </div>` : ''}
+      <div><span class="label">เงื่อนไข :</span> 1. ชำระเงิน 50% เมื่อเซ็นสัญญา ส่วนที่เหลือชำระเมื่องานแล้วเสร็จ<br/>
+      2. ระยะเวลาดำเนินงาน 15 วันทำการ นับจากวันเริ่มงาน<br/>
+      3. รับประกันโครงสร้างชั้นวาง 3 ปี<br/>
+      4. ราคาไม่รวมค่าขนส่งกรณีระยะทางเกิน 100 กม.
+      </div>
+    </div>
 
     <!-- Signature -->
     <div class="signature-section">
@@ -405,22 +389,11 @@ export async function GET(
       <div>
         <div class="sig-box">
           ผู้อนุมัติ<br/>
-          ${q.customerGroup?.groupName || ''}<br/>
+          บริษัท ซีพี ออลล์ จำกัด (มหาชน)<br/>
           วันที่ ......./......./........
         </div>
       </div>
     </div>
   </div>
 </body>
-</html>`;
-
-    return new NextResponse(html, {
-      headers: {
-        'Content-Type': 'text/html; charset=utf-8',
-      },
-    });
-  } catch (error) {
-    console.error('PDF generation error:', error);
-    return NextResponse.json({ error: 'Failed to generate PDF' }, { status: 500 });
-  }
-}
+</html>

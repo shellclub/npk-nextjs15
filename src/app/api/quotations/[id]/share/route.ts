@@ -32,7 +32,7 @@ export async function GET(
       quotationNumber: displayQN,
       date: q.date,
       customerName: q.customerGroup?.groupName || '',
-      customerAddress: q.customerGroup?.headOfficeAddress || '',
+      customerAddress: q.address || q.customerGroup?.headOfficeAddress || '',
       branchName: q.branch ? `${q.branch.code || ''} ${q.branch.name}` : '',
       contactPerson: q.contactPerson || '',
       contactPhone: q.contactPhone || '',

@@ -81,6 +81,7 @@ model CustomerGroup {
   updatedAt        DateTime @updatedAt
 
   branches         CustomerBranch[]
+  contacts         Contact[]
   quotations       Quotation[]
 }
 
@@ -98,6 +99,21 @@ model CustomerBranch {
 
   quotations      Quotation[]
   workOrders      WorkOrder[]
+}
+
+// ========================================
+// ผู้ติดต่อ (Contacts per Customer Group)
+// ========================================
+model Contact {
+  id              String        @id @default(cuid())
+  name            String        // ชื่อผู้ติดต่อ
+  phone           String?       // เบอร์โทร
+  email           String?       // อีเมล
+  position        String?       // ตำแหน่ง
+  customerGroupId String
+  customerGroup   CustomerGroup @relation(fields: [customerGroupId], references: [id], onDelete: Cascade)
+  isActive        Boolean       @default(true)
+  createdAt       DateTime      @default(now())
 }
 
 // ========================================
@@ -143,6 +159,7 @@ model Quotation {
   branch          CustomerBranch?  @relation(fields: [branchId], references: [id])
   contactPerson   String?          // ผู้ติดต่อ
   contactPhone    String?          // เบอร์โทรผู้ติดต่อ
+  address         String?          // ที่อยู่ (override จากลูกค้า, ไม่บังคับ)
   projectName     String?          // ชื่อโครงการ/งาน
   subtotal        Decimal          @default(0) @db.Decimal(12, 2) // ยอดรวมก่อน VAT
   discountPercent Decimal          @default(0) @db.Decimal(5, 2)
@@ -204,6 +221,7 @@ model WorkOrder {
   date            DateTime
   startDate       DateTime?        // วันเริ่มงาน
   endDate         DateTime?        // วันสิ้นสุดงาน
+  customerPO      String?          // เลข PO/WO ของลูกค้า
   description     String?          // รายละเอียดงาน
   totalAmount     Decimal          @default(0) @db.Decimal(12, 2)
   status          WorkOrderStatus  @default(PENDING)

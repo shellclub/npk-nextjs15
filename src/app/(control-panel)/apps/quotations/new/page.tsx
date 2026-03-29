@@ -40,7 +40,8 @@ const Root = styled(FusePageCarded)(() => ({
 }));
 
 type Branch = { id: string; code: string; name: string };
-type CustomerGroup = { id: string; groupName: string; contactName?: string | null; contactPhone?: string | null; taxId?: string | null; branches: Branch[] };
+type Contact = { id: string; name: string; phone?: string | null; email?: string | null; position?: string | null };
+type CustomerGroup = { id: string; groupName: string; headOfficeAddress?: string | null; contactName?: string | null; contactPhone?: string | null; taxId?: string | null; branches: Branch[]; contacts?: Contact[] };
 type QuotationItem = {
   tempId: number;
   itemType: 'HEADER' | 'ITEM';
@@ -78,6 +79,7 @@ function NewQuotationPage() {
   const [branchId, setBranchId] = useState('');
   const [contactPerson, setContactPerson] = useState('');
   const [contactPhone, setContactPhone] = useState('');
+  const [address, setAddress] = useState('');
   const [projectName, setProjectName] = useState('');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [validDays, setValidDays] = useState(30);
@@ -105,6 +107,12 @@ function NewQuotationPage() {
   const [newBranchError, setNewBranchError] = useState('');
   const [newBranch, setNewBranch] = useState({ code: '', name: '', address: '', contactName: '', contactPhone: '' });
 
+  // ── Add Contact Dialog State ──
+  const [addContactOpen, setAddContactOpen] = useState(false);
+  const [newContactSaving, setNewContactSaving] = useState(false);
+  const [newContactError, setNewContactError] = useState('');
+  const [newContact, setNewContact] = useState({ name: '', phone: '', email: '', position: '' });
+
   const fetchCustomers = () => {
     fetch('/api/customers')
       .then((res) => res.json())
@@ -114,13 +122,15 @@ function NewQuotationPage() {
 
   useEffect(() => { fetchCustomers(); }, []);
 
-  // Auto-fill contact info when customer is selected
+  // Auto-fill address when customer is selected
   useEffect(() => {
     if (customerGroupId) {
       const customer = customers.find(c => c.id === customerGroupId);
       if (customer) {
-        if (customer.contactName) setContactPerson(customer.contactName);
-        if (customer.contactPhone) setContactPhone(customer.contactPhone);
+        if (customer.headOfficeAddress) setAddress(customer.headOfficeAddress);
+        // Reset contact when switching customer
+        setContactPerson('');
+        setContactPhone('');
       }
     }
   }, [customerGroupId, customers]);
@@ -153,6 +163,7 @@ function NewQuotationPage() {
 
   const selectedCustomer = customers.find((c) => c.id === customerGroupId);
   const branches = selectedCustomer?.branches || [];
+  const selectedCustomerContacts: Contact[] = selectedCustomer?.contacts || [];
 
   // Calculate subtotal from ITEM rows only
   const subtotal = items.reduce((sum, item) => {
@@ -286,7 +297,8 @@ function NewQuotationPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          customerGroupId, branchId: branchId || null, contactPerson, contactPhone, projectName, date,
+          customerGroupId, branchId: branchId || null, contactPerson, contactPhone,
+          address: address || null, projectName, date,
           validDays, vatPercent, discountAmount, conditions, status,
           createdById: 'system',
           items: processedItems,
@@ -363,6 +375,39 @@ function NewQuotationPage() {
       setNewBranchError('เกิดข้อผิดพลาดในการบันทึก');
     }
     setNewBranchSaving(false);
+  };
+
+  // ── Add Contact Dialog Handlers ──
+  const handleOpenAddContact = () => {
+    setNewContact({ name: '', phone: '', email: '', position: '' });
+    setNewContactError('');
+    setAddContactOpen(true);
+  };
+
+  const handleSaveNewContact = async () => {
+    setNewContactError('');
+    if (!newContact.name.trim()) { setNewContactError('กรุณากรอกชื่อผู้ติดต่อ'); return; }
+    if (!customerGroupId) { setNewContactError('กรุณาเลือกลูกค้าก่อน'); return; }
+
+    setNewContactSaving(true);
+    try {
+      const res = await fetch('/api/contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...newContact, customerGroupId }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      const created = await res.json();
+      // Refresh customer list to get updated contacts
+      fetchCustomers();
+      setContactPerson(created.name);
+      setContactPhone(created.phone || '');
+      setAddContactOpen(false);
+    } catch {
+      setNewContactError('เกิดข้อผิดพลาดในการบันทึก');
+    } finally {
+      setNewContactSaving(false);
+    }
   };
 
   const header = (
@@ -457,10 +502,65 @@ function NewQuotationPage() {
                     </Tooltip>
                   )}
                 </Box>
-                <TextField label="ชื่อผู้ติดต่อ" value={contactPerson}
-                  onChange={(e) => setContactPerson(e.target.value)} fullWidth />
+                {/* Contact search with auto-fill */}
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                  <Autocomplete
+                    freeSolo
+                    options={selectedCustomerContacts}
+                    getOptionLabel={(opt) => typeof opt === 'string' ? opt : opt.name}
+                    inputValue={contactPerson}
+                    onInputChange={(_, val, reason) => {
+                      if (reason === 'input') setContactPerson(val);
+                    }}
+                    onChange={(_, val) => {
+                      if (val && typeof val !== 'string') {
+                        setContactPerson(val.name);
+                        setContactPhone(val.phone || '');
+                      }
+                    }}
+                    renderOption={(props, option) => {
+                      if (typeof option === 'string') return null;
+                      return (
+                        <ListItem {...props} key={option.id} sx={{ py: 0.5 }}>
+                          <ListItemText
+                            primary={option.name}
+                            secondary={[option.position, option.phone].filter(Boolean).join(' • ')}
+                            primaryTypographyProps={{ fontSize: '13px', fontWeight: 500 }}
+                            secondaryTypographyProps={{ fontSize: '11px', color: '#64748B' }}
+                          />
+                        </ListItem>
+                      );
+                    }}
+                    renderInput={(params) => (
+                      <TextField {...params} label="ชื่อผู้ติดต่อ" placeholder="พิมพ์หรือเลือก..." />
+                    )}
+                    slotProps={{ paper: { sx: { borderRadius: '10px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' } } }}
+                    fullWidth
+                    noOptionsText="ไม่พบผู้ติดต่อ"
+                    disabled={!customerGroupId}
+                  />
+                  {customerGroupId && (
+                    <Tooltip title="เพิ่มผู้ติดต่อใหม่" arrow>
+                      <IconButton onClick={handleOpenAddContact}
+                        sx={{
+                          mt: '1px',
+                          width: 44, height: 44, flexShrink: 0,
+                          bgcolor: '#7C3AED', color: '#fff',
+                          borderRadius: '10px',
+                          '&:hover': { bgcolor: '#6D28D9' },
+                        }}>
+                        <FuseSvgIcon size={22}>lucide:user-plus</FuseSvgIcon>
+                      </IconButton>
+                    </Tooltip>
+                  )}
+                </Box>
                 <TextField label="เบอร์โทร" value={contactPhone}
                   onChange={(e) => setContactPhone(e.target.value)} fullWidth />
+                <TextField label="ที่อยู่ (ไม่บังคับ)" value={address}
+                  onChange={(e) => setAddress(e.target.value)} fullWidth
+                  multiline rows={2}
+                  sx={{ gridColumn: { md: 'span 3' } }}
+                  placeholder="ที่อยู่ลูกค้า (จะขึ้นอัตโนมัติเมื่อเลือกลูกค้า)" />
                 <TextField label="ชื่อโครงการ / งาน" value={projectName}
                   onChange={(e) => setProjectName(e.target.value)} fullWidth
                   InputProps={{ sx: { color: '#1D4ED8', fontWeight: 600 } }} />
@@ -843,6 +943,55 @@ function NewQuotationPage() {
               '&:hover': { background: 'linear-gradient(135deg, #047857, #065F46)' },
             }}>
             {newBranchSaving ? 'กำลังบันทึก...' : 'เพิ่มสาขา'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── Add Contact Dialog ── */}
+      <Dialog open={addContactOpen} onClose={() => setAddContactOpen(false)} maxWidth="sm" fullWidth
+        PaperProps={{ sx: { borderRadius: '16px' } }}>
+        <DialogTitle sx={{
+          display: 'flex', alignItems: 'center', gap: 1.5, pb: 1,
+          borderBottom: '1px solid', borderColor: 'divider',
+        }}>
+          <Box sx={{
+            width: 36, height: 36, borderRadius: '10px',
+            background: 'linear-gradient(135deg, #7C3AED, #6D28D9)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <FuseSvgIcon size={20} sx={{ color: '#fff' }}>lucide:user-plus</FuseSvgIcon>
+          </Box>
+          <Typography variant="h6" fontWeight={700}>เพิ่มผู้ติดต่อใหม่</Typography>
+        </DialogTitle>
+        <DialogContent sx={{ pt: '20px!important' }}>
+          {newContactError && (
+            <Alert severity="error" sx={{ mb: 2 }}>{newContactError}</Alert>
+          )}
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+            <TextField label="ชื่อผู้ติดต่อ *" value={newContact.name}
+              onChange={(e) => setNewContact({ ...newContact, name: e.target.value })}
+              fullWidth autoFocus />
+            <TextField label="ตำแหน่ง" value={newContact.position}
+              onChange={(e) => setNewContact({ ...newContact, position: e.target.value })} fullWidth />
+            <TextField label="เบอร์โทร" value={newContact.phone}
+              onChange={(e) => setNewContact({ ...newContact, phone: e.target.value })} fullWidth />
+            <TextField label="อีเมล" value={newContact.email}
+              onChange={(e) => setNewContact({ ...newContact, email: e.target.value })} fullWidth />
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+          <Button onClick={() => setAddContactOpen(false)}
+            sx={{ textTransform: 'none', fontWeight: 600, color: 'text.secondary' }}>
+            ยกเลิก
+          </Button>
+          <Button variant="contained" onClick={handleSaveNewContact} disabled={newContactSaving}
+            startIcon={<FuseSvgIcon size={18}>lucide:check</FuseSvgIcon>}
+            sx={{
+              textTransform: 'none', fontWeight: 600,
+              background: 'linear-gradient(135deg, #7C3AED, #6D28D9)',
+              '&:hover': { background: 'linear-gradient(135deg, #6D28D9, #5B21B6)' },
+            }}>
+            {newContactSaving ? 'กำลังบันทึก...' : 'เพิ่มผู้ติดต่อ'}
           </Button>
         </DialogActions>
       </Dialog>

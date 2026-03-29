@@ -32,7 +32,7 @@ const Root = styled(FusePageCarded)(() => ({ '& .container': { maxWidth: '100%!i
 type WorkOrder = {
   id: string; woNumber: string; date: string; description?: string | null;
   totalAmount: number; status: string;
-  quotation?: { quotationNumber: string; customerGroup: { groupName: string } } | null;
+  quotation?: { quotationNumber: string; projectName?: string | null; customerGroup: { groupName: string } } | null;
   team?: { teamName: string; leaderName: string } | null;
 };
 
@@ -142,7 +142,7 @@ function PendingPaymentsPage() {
                   <TableCell>วันที่</TableCell>
                   <TableCell>อ้างอิง QT</TableCell>
                   <TableCell>ลูกค้า</TableCell>
-                  <TableCell>รายละเอียดงาน</TableCell>
+                  <TableCell>ชื่อโครงการ/งาน</TableCell>
                   <TableCell>ทีมช่าง</TableCell>
                   <TableCell align="right">ยอดรวม (บาท)</TableCell>
                   <TableCell align="center">สถานะ</TableCell>
@@ -168,8 +168,10 @@ function PendingPaymentsPage() {
                       ) : '-'}
                     </TableCell>
                     <TableCell sx={{ fontWeight: 500 }}>{wo.quotation?.customerGroup?.groupName || '-'}</TableCell>
-                    <TableCell sx={{ maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {wo.description || '-'}
+                    <TableCell sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#D97706' }}>
+                        {wo.quotation?.projectName || wo.description || '-'}
+                      </Typography>
                     </TableCell>
                     <TableCell sx={{ fontWeight: 500 }}>{wo.team?.teamName || '-'}</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: '15px !important', color: '#D97706' }}>

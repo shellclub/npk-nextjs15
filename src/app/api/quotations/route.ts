@@ -97,6 +97,7 @@ export async function POST(request: NextRequest) {
         branchId: body.branchId || null,
         contactPerson: body.contactPerson || null,
         contactPhone: body.contactPhone || null,
+        address: body.address || null,
         projectName: body.projectName || null,
         subtotal,
         discountPercent: 0,

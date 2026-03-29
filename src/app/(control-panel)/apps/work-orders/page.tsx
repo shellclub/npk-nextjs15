@@ -42,13 +42,14 @@ const Root = styled(FusePageCarded)(() => ({ '& .container': { maxWidth: '100%!i
 
 type WorkOrder = {
   id: string; woNumber: string; date: string; description?: string | null;
+  customerPO?: string | null;
   totalAmount: number; status: string;
-  quotation?: { quotationNumber: string; customerGroup: { groupName: string } } | null;
+  quotation?: { quotationNumber: string; projectName?: string | null; customerGroup: { groupName: string } } | null;
   team?: { teamName: string; leaderName: string } | null;
   branch?: { name: string } | null;
   purchaseOrders?: { id: string; poNumber: string; totalAmount: number; status: string }[];
 };
-type Quotation = { id: string; quotationNumber: string; customerGroup: { groupName: string }; totalAmount: number };
+type Quotation = { id: string; quotationNumber: string; projectName?: string | null; customerGroup: { groupName: string }; totalAmount: number };
 type Team = { id: string; teamName: string; leaderName: string };
 
 const statusConfig: Record<string, { label: string; bgColor: string; textColor: string; borderColor: string }> = {
@@ -91,7 +92,14 @@ function WorkOrdersPage() {
   const [form, setForm] = useState({
     quotationId: '', teamId: '', date: new Date().toISOString().split('T')[0],
     startDate: '', endDate: '', description: '', totalAmount: 0, notes: '',
+    customerPO: '',
   });
+
+  // Year/Month filter
+  const currentYear = new Date().getFullYear() + 543; // Buddhist year
+  const [yearFilter, setYearFilter] = useState(currentYear);
+  const [monthFilter, setMonthFilter] = useState(0); // 0 = all months
+  const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
   // Action menu
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
@@ -117,6 +125,15 @@ function WorkOrdersPage() {
   }, [statusFilter, search]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Filter by year/month
+  const filteredByDate = data.filter((wo) => {
+    const d = new Date(wo.date);
+    const buddhistYear = d.getFullYear() + 543;
+    if (buddhistYear !== yearFilter) return false;
+    if (monthFilter > 0 && (d.getMonth() + 1) !== monthFilter) return false;
+    return true;
+  });
 
   const toggleSelect = (id: string) => setSelected(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id]);
   const toggleAll = () => setSelected(selected.length === data.length ? [] : data.map(d => d.id));
@@ -197,7 +214,7 @@ function WorkOrdersPage() {
       if (!res.ok) throw new Error('Failed');
       const newWO = await res.json();
       setDialogOpen(false);
-      setForm({ quotationId: '', teamId: '', date: new Date().toISOString().split('T')[0], startDate: '', endDate: '', description: '', totalAmount: 0, notes: '' });
+      setForm({ quotationId: '', teamId: '', date: new Date().toISOString().split('T')[0], startDate: '', endDate: '', description: '', totalAmount: 0, notes: '', customerPO: '' });
       setSnackbar({ open: true, message: `สร้าง ${newWO.woNumber} เรียบร้อย`, severity: 'success' });
       load();
     } catch {
@@ -252,6 +269,39 @@ function WorkOrdersPage() {
           </div>
         </div>
       </div>
+      {/* Year/Month filter row */}
+      <Box sx={{ display: 'flex', gap: 1.5, mt: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
+        <Typography sx={{ fontSize: '14px', color: '#64748B', fontWeight: 500 }}>กรองตาม:</Typography>
+        {yearOptions.map((y) => (
+          <Chip key={y} label={`ปี ${y}`} size="small"
+            onClick={() => setYearFilter(y)}
+            sx={{
+              fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+              bgcolor: yearFilter === y ? '#0284C7' : '#F1F5F9',
+              color: yearFilter === y ? '#fff' : '#475569',
+              '&:hover': { bgcolor: yearFilter === y ? '#0369A1' : '#E2E8F0' },
+            }} />
+        ))}
+        <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+        <Chip label="ทั้งปี" size="small"
+          onClick={() => setMonthFilter(0)}
+          sx={{
+            fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+            bgcolor: monthFilter === 0 ? '#059669' : '#F1F5F9',
+            color: monthFilter === 0 ? '#fff' : '#475569',
+            '&:hover': { bgcolor: monthFilter === 0 ? '#047857' : '#E2E8F0' },
+          }} />
+        {['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'].map((m, i) => (
+          <Chip key={i+1} label={m} size="small"
+            onClick={() => setMonthFilter(i + 1)}
+            sx={{
+              fontSize: '12px', fontWeight: 600, cursor: 'pointer',
+              bgcolor: monthFilter === i + 1 ? '#059669' : '#F1F5F9',
+              color: monthFilter === i + 1 ? '#fff' : '#475569',
+              '&:hover': { bgcolor: monthFilter === i + 1 ? '#047857' : '#E2E8F0' },
+            }} />
+        ))}
+      </Box>
     </div>
   );
 
@@ -260,7 +310,7 @@ function WorkOrdersPage() {
     <Paper className="flex h-full w-full flex-auto flex-col overflow-hidden rounded-b-none" elevation={0}>
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress sx={{ color: '#38BDF8' }} /></Box>
-      ) : data.length === 0 ? (
+      ) : filteredByDate.length === 0 ? (
         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 10 }}>
           <FuseSvgIcon sx={{ color: '#CBD5E1', mb: 2 }} size={64}>lucide:clipboard-check</FuseSvgIcon>
           <Typography sx={{ fontSize: '18px', fontWeight: 600, color: '#64748B' }}>ยังไม่มี Work Order</Typography>
@@ -282,7 +332,8 @@ function WorkOrdersPage() {
                   <TableCell>วันที่</TableCell>
                   <TableCell>อ้างอิง QT</TableCell>
                   <TableCell>ลูกค้า</TableCell>
-                  <TableCell>รายละเอียดงาน</TableCell>
+                  <TableCell>ชื่อโครงการ/งาน</TableCell>
+                  <TableCell>PO ลูกค้า</TableCell>
                   <TableCell>ทีมช่าง</TableCell>
                   <TableCell align="right">ยอดรวม (บาท)</TableCell>
                   <TableCell align="center">สถานะ</TableCell>
@@ -290,7 +341,7 @@ function WorkOrdersPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {data.map((wo, idx) => {
+                {filteredByDate.map((wo, idx) => {
                   const sc = statusConfig[wo.status] || statusConfig['PENDING'];
                   const isCancelled = wo.status === 'CANCELLED';
                   return (
@@ -318,8 +369,13 @@ function WorkOrdersPage() {
                       <TableCell sx={{ fontWeight: 500 }}>
                         {wo.quotation?.customerGroup?.groupName || '-'}
                       </TableCell>
-                      <TableCell sx={{ maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {wo.description || '-'}
+                      <TableCell sx={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#059669' }}>
+                          {wo.quotation?.projectName || wo.description || '-'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell sx={{ fontSize: '13px', color: '#64748B' }}>
+                        {wo.customerPO || '-'}
                       </TableCell>
                       <TableCell sx={{ fontWeight: 500 }}>{wo.team?.teamName || '-'}</TableCell>
                       <TableCell align="right" sx={{
@@ -354,11 +410,11 @@ function WorkOrdersPage() {
 
           {/* Footer summary */}
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 3, py: 1.5, borderTop: '1px solid #E2E8F0', bgcolor: '#FAFBFC' }}>
-            <Typography sx={{ fontSize: '14px', color: '#64748B' }}>แสดง {data.length} รายการ</Typography>
+            <Typography sx={{ fontSize: '14px', color: '#64748B' }}>แสดง {filteredByDate.length} รายการ</Typography>
             <Typography sx={{ fontSize: '15px', fontWeight: 600, color: '#0284C7' }}>
               ยอดรวม{' '}
               <Box component="span" sx={{ fontSize: '17px', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                {fmt(data.filter(w => w.status !== 'CANCELLED').reduce((s, w) => s + Number(w.totalAmount), 0))}
+                {fmt(filteredByDate.filter(w => w.status !== 'CANCELLED').reduce((s, w) => s + Number(w.totalAmount), 0))}
               </Box>{' '}บาท
             </Typography>
           </Box>
@@ -393,6 +449,12 @@ function WorkOrdersPage() {
 
         {menuWO && menuWO.status !== 'CANCELLED' && menuWO.status !== 'PAID' && (
           <>
+            <Divider sx={{ my: 0.5 }} />
+            <MenuItem onClick={() => { window.open(`/api/work-orders/${menuWO.id}/pdf`, '_blank'); handleMenuClose(); }}
+              sx={{ py: 1.2, gap: 1.5 }}>
+              <ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#059669' }}>lucide:printer</FuseSvgIcon></ListItemIcon>
+              <ListItemText>พิมพ์ใบตอบรับงาน</ListItemText>
+            </MenuItem>
             <Divider sx={{ my: 0.5 }} />
             <MenuItem onClick={handleCancelClick} sx={{ py: 1.2, gap: 1.5, color: '#DC2626' }}>
               <ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#DC2626' }}>lucide:trash-2</FuseSvgIcon></ListItemIcon>
@@ -477,6 +539,9 @@ function WorkOrdersPage() {
             <TextField label="ยอดรวม (บาท)" type="number" value={form.totalAmount}
               onChange={(e) => setForm({ ...form, totalAmount: Number(e.target.value) })}
               fullWidth sx={fieldSx} />
+            <TextField label="เลข PO ลูกค้า (ถ้ามี)" value={form.customerPO}
+              onChange={(e) => setForm({ ...form, customerPO: e.target.value })}
+              fullWidth sx={fieldSx} placeholder="เช่น WO-XXXXX / PO-XXXXX" />
           </div>
         </DialogContent>
         <Divider />

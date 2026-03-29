@@ -334,6 +334,11 @@ function PurchaseOrdersPage() {
 				{menuPO && menuPO.status !== 'CANCELLED' && menuPO.status !== 'RECEIVED' && (
 					<>
 						<Divider sx={{ my: 0.5 }} />
+						<MenuItem onClick={() => { router.push(`/apps/purchase-orders/${menuPO.id}/print`); handleMenuClose(); }} sx={{ py: 1.2, gap: 1.5 }}>
+							<ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#059669' }}>lucide:printer</FuseSvgIcon></ListItemIcon>
+							<ListItemText>พิมพ์ใบสั่งซื้อ</ListItemText>
+						</MenuItem>
+						<Divider sx={{ my: 0.5 }} />
 						<MenuItem onClick={handleCancelClick} sx={{ py: 1.2, gap: 1.5, color: '#DC2626' }}>
 							<ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#DC2626' }}>lucide:trash-2</FuseSvgIcon></ListItemIcon>
 							<ListItemText primaryTypographyProps={{ color: '#DC2626' }}>ยกเลิก</ListItemText>

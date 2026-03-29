@@ -35,7 +35,7 @@ const Root = styled(FusePageCarded)(() => ({ '& .container': { maxWidth: '100%!i
 type WorkOrder = {
   id: string; woNumber: string; date: string; description?: string | null;
   totalAmount: number; status: string;
-  quotation?: { quotationNumber: string; customerGroup: { groupName: string } } | null;
+  quotation?: { quotationNumber: string; projectName?: string | null; customerGroup: { groupName: string } } | null;
   team?: { teamName: string; leaderName: string } | null;
 };
 
@@ -168,7 +168,7 @@ function CompletedWorksPage() {
                   <TableCell>วันที่</TableCell>
                   <TableCell>อ้างอิง QT</TableCell>
                   <TableCell>ลูกค้า</TableCell>
-                  <TableCell>รายละเอียดงาน</TableCell>
+                  <TableCell>ชื่อโครงการ/งาน</TableCell>
                   <TableCell>ทีมช่าง</TableCell>
                   <TableCell align="right">ยอดรวม (บาท)</TableCell>
                   <TableCell align="center">สถานะ</TableCell>
@@ -193,8 +193,10 @@ function CompletedWorksPage() {
                         ) : '-'}
                       </TableCell>
                       <TableCell sx={{ fontWeight: 500 }}>{wo.quotation?.customerGroup?.groupName || '-'}</TableCell>
-                      <TableCell sx={{ maxWidth: 250, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {wo.description || '-'}
+                      <TableCell sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#059669' }}>
+                          {wo.quotation?.projectName || wo.description || '-'}
+                        </Typography>
                       </TableCell>
                       <TableCell sx={{ fontWeight: 500 }}>{wo.team?.teamName || '-'}</TableCell>
                       <TableCell align="right" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: '15px !important' }}>
@@ -234,11 +236,21 @@ function CompletedWorksPage() {
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
         slotProps={{ paper: { sx: { borderRadius: '12px', minWidth: 200, boxShadow: '0 8px 30px rgba(0,0,0,0.12)', py: 0.5 } } }}>
-        {menuWO && menuWO.status === 'COMPLETED' && (
-          <MenuItem onClick={() => handleStatusUpdate('PAID', 'จ่ายแล้ว')} sx={{ py: 1.2, gap: 1.5 }}>
-            <ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#4F46E5' }}>lucide:banknote</FuseSvgIcon></ListItemIcon>
-            <ListItemText>จ่ายแล้ว</ListItemText>
+        {menuWO && (
+          <MenuItem onClick={() => { window.open(`/api/work-orders/${menuWO.id}/delivery-note`, '_blank'); handleMenuClose(); }}
+            sx={{ py: 1.2, gap: 1.5 }}>
+            <ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#059669' }}>lucide:printer</FuseSvgIcon></ListItemIcon>
+            <ListItemText>พิมพ์ใบส่งมอบงาน</ListItemText>
           </MenuItem>
+        )}
+        {menuWO && menuWO.status === 'COMPLETED' && (
+          <>
+            <Divider sx={{ my: 0.5 }} />
+            <MenuItem onClick={() => handleStatusUpdate('PAID', 'จ่ายแล้ว')} sx={{ py: 1.2, gap: 1.5 }}>
+              <ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#4F46E5' }}>lucide:banknote</FuseSvgIcon></ListItemIcon>
+              <ListItemText>จ่ายแล้ว</ListItemText>
+            </MenuItem>
+          </>
         )}
         {menuWO && menuWO.status === 'PAID' && (
           <MenuItem disabled sx={{ py: 1.2, gap: 1.5, opacity: 0.5 }}>

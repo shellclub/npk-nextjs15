@@ -8,7 +8,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const wo = await prisma.workOrder.findUnique({
       where: { id },
       include: {
-        quotation: { select: { quotationNumber: true, customerGroup: { select: { groupName: true } } } },
+        quotation: {
+          select: {
+            quotationNumber: true,
+            projectName: true,
+            customerGroup: { select: { groupName: true } },
+          },
+        },
         branch: true,
         team: { select: { teamName: true, leaderName: true } },
         createdBy: { select: { name: true } },
@@ -37,6 +43,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (body.startDate !== undefined) data.startDate = body.startDate ? new Date(body.startDate) : null;
     if (body.endDate !== undefined) data.endDate = body.endDate ? new Date(body.endDate) : null;
     if (body.notes !== undefined) data.notes = body.notes;
+    if (body.customerPO !== undefined) data.customerPO = body.customerPO || null;
 
     const updated = await prisma.workOrder.update({
       where: { id },

@@ -6,7 +6,10 @@ export async function GET() {
   try {
     const customers = await prisma.customerGroup.findMany({
       where: { isActive: true },
-      include: { branches: { where: { isActive: true } } },
+      include: {
+        branches: { where: { isActive: true } },
+        contacts: { where: { isActive: true }, orderBy: { name: 'asc' } },
+      },
       orderBy: { groupName: 'asc' },
     });
     return NextResponse.json(customers);

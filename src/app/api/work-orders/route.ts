@@ -23,7 +23,13 @@ export async function GET(request: NextRequest) {
     const workOrders = await prisma.workOrder.findMany({
       where,
       include: {
-        quotation: { select: { quotationNumber: true, customerGroup: { select: { groupName: true } } } },
+        quotation: {
+          select: {
+            quotationNumber: true,
+            projectName: true,
+            customerGroup: { select: { groupName: true } },
+          },
+        },
         branch: true,
         team: { select: { teamName: true, leaderName: true } },
         createdBy: { select: { name: true } },
@@ -86,6 +92,7 @@ export async function POST(request: NextRequest) {
         totalAmount: body.totalAmount || 0,
         status: body.status || 'PENDING',
         notes: body.notes || null,
+        customerPO: body.customerPO || null,
         createdById,
       },
       include: {

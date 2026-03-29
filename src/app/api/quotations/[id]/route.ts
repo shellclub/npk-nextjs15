@@ -82,6 +82,7 @@ export async function PATCH(
         branchId: body.branchId ?? undefined,
         contactPerson: body.contactPerson ?? undefined,
         contactPhone: body.contactPhone ?? undefined,
+        address: body.address ?? undefined,
         projectName: body.projectName ?? undefined,
         subtotal,
         discountPercent: 0,
