@@ -56,6 +56,8 @@ type Quotation = {
   customerGroup: { groupName: string };
   branch?: { name: string; code?: string } | null;
   projectName?: string | null;
+  contactPerson?: string | null;
+  contactPhone?: string | null;
   subtotal: number; totalAmount: number; status: string;
   createdBy: { name: string };
   items: QuotationItem[];
@@ -457,12 +459,11 @@ function QuotationsPage() {
                       indeterminate={selected.length > 0 && selected.length < quotations.length}
                       onChange={toggleSelectAll} size="small" />
                   </TableCell>
-                  <TableCell align="center" sx={{ width: 50 }}>#</TableCell>
-                  <TableCell>เลขที่</TableCell>
-                  <TableCell>ลูกค้า</TableCell>
-                  <TableCell>สาขา</TableCell>
-                  <TableCell>ชื่อใบเสนอราคา</TableCell>
-                  <TableCell align="right">ก่อน VAT</TableCell>
+                  <TableCell sx={{ minWidth: 130 }}>เลขที่ / วันที่</TableCell>
+                  <TableCell>ลูกค้า / สาขา</TableCell>
+                  <TableCell>ชื่อโครงการ</TableCell>
+                  <TableCell>ผู้ติดต่อ</TableCell>
+                  <TableCell sx={{ maxWidth: 220 }}>ชื่อใบเสนอราคา</TableCell>
                   <TableCell align="right">ยอดรวม</TableCell>
                   <TableCell align="center">สถานะ</TableCell>
                   <TableCell align="center" sx={{ width: 70 }}>จัดการ</TableCell>
@@ -485,9 +486,7 @@ function QuotationsPage() {
                       <TableCell padding="checkbox" sx={{ pl: 2 }} onClick={(e) => e.stopPropagation()}>
                         <Checkbox checked={selected.includes(q.id)} onChange={() => toggleSelect(q.id)} size="small" />
                       </TableCell>
-                      <TableCell align="center" sx={{ fontWeight: 500, color: '#94A3B8 !important' }}>
-                        {quotations.length - index}
-                      </TableCell>
+                      {/* เลขที่ / วันที่ */}
                       <TableCell>
                         <Typography sx={{
                           fontSize: '14px', fontWeight: 600,
@@ -498,6 +497,7 @@ function QuotationsPage() {
                         </Typography>
                         <Typography sx={{ fontSize: '12px', color: '#94A3B8', mt: 0.25 }}>{fmtDate(q.date)}</Typography>
                       </TableCell>
+                      {/* ลูกค้า / สาขา */}
                       <TableCell>
                         <Typography sx={{
                           fontSize: '14px', fontWeight: 500,
@@ -506,14 +506,31 @@ function QuotationsPage() {
                         }}>
                           {q.customerGroup?.groupName}
                         </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography sx={{
-                          fontSize: '13px', color: isCancelled ? '#D1D5DB' : '#64748B',
-                        }}>
+                        <Typography sx={{ fontSize: '12px', color: '#94A3B8', mt: 0.25 }}>
                           {q.branch ? `${q.branch.code || ''} ${q.branch.name}` : '-'}
                         </Typography>
                       </TableCell>
+                      {/* ชื่อโครงการ */}
+                      <TableCell>
+                        <Typography sx={{
+                          fontSize: '13px', color: isCancelled ? '#9CA3AF' : '#475569',
+                          maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                        }}>
+                          {q.projectName || '-'}
+                        </Typography>
+                      </TableCell>
+                      {/* ผู้ติดต่อ / เบอร์โทร */}
+                      <TableCell>
+                        <Typography sx={{
+                          fontSize: '13px', color: isCancelled ? '#9CA3AF' : '#475569',
+                        }}>
+                          {q.contactPerson || '-'}
+                        </Typography>
+                        <Typography sx={{ fontSize: '12px', color: '#94A3B8', mt: 0.25 }}>
+                          {q.contactPhone || ''}
+                        </Typography>
+                      </TableCell>
+                      {/* ชื่อใบเสนอราคา */}
                       <TableCell>
                         <Typography sx={{
                           fontSize: '14px', color: isCancelled ? '#9CA3AF' : '#475569',
@@ -523,12 +540,7 @@ function QuotationsPage() {
                           {q.projectName || '-'}
                         </Typography>
                       </TableCell>
-                      <TableCell align="right" sx={{
-                        fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
-                        color: isCancelled ? '#D1D5DB !important' : '#0284C7 !important',
-                      }}>
-                        {fmt(q.subtotal)}
-                      </TableCell>
+                      {/* ยอดรวม */}
                       <TableCell align="right" sx={{
                         fontWeight: 700, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',
                         fontSize: '15px !important',
@@ -536,6 +548,7 @@ function QuotationsPage() {
                       }}>
                         {fmt(q.totalAmount)}
                       </TableCell>
+                      {/* สถานะ */}
                       <TableCell align="center" sx={{ textDecoration: 'none !important' }}>
                         <Chip label={sc.label} size="small" sx={{
                           bgcolor: sc.bgColor, color: sc.textColor,
@@ -543,6 +556,7 @@ function QuotationsPage() {
                           minWidth: 72,
                         }} />
                       </TableCell>
+                      {/* จัดการ */}
                       <TableCell align="center" onClick={(e) => e.stopPropagation()}
                         sx={{ textDecoration: 'none !important' }}>
                         <Tooltip title="จัดการ" arrow>

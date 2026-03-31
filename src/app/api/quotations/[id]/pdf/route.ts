@@ -118,10 +118,13 @@ export async function GET(
     }
     .page {
       width: 210mm;
-      min-height: 297mm;
+      height: 297mm;
       margin: 0 auto;
       padding: 12mm 12mm 15mm 12mm;
       position: relative;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
     }
 
     /* ── Header ── */
@@ -131,18 +134,18 @@ export async function GET(
       gap: 16px;
       margin-bottom: 6px;
     }
-    .header-logo { width: 90px; height: auto; }
-    .header-info { flex: 1; text-align: center; }
+    .header-logo { width: 110px; height: auto; }
+    .header-info { flex: 1; text-align: left; }
     .header-info .company-th {
-      font-size: 17px; font-weight: 700; color: #1a1a1a;
+      font-size: 18px; font-weight: 700; color: #1a1a1a;
       margin-bottom: 1px;
     }
     .header-info .company-en {
-      font-size: 14px; font-weight: 600; color: #333;
+      font-size: 13px; font-weight: 600; color: #333;
       margin-bottom: 4px;
     }
     .header-info .addr {
-      font-size: 10px; color: #555; line-height: 1.5;
+      font-size: 10px; color: #555; line-height: 1.6;
     }
 
     /* ── Title ── */
@@ -150,9 +153,8 @@ export async function GET(
       text-align: center;
       font-size: 18px;
       font-weight: 700;
-      color: #0066cc;
+      color: #333;
       margin: 10px 0 8px;
-      border-bottom: 2px solid #0066cc;
       padding-bottom: 4px;
     }
 
@@ -190,6 +192,14 @@ export async function GET(
       font-size: 15px;
     }
 
+    /* ── Items Wrapper ── */
+    .items-wrapper {
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
     /* ── Items Table ── */
     .items-table {
       width: 100%;
@@ -222,6 +232,14 @@ export async function GET(
     .items-table .header-row td {
       background: #fffde7;
       border: 1px solid #bbb;
+    }
+    .items-table .filler-row td {
+      border-left: 1px solid #bbb;
+      border-right: 1px solid #bbb;
+      border-top: none;
+      border-bottom: none;
+      padding: 0;
+      height: 20px;
     }
 
     /* ── Totals ── */
@@ -281,7 +299,7 @@ export async function GET(
 
     @media print {
       body { padding: 0; }
-      .page { padding: 8mm; margin: 0; width: 100%; min-height: auto; }
+      .page { padding: 8mm; margin: 0; width: 100%; height: 297mm; }
     }
   </style>
 </head>
@@ -292,11 +310,11 @@ export async function GET(
       <img src="${logoUrl}" alt="NPK Logo" class="header-logo" />
       <div class="header-info">
         <div class="company-th">บริษัท เอ็นพีเค เซอร์วิส แอนด์ ซัพพลาย จำกัด</div>
-        <div class="company-en">NPK SERVICE & SUPPLY CO.,LTD.</div>
+        <div class="company-en">NPK SERVICE & SUPPLY CO.,LTD</div>
         <div class="addr">
-          สำนักงานใหญ่ : 210/19 หมู่ 4 ตำบลสนามชัย อำเภอเมืองสุพรรณบุรี จังหวัดสุพรรณบุรี 72000<br/>
-          Head Office : 210/19 Moo.4, Tambon Sanamchai, Amphur Mueang Suphanburi, Suphanburi 72000<br/>
-          Call : 09-8942-9891, 06-5961-9799, 09-3694-4591 E-mail : npkservicesupply@gmail.com
+          สำนักงานใหญ่ : 210/19  หมู่ 4  ตำบลสนามชัย  อำเภอเมืองสุพรรณบุรี  จังหวัดสุพรรณบุรี  72000<br/>
+          Head Office : 210/19 Moo.4 , Tombon Sanamchai ,  Amphur Mueang   Suphanburi,   Suphanburi 72000<br/>
+          เลขผู้เสียภาษี 0105555161084 &nbsp;&nbsp; Tel: 09-8942-9891, 06-5961-9799 , 09-3694-4591 &nbsp;&nbsp; E-mail : npkservicesupply@gmail.com
         </div>
       </div>
     </div>
@@ -342,6 +360,7 @@ export async function GET(
     </div>
 
     <!-- Items Table -->
+    <div class="items-wrapper">
     <table class="items-table">
       <thead>
         <tr>
@@ -362,42 +381,51 @@ export async function GET(
       </thead>
       <tbody>
         ${itemsHtml}
+        ${Array(20).fill('<tr class="filler-row"><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>').join('\n        ')}
       </tbody>
     </table>
+    </div>
 
-    <!-- Totals -->
-    <div class="totals-section">
-      <table class="totals-table">
+    <!-- Conditions + Totals side by side -->
+    <div style="display:flex; margin-top:0; gap:0;">
+      <!-- LEFT: Conditions box -->
+      <div style="flex:1; border:1px solid #999; font-size:11px;">
+        <div style="padding:4px 6px; border-bottom:1px solid #999; min-height:28px;">
+          <strong>เงื่อนไขการชำระเงิน :</strong> ${q.conditions || ''}
+        </div>
+        <div style="padding:4px 6px; border-bottom:1px solid #999; min-height:28px;">
+          <strong>เงื่อนไขการรับประกัน</strong> ${q.warranty || ''}
+        </div>
+        <div style="padding:4px 6px; min-height:28px;">
+          <strong>หมายเหตุ :</strong> ${q.notes || ''}
+        </div>
+      </div>
+
+      <!-- RIGHT: Totals table -->
+      <table class="totals-table" style="margin:0;">
         <tr>
-          <td class="label-cell">ราคาเป็นเงิน</td>
+          <td class="label-cell">Sub Total</td>
           <td class="amount-cell">${fmt(q.subtotal)}</td>
-          <td style="min-width:40px; text-align:center; border:1px solid #bbb;">บาท</td>
         </tr>
         ${Number(q.discountAmount) > 0 ? `
         <tr>
-          <td class="label-cell">ส่วนลด</td>
+          <td class="label-cell">Discount</td>
           <td class="amount-cell" style="color:#dc2626;">-${fmt(q.discountAmount)}</td>
-          <td style="text-align:center; border:1px solid #bbb;">บาท</td>
+        </tr>
+        <tr>
+          <td class="label-cell">After Discount</td>
+          <td class="amount-cell">${fmt(Number(q.subtotal) - Number(q.discountAmount))}</td>
         </tr>` : ''}
         <tr>
-          <td class="label-cell" style="color:#dc2626;">ภาษีมูลค่าเพิ่ม ${Number(q.vatPercent)}%</td>
+          <td class="label-cell">Vat ${Number(q.vatPercent)}%</td>
           <td class="amount-cell">${fmt(q.vatAmount)}</td>
-          <td style="text-align:center; border:1px solid #bbb;">บาท</td>
         </tr>
         <tr class="grand-total">
-          <td class="label-cell">จำนวนเงินทั้งสิ้น</td>
+          <td class="label-cell">Grand Total</td>
           <td class="amount-cell">${fmt(q.totalAmount)}</td>
-          <td style="text-align:center; border:1px solid #bbb; font-weight:700;">บาท</td>
         </tr>
       </table>
     </div>
-
-    <!-- Conditions -->
-    ${conditionsText || notesText ? `
-    <div class="conditions-section">
-      ${conditionsText ? `<div><span class="label">เงื่อนไข :</span> ${conditionsText.replace(/\n/g, '<br/>')}</div>` : ''}
-      ${notesText && !conditionsText ? `<div><span class="label">หมายเหตุ :</span> ${notesText.replace(/\n/g, '<br/>')}</div>` : ''}
-    </div>` : ''}
 
     <!-- Closing -->
     <div style="font-size:12px; font-weight:700; text-align:right; margin:6px 0 8px;">
@@ -405,7 +433,7 @@ export async function GET(
         const txt = ['', 'หนึ่ง','สอง','สาม','สี่','ห้า','หก','เจ็ด','แปด','เก้า'];
         const unit = ['', 'สิบ','ร้อย','พัน','หมื่น','แสน','ล้าน'];
         const n = Number(q.totalAmount);
-        if (n === 0) return 'ศูนย์บาทถ้วน';
+        if (n === 0) return 'ศูนย์ถ้วน';
         const [intPart, decPart] = n.toFixed(2).split('.');
         let result = '';
         const intStr = intPart.replace(/,/g, '');
@@ -419,7 +447,7 @@ export async function GET(
           if (pos === 0 && d === 1 && len > 1) { result += 'เอ็ด'; continue; }
           result += txt[d] + unit[pos];
         }
-        result += 'บาท';
+        result += '';
         const dec = parseInt(decPart);
         if (dec === 0) { result += 'ถ้วน'; }
         else {

@@ -18,7 +18,7 @@ function thaiDate(d: Date | string) {
 function bahtText(n: number): string {
   const txt = ['', 'หนึ่ง','สอง','สาม','สี่','ห้า','หก','เจ็ด','แปด','เก้า'];
   const unit = ['', 'สิบ','ร้อย','พัน','หมื่น','แสน','ล้าน'];
-  if (n === 0) return 'ศูนย์บาทถ้วน';
+  if (n === 0) return 'ศูนย์ถ้วน';
   const [intPart, decPart] = n.toFixed(2).split('.');
   let result = '';
   const intStr = intPart.replace(/,/g, '');
@@ -32,7 +32,7 @@ function bahtText(n: number): string {
     if (pos === 0 && d === 1 && len > 1) { result += 'เอ็ด'; continue; }
     result += txt[d] + unit[pos];
   }
-  result += 'บาท';
+  result += '';
   const dec = parseInt(decPart);
   if (dec === 0) { result += 'ถ้วน'; }
   else {
@@ -114,53 +114,52 @@ export function generateQuotationPDF(data: QuotationPDFData): jsPDF {
   const customerName = data.customerGroup?.groupName || '-';
 
   // ══════════════════════════════════════
-  // HEADER — Company info (centered like mpdf.pdf)
+  // HEADER — Company info (left-aligned like reference)
   // ══════════════════════════════════════
-  // Logo - green N PK block (left side)
-  const logoW = 22;
-  const logoH = 28;
+  // Logo - green N PK block (left side, larger)
+  const logoW = 28;
+  const logoH = 34;
   const logoX = marginL;
 
   // Draw NPK logo
   doc.setFillColor(34, 139, 34);
   doc.rect(logoX, y, logoW, logoH, 'F');
   doc.setFont('THSarabunNew', 'bold');
-  doc.setFontSize(28);
+  doc.setFontSize(34);
   doc.setTextColor(255, 255, 255);
-  doc.text('N', logoX + 4, y + 14);
-  doc.setFontSize(14);
+  doc.text('N', logoX + 4, y + 16);
+  doc.setFontSize(16);
   doc.setTextColor(0, 0, 0);
-  doc.text('PK', logoX + 14, y + 16);
+  doc.text('PK', logoX + 17, y + 18);
   // Small text under logo
   doc.setFontSize(5);
   doc.text('NPK SERVICE & SUPPLY CO.,LTD.', logoX + logoW / 2, y + logoH - 2, { align: 'center' });
 
-  // Company text - centered
+  // Company text - LEFT-ALIGNED next to logo
   const textStartX = logoX + logoW + 5;
-  const textCenterX = textStartX + (pageW - marginR - textStartX) / 2;
 
   doc.setTextColor(0, 0, 0);
   doc.setFont('THSarabunNew', 'bold');
   doc.setFontSize(16);
-  doc.text('บริษัท เอ็นพีเค เซอร์วิส แอนด์ ซัพพลาย จำกัด', textCenterX, y + 5, { align: 'center' });
+  doc.text('บริษัท เอ็นพีเค เซอร์วิส แอนด์ ซัพพลาย จำกัด', textStartX, y + 6);
 
-  doc.setFontSize(13);
-  doc.text('NPK SERVICE & SUPPLY CO.,LTD.', textCenterX, y + 10, { align: 'center' });
+  doc.setFontSize(12);
+  doc.text('NPK SERVICE & SUPPLY CO.,LTD', textStartX, y + 11);
 
   doc.setFont('THSarabunNew', 'normal');
   doc.setFontSize(9);
-  doc.text('สำนักงานใหญ่ : 210/19 หมู่ 4 ตำบลสนามชัย อำเภอเมืองสุพรรณบุรี จังหวัดสุพรรณบุรี 72000', textCenterX, y + 15, { align: 'center' });
-  doc.text('Head Office : 210/19 Moo.4 ,Tambon Sanamchai , Amphur Mueang Suphanburi , Suphanburi 72000', textCenterX, y + 19, { align: 'center' });
-  doc.text('Call : 09-8942-9891, 06-5961-9799 , 09-3694-4591 E-mail : npkservicesupply@gmail.com', textCenterX, y + 23, { align: 'center' });
+  doc.text('สำนักงานใหญ่ : 210/19  หมู่ 4  ตำบลสนามชัย  อำเภอเมืองสุพรรณบุรี  จังหวัดสุพรรณบุรี  72000', textStartX, y + 16);
+  doc.text('Head Office : 210/19 Moo.4 , Tombon Sanamchai ,  Amphur Mueang   Suphanburi,   Suphanburi 72000', textStartX, y + 20);
+  doc.text('เลขผู้เสียภาษี 0105555161084    Tel: 09-8942-9891, 06-5961-9799 , 09-3694-4591    E-mail : npkservicesupply@gmail.com', textStartX, y + 24);
 
   y += logoH + 4;
 
   // ══════════════════════════════════════
-  // TITLE — ใบเสนอราคา(Quotation) — no space like mpdf
+  // TITLE — ใบเสนอราคา(Quotation)
   // ══════════════════════════════════════
   doc.setFont('THSarabunNew', 'bold');
   doc.setFontSize(18);
-  doc.text('ใบเสนอราคา(Quotation)', centerX, y, { align: 'center' });
+  doc.text('ใบเสนอราคา (Quotation)', centerX, y, { align: 'center' });
   y += 8;
 
   // ══════════════════════════════════════
@@ -329,20 +328,72 @@ export function generateQuotationPDF(data: QuotationPDFData): jsPDF {
     },
   });
 
-  y = (doc as any).lastAutoTable.finalY + 3;
+  y = (doc as any).lastAutoTable.finalY;
 
   const totalNum = Number(data.totalAmount);
   const amountText = `( ${bahtText(totalNum)} )`;
 
   // ══════════════════════════════════════
-  // TOTALS TABLE (right side - matching mpdf layout)
+  // CONDITIONS BOX (left) + TOTALS TABLE (right) — side by side
   // ══════════════════════════════════════
-  const totalsX = pageW - marginR - 85;
+  const tableRightEdge = pageW - marginR; // = 195, same as items table
   const totLabelW = 40;
-  const totAmountW = 35;
-  const totUnitW = 10;
+  const totAmountW = 45;
   const rowH = 6;
+  const totTotalW = totLabelW + totAmountW;
+  const totalsX = tableRightEdge - totTotalW;
 
+  // Calculate total rows for totals
+  const hasDiscount = Number(data.discountAmount) > 0;
+  const totalRows = hasDiscount ? 5 : 3; // Sub, (Discount, After Discount), Vat, Grand
+  const totalsHeight = totalRows * rowH;
+
+  // ── LEFT: Conditions box (same height as totals) ──
+  const condBoxX = marginL;
+  const condBoxW = totalsX - marginL - 2;
+  const condBoxY = y;
+  const condBoxH = totalsHeight;
+
+  // Draw conditions box border
+  doc.rect(condBoxX, condBoxY, condBoxW, condBoxH);
+
+  doc.setFontSize(10);
+  let condY = condBoxY + 4.5;
+
+  // เงื่อนไขการชำระเงิน
+  doc.setFont('THSarabunNew', 'bold');
+  doc.text('เงื่อนไขการชำระเงิน :', condBoxX + 2, condY);
+  doc.setFont('THSarabunNew', 'normal');
+  if (data.conditions) {
+    const payLines = doc.splitTextToSize(data.conditions, condBoxW - 40);
+    doc.text(payLines.slice(0, 2).join(' '), condBoxX + 38, condY);
+  }
+  condY += 5;
+
+  // Inner line
+  doc.line(condBoxX, condBoxY + (condBoxH / 3), condBoxX + condBoxW, condBoxY + (condBoxH / 3));
+
+  // เงื่อนไขการรับประกัน
+  doc.setFont('THSarabunNew', 'bold');
+  doc.text('เงื่อนไขการรับประกัน', condBoxX + 2, condY + 4);
+  doc.setFont('THSarabunNew', 'normal');
+  if (data.warranty) {
+    doc.text(data.warranty.substring(0, 60), condBoxX + 38, condY + 4);
+  }
+
+  // Inner line
+  doc.line(condBoxX, condBoxY + (condBoxH * 2 / 3), condBoxX + condBoxW, condBoxY + (condBoxH * 2 / 3));
+
+  // หมายเหตุ
+  condY = condBoxY + (condBoxH * 2 / 3) + 4.5;
+  doc.setFont('THSarabunNew', 'bold');
+  doc.text('หมายเหตุ :', condBoxX + 2, condY);
+  doc.setFont('THSarabunNew', 'normal');
+  if (data.notes) {
+    doc.text(data.notes.substring(0, 60), condBoxX + 20, condY);
+  }
+
+  // ── RIGHT: Totals table ──
   const drawTotalRow = (label: string, amount: string, yPos: number, isBold = false, color?: string) => {
     doc.setFont('THSarabunNew', isBold ? 'bold' : 'normal');
     doc.setFontSize(11);
@@ -356,52 +407,28 @@ export function generateQuotationPDF(data: QuotationPDFData): jsPDF {
     if (color === 'red') doc.setTextColor(220, 38, 38);
     doc.text(amount, totalsX + totLabelW + totAmountW - 2, yPos + 4.5, { align: 'right' });
     doc.setTextColor(0, 0, 0);
-
-    // Unit cell
-    doc.rect(totalsX + totLabelW + totAmountW, yPos, totUnitW, rowH);
-    doc.text('บาท', totalsX + totLabelW + totAmountW + 2, yPos + 4.5);
   };
 
   let totY = y;
-  drawTotalRow('ราคาเป็นเงิน', fmt(data.subtotal), totY);
+  drawTotalRow('Sub Total', fmt(data.subtotal), totY);
   totY += rowH;
 
-  if (Number(data.discountAmount) > 0) {
-    drawTotalRow('ส่วนลด', `-${fmt(data.discountAmount)}`, totY, false, 'red');
+  if (hasDiscount) {
+    drawTotalRow('Discount', `-${fmt(data.discountAmount)}`, totY, false, 'red');
+    totY += rowH;
+    // After Discount row
+    const afterDiscount = Number(data.subtotal) - Number(data.discountAmount);
+    drawTotalRow('After Discount', fmt(afterDiscount), totY);
     totY += rowH;
   }
 
-  drawTotalRow(`ภาษีมูลค่าเพิ่ม ${Number(data.vatPercent || 7)}%`, fmt(data.vatAmount), totY);
+  drawTotalRow(`Vat ${Number(data.vatPercent || 7)}%`, fmt(data.vatAmount), totY);
   totY += rowH;
 
-  drawTotalRow('จำนวนเงินทั้งสิ้น', fmt(data.totalAmount), totY, true);
+  drawTotalRow('Grand Total', fmt(data.totalAmount), totY, true);
   totY += rowH;
 
-  y = Math.max(y + 8, totY + 4);
-
-  // ══════════════════════════════════════
-  // CONDITIONS / NOTES
-  // ══════════════════════════════════════
-  const conditionsText = data.conditions || data.warranty || '';
-  const notesText = data.notes || '';
-
-  if (conditionsText || notesText) {
-    if (y > 250) {
-      doc.addPage();
-      y = 15;
-    }
-
-    doc.setFont('THSarabunNew', 'bold');
-    doc.setFontSize(11);
-    doc.text('เงื่อนไข :', marginL, y);
-
-    doc.setFont('THSarabunNew', 'normal');
-    doc.setFontSize(10);
-    const condText = conditionsText || notesText;
-    const condLines = doc.splitTextToSize(condText, contentW - 25);
-    doc.text(condLines, marginL + 20, y);
-    y += condLines.length * 4 + 3;
-  }
+  y = Math.max(y + 8, totY + 2);
 
   // ══════════════════════════════════════
   // AMOUNT IN THAI TEXT (right-aligned, bold)
