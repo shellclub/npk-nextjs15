@@ -179,6 +179,7 @@ model Quotation {
 
   items           QuotationItem[]
   workOrders      WorkOrder[]
+  photos          QuotationPhoto[]
 }
 
 enum QuotationStatus {
@@ -392,4 +393,20 @@ model WithholdingTax {
   date              DateTime
   notes             String?
   createdAt         DateTime       @default(now())
+}
+
+// ========================================
+// รูปภาพก่อนทำงาน (Quotation Photos)
+// ========================================
+model QuotationPhoto {
+  id            String    @id @default(cuid())
+  quotationId   String
+  quotation     Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  fileName      String    // ชื่อไฟล์
+  fileUrl       String    // URL ไฟล์
+  fileSize      Int       @default(0) // ขนาดไฟล์ (bytes)
+  caption       String?   // คำอธิบาย
+  photoType     String    @default("BEFORE") // BEFORE = ก่อนทำงาน, AFTER = หลังทำงาน
+  uploadedBy    String?   // ชื่อผู้อัพโหลด
+  createdAt     DateTime  @default(now())
 }

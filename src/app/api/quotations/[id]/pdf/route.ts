@@ -28,6 +28,7 @@ export async function GET(
         branch: true,
         createdBy: { select: { name: true } },
         items: { orderBy: { itemOrder: 'asc' } },
+        photos: { orderBy: { createdAt: 'asc' } },
       },
     });
 
@@ -329,11 +330,16 @@ export async function GET(
         <td class="label" style="text-align:right;">โทร :</td>
         <td class="value" style="text-align:right;">${q.contactPhone || '-'}</td>
       </tr>
-      ${q.projectName ? `<tr>
-        <td class="label">ชื่อโครงการ/ชื่องาน :</td>
-        <td class="value-green" colspan="3">${q.projectName}</td>
-      </tr>` : ''}
+      <tr>
+        <td class="label">ชื่อโครงการ :</td>
+        <td class="value-green" colspan="3">${q.projectName || '-'}</td>
+      </tr>
     </table>
+
+    <!-- Greeting -->
+    <div style="font-size:12px; color:#333; margin: 4px 0 6px; line-height:1.6;">
+      บริษัทฯ มีความยินดีใคร่ขอเสนอราคางานบริการ โดยมีทีมงานคุณภาพให้กับท่าน มีรายละเอียด ดังนี้
+    </div>
 
     <!-- Items Table -->
     <table class="items-table">
@@ -393,24 +399,119 @@ export async function GET(
       ${notesText && !conditionsText ? `<div><span class="label">หมายเหตุ :</span> ${notesText.replace(/\n/g, '<br/>')}</div>` : ''}
     </div>` : ''}
 
+    <!-- Closing -->
+    <div style="font-size:12px; font-weight:700; text-align:right; margin:6px 0 8px;">
+      ( ${(() => {
+        const txt = ['', 'หนึ่ง','สอง','สาม','สี่','ห้า','หก','เจ็ด','แปด','เก้า'];
+        const unit = ['', 'สิบ','ร้อย','พัน','หมื่น','แสน','ล้าน'];
+        const n = Number(q.totalAmount);
+        if (n === 0) return 'ศูนย์บาทถ้วน';
+        const [intPart, decPart] = n.toFixed(2).split('.');
+        let result = '';
+        const intStr = intPart.replace(/,/g, '');
+        const len = intStr.length;
+        for (let i = 0; i < len; i++) {
+          const d = parseInt(intStr[i]);
+          const pos = len - i - 1;
+          if (d === 0) continue;
+          if (pos === 1 && d === 1) { result += 'สิบ'; continue; }
+          if (pos === 1 && d === 2) { result += 'ยี่สิบ'; continue; }
+          if (pos === 0 && d === 1 && len > 1) { result += 'เอ็ด'; continue; }
+          result += txt[d] + unit[pos];
+        }
+        result += 'บาท';
+        const dec = parseInt(decPart);
+        if (dec === 0) { result += 'ถ้วน'; }
+        else {
+          const d1 = Math.floor(dec / 10);
+          const d2 = dec % 10;
+          if (d1 === 1) result += 'สิบ';
+          else if (d1 === 2) result += 'ยี่สิบ';
+          else if (d1 > 0) result += txt[d1] + 'สิบ';
+          if (d2 === 1 && d1 > 0) result += 'เอ็ด';
+          else if (d2 > 0) result += txt[d2];
+          result += 'สตางค์';
+        }
+        return result;
+      })()} )
+    </div>
+
+    <div style="font-size:11px; margin-bottom:6px; line-height:1.6;">
+      จึงเรียนมาเพื่อพิจารณา บริษัทฯ หวังเป็นอย่างยิ่งว่าจะมีโอกาสให้บริการแก่ท่าน และขอบขอบพระคุณมา ณ โอกาสนี้
+    </div>
+
+    <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:4px;">
+      <span>กรุณาลงชื่อเพื่ออนุมัติและส่งกลับ กรณีต้องการใช้บริการ</span>
+      <span>ในนาม บริษัท เอ็นพีเค เซอร์วิส แอนด์ ซัพพลาย จำกัด</span>
+    </div>
+    <div style="font-size:11px; margin-bottom:15px;">
+      ในนาม  ${q.customerGroup?.groupName || ''}
+    </div>
+
     <!-- Signature -->
     <div class="signature-section">
       <div>
+        <div style="text-align:center; font-weight:700; font-size:12px; margin-bottom:25px;">ผู้อนุมัติสั่งซื้อ/สั่งจ้าง</div>
         <div class="sig-box">
-          ผู้เสนอราคา<br/>
-          บริษัท เอ็นพีเค เซอร์วิส แอนด์ ซัพพลาย จำกัด<br/>
-          วันที่ ......./......./........
+          .....................................................<br/>
+          วันที่......./......./........
         </div>
       </div>
       <div>
-        <div class="sig-box">
-          ผู้อนุมัติ<br/>
-          ${q.customerGroup?.groupName || ''}<br/>
-          วันที่ ......./......./........
+        <div style="text-align:center; font-weight:700; font-size:12px; margin-bottom:5px;">ผู้อนุมัติ</div>
+        <div style="text-align:center; font-size:11px;">
+          ${q.createdBy?.name || 'มนต์เทียน เรืองเดชอังกูร'}<br/>
+          กรรมการผู้จัดการ<br/>
+          ${thaiDate(new Date(q.date))}
         </div>
       </div>
     </div>
   </div>
+
+  ${q.photos && q.photos.length > 0 ? `
+  <!-- Photo Report Page -->
+  <div class="page" style="page-break-before: always;">
+    <!-- Header (same) -->
+    <div class="header">
+      <img src="${logoUrl}" alt="NPK Logo" class="header-logo" />
+      <div class="header-info">
+        <div class="company-th">บริษัท เอ็นพีเค เซอร์วิส แอนด์ ซัพพลาย จำกัด</div>
+        <div class="company-en">NPK SERVICE & SUPPLY CO.,LTD.</div>
+        <div class="addr">
+          สำนักงานใหญ่ : 210/19 หมู่ 4 ตำบลสนามชัย อำเภอเมืองสุพรรณบุรี จังหวัดสุพรรณบุรี 72000<br/>
+          Call : 09-8942-9891, 06-5961-9799, 09-3694-4591 E-mail : npkservicesupply@gmail.com
+        </div>
+      </div>
+    </div>
+
+    <!-- Title -->
+    <div style="text-align:center; font-size:20px; font-weight:700; color:#dc2626; margin:8px 0 6px;">รูปภาพ REPORT</div>
+
+    <!-- Info -->
+    <div style="font-size:12px; margin-bottom:8px; border-bottom:2px solid #333; padding-bottom:4px;">
+      <div><strong>สถานที่ปฏิบัติงาน</strong> ${q.customerGroup?.groupName || '-'}</div>
+      <div style="display:flex; gap:20px;">
+        <span><strong>สาขา</strong> ${q.branch ? `${q.branch.code || ''} ${q.branch.name}` : '-'}</span>
+        <span><strong>เลขที่คำสั่งงาน</strong> ${displayQN}</span>
+        <span><strong>ใบเสนอราคาลงวันที่</strong> ${thaiDate(new Date(q.date))}</span>
+      </div>
+    </div>
+
+    <!-- Photo Grid -->
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+      ${q.photos.map((photo, idx) => `
+        <div style="border:1px solid #ccc; border-radius:4px; overflow:hidden;">
+          <img src="${photo.fileUrl}" alt="${photo.caption || `รูปที่ ${idx + 1}`}"
+               style="width:100%; height:180px; object-fit:cover; display:block;" />
+          <div style="padding:4px 8px; font-size:10px; background:#f8f8f8; border-top:1px solid #eee;">
+            <span style="color:#333;">${photo.caption || `รูปที่ ${idx + 1}`}</span>
+            <span style="float:right; color:#0066cc; font-size:9px;">${photo.photoType === 'AFTER' ? 'หลังทำงาน' : 'ก่อนทำงาน'}</span>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  </div>
+  ` : ''}
 </body>
 </html>`;
 

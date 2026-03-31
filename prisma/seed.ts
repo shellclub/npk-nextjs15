@@ -229,7 +229,7 @@ async function main() {
   if (adminUser && allCustomers.length > 0) {
     const quotationsData = [
       {
-        quotationNumber: 'npk-260301-001',
+        quotationNumber: 'Npk260301-0001',
         date: new Date('2026-03-01'),
         customer: allCustomers[0], // ศุภมิตร
         branchIndex: 0, // store036
@@ -251,7 +251,7 @@ async function main() {
         ],
       },
       {
-        quotationNumber: 'npk-260305-001',
+        quotationNumber: 'Npk260305-0001',
         date: new Date('2026-03-05'),
         customer: allCustomers[1], // เซ็นทรัล พัฒนา
         branchIndex: 0, // Central World
@@ -273,7 +273,7 @@ async function main() {
         ],
       },
       {
-        quotationNumber: 'npk-260308-001',
+        quotationNumber: 'Npk260308-0001',
         date: new Date('2026-03-08'),
         customer: allCustomers[2], // HomePro
         branchIndex: 0, // HomePro ราชพฤกษ์
@@ -294,7 +294,7 @@ async function main() {
         ],
       },
       {
-        quotationNumber: 'npk-260310-001',
+        quotationNumber: 'Npk260310-0001',
         date: new Date('2026-03-10'),
         customer: allCustomers[3], // สยามพิวรรธน์
         branchIndex: 0, // Siam Paragon
@@ -314,7 +314,7 @@ async function main() {
         ],
       },
       {
-        quotationNumber: 'npk-260312-001',
+        quotationNumber: 'Npk260312-0001',
         date: new Date('2026-03-12'),
         customer: allCustomers[4], // เดอะมอลล์กรุ๊ป
         branchIndex: 1, // The Mall งามวงศ์วาน
@@ -336,7 +336,7 @@ async function main() {
         ],
       },
       {
-        quotationNumber: 'npk-260315-001',
+        quotationNumber: 'Npk260315-0001',
         date: new Date('2026-03-15'),
         customer: allCustomers[0], // ศุภมิตร
         branchIndex: 1, // store037 Chonburi

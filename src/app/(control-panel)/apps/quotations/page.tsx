@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { generateQuotationPDF, QuotationPDFData } from '@/lib/pdf/quotation-pdf';
 import { useRouter } from 'next/navigation';
 import Typography from '@mui/material/Typography';
 import Paper from '@mui/material/Paper';
@@ -114,6 +115,12 @@ function QuotationsPage() {
   const [shareOpen, setShareOpen] = useState(false);
   const [shareQuotationId, setShareQuotationId] = useState('');
   const [shareQuotationNumber, setShareQuotationNumber] = useState('');
+
+  // Photo upload link dialog
+  const [photoLinkOpen, setPhotoLinkOpen] = useState(false);
+  const [photoLinkQuotationId, setPhotoLinkQuotationId] = useState('');
+  const [photoLinkQuotationNumber, setPhotoLinkQuotationNumber] = useState('');
+  const [photoLinkCopied, setPhotoLinkCopied] = useState(false);
   const [shareCopied, setShareCopied] = useState(false);
 
   const fetchQuotations = useCallback(async () => {
@@ -199,6 +206,38 @@ function QuotationsPage() {
     handleMenuClose();
   };
 
+  // Photo Upload Link
+  const handlePhotoLink = () => {
+    if (menuQuotation) {
+      setPhotoLinkQuotationId(menuQuotation.id);
+      setPhotoLinkQuotationNumber(menuQuotation.quotationNumber);
+      setPhotoLinkCopied(false);
+      setPhotoLinkOpen(true);
+    }
+    handleMenuClose();
+  };
+
+  const photoUploadUrl = typeof window !== 'undefined'
+    ? `${window.location.origin}/upload-photos/${photoLinkQuotationId}`
+    : '';
+
+  const handleCopyPhotoLink = async () => {
+    try {
+      await navigator.clipboard.writeText(photoUploadUrl);
+      setPhotoLinkCopied(true);
+      setTimeout(() => setPhotoLinkCopied(false), 3000);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = photoUploadUrl;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      setPhotoLinkCopied(true);
+      setTimeout(() => setPhotoLinkCopied(false), 3000);
+    }
+  };
+
   const shareUrl = typeof window !== 'undefined' 
     ? `${window.location.origin}/share/quotation/${shareQuotationId}` 
     : '';
@@ -229,10 +268,85 @@ function QuotationsPage() {
     }
   };
 
-  const handlePdfDownload = () => {
-    const iframe = document.getElementById('pdf-preview-iframe') as HTMLIFrameElement;
-    if (iframe?.contentWindow) {
-      iframe.contentWindow.print();
+  const handlePdfDownload = async () => {
+    if (!pdfQuotationId) return;
+    try {
+      // Fetch quotation data and photos in parallel
+      const [res, photosRes] = await Promise.all([
+        fetch(`/api/quotations/${pdfQuotationId}`),
+        fetch(`/api/quotations/${pdfQuotationId}/photos`),
+      ]);
+      if (!res.ok) throw new Error('Failed to fetch');
+      const data = await res.json();
+      const photos = photosRes.ok ? await photosRes.json() : [];
+
+      // Convert photo URLs to base64 for embedding in PDF
+      const loadImageAsBase64 = (url: string): Promise<string> => {
+        return new Promise((resolve) => {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext('2d');
+            ctx?.drawImage(img, 0, 0);
+            resolve(canvas.toDataURL('image/jpeg', 0.8));
+          };
+          img.onerror = () => resolve('');
+          img.src = url;
+        });
+      };
+
+      const photosWithImages = Array.isArray(photos) ? await Promise.all(
+        photos.map(async (p: any) => ({
+          fileUrl: p.fileUrl,
+          caption: p.caption,
+          photoType: p.photoType,
+          uploadedBy: p.uploadedBy,
+          imageData: await loadImageAsBase64(p.fileUrl),
+        }))
+      ) : [];
+
+      const pdfData: QuotationPDFData = {
+        quotationNumber: data.quotationNumber,
+        revisionNumber: data.revisionNumber,
+        date: data.date,
+        projectName: data.projectName,
+        customerPO: data.customerPO,
+        address: data.address,
+        contactName: data.contactName,
+        contactPhone: data.contactPhone,
+        subtotal: Number(data.subtotal),
+        discountPercent: Number(data.discountPercent || 0),
+        discountAmount: Number(data.discountAmount || 0),
+        vatPercent: Number(data.vatPercent || 7),
+        vatAmount: Number(data.vatAmount),
+        totalAmount: Number(data.totalAmount),
+        conditions: data.conditions,
+        notes: data.notes,
+        warranty: data.warranty,
+        customerGroup: data.customerGroup,
+        branch: data.branch,
+        createdBy: data.createdBy,
+        items: (data.items || []).map((item: any) => ({
+          itemType: item.itemType,
+          description: item.description,
+          quantity: Number(item.quantity),
+          unit: item.unit,
+          materialPrice: Number(item.materialPrice || 0),
+          labourPrice: Number(item.labourPrice || 0),
+          parentIndex: item.parentIndex,
+        })),
+        photos: photosWithImages,
+      };
+      const doc = generateQuotationPDF(pdfData);
+      const displayQN = (pdfData.revisionNumber || 0) > 0
+        ? `${pdfData.quotationNumber}_Rev${pdfData.revisionNumber}`
+        : pdfData.quotationNumber;
+      doc.save(`ใบเสนอราคา_${displayQN}.pdf`);
+    } catch (err) {
+      console.error('PDF download error:', err);
     }
   };
 
@@ -485,6 +599,10 @@ function QuotationsPage() {
           <ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#059669' }}>lucide:copy</FuseSvgIcon></ListItemIcon>
           <ListItemText>สร้างซ้ำ</ListItemText>
         </MenuItem>
+        <MenuItem onClick={handlePhotoLink} sx={{ py: 1.2, gap: 1.5 }}>
+          <ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#F59E0B' }}>lucide:camera</FuseSvgIcon></ListItemIcon>
+          <ListItemText>แนบรูปภาพก่อนทำงาน</ListItemText>
+        </MenuItem>
         <Divider sx={{ my: 0.5 }} />
         <MenuItem onClick={handleCancelClick} sx={{ py: 1.2, gap: 1.5, color: '#DC2626' }}
           disabled={menuQuotation?.status === 'CANCELLED'}>
@@ -675,6 +793,70 @@ function QuotationsPage() {
           <Button
             variant="outlined"
             onClick={() => setShareOpen(false)}
+            sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, borderColor: '#e2e8f0', color: '#64748b' }}
+          >
+            ปิดหน้าต่าง
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── Photo Upload Link Dialog ── */}
+      <Dialog
+        open={photoLinkOpen}
+        onClose={() => setPhotoLinkOpen(false)}
+        PaperProps={{ sx: { borderRadius: '16px', minWidth: 500, maxWidth: 600, p: 0 } }}
+      >
+        <DialogTitle sx={{ fontSize: '20px', fontWeight: 700, color: '#F59E0B', pb: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <FuseSvgIcon size={24} sx={{ color: '#F59E0B' }}>lucide:camera</FuseSvgIcon>
+          แนบรูปภาพก่อนทำงาน
+        </DialogTitle>
+        <DialogContent sx={{ pt: '8px !important' }}>
+          <Typography sx={{ fontSize: '14px', color: '#64748B', mb: 2 }}>
+            คัดลอกลิงก์ด้านล่างส่งให้ช่าง เพื่อให้ถ่ายรูปก่อนเริ่มทำงาน
+          </Typography>
+          <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#333', mb: 0.5 }}>
+            เลขที่: {photoLinkQuotationNumber}
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 2 }}>
+            <TextField
+              fullWidth
+              size="small"
+              value={photoUploadUrl}
+              slotProps={{ input: { readOnly: true, sx: { fontSize: '13px', fontFamily: 'monospace', bgcolor: '#f8fafc', borderRadius: '8px' } } }}
+            />
+            <Button
+              variant="outlined"
+              onClick={handleCopyPhotoLink}
+              startIcon={<FuseSvgIcon size={16}>{photoLinkCopied ? 'lucide:check' : 'lucide:copy'}</FuseSvgIcon>}
+              sx={{
+                borderRadius: '10px', textTransform: 'none', fontWeight: 600, whiteSpace: 'nowrap',
+                minWidth: 120, borderColor: photoLinkCopied ? '#059669' : '#F59E0B',
+                color: photoLinkCopied ? '#059669' : '#F59E0B',
+                '&:hover': { borderColor: photoLinkCopied ? '#047857' : '#D97706', bgcolor: photoLinkCopied ? '#f0fdf4' : '#fffbeb' },
+              }}
+            >
+              {photoLinkCopied ? 'คัดลอกแล้ว' : 'คัดลอกลิงก์'}
+            </Button>
+          </Box>
+          <Box
+            component="a"
+            href={photoUploadUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            sx={{
+              display: 'inline-flex', alignItems: 'center', gap: 0.5,
+              fontSize: '13px', color: '#F59E0B', textDecoration: 'none',
+              '&:hover': { textDecoration: 'underline' },
+            }}
+          >
+            <FuseSvgIcon size={14}>lucide:external-link</FuseSvgIcon>
+            เปิดหน้าอัพโหลดรูปภาพ
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            variant="outlined"
+            onClick={() => setPhotoLinkOpen(false)}
             sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, borderColor: '#e2e8f0', color: '#64748b' }}
           >
             ปิดหน้าต่าง

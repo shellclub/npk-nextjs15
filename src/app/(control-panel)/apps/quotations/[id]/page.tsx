@@ -891,7 +891,12 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
                 placeholder="ระบุเงื่อนไขการทำงาน เช่น เงื่อนไขการชำระเงิน, การรับประกัน, ระยะเวลาดำเนินการ" />
             </Box>
 
-            {/* ── Section 4: Action Buttons ── */}
+            {/* ── Section 4: รูปภาพก่อนทำงาน ── */}
+            {id !== 'new' && (
+              <PhotoSection quotationId={id} />
+            )}
+
+            {/* ── Section 5: Action Buttons ── */}
             {!isReadOnly && (
               <Box sx={{
                 px: { xs: 1, md: 2 }, py: 2,
@@ -1078,6 +1083,317 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
   );
 
   return <Root header={header} content={content} />;
+}
+
+// ── Photo Upload Section Component ──
+type PhotoData = {
+  id: string;
+  fileName: string;
+  fileUrl: string;
+  fileSize: number;
+  caption: string | null;
+  photoType: string;
+  uploadedBy: string | null;
+  createdAt: string;
+};
+
+function PhotoSection({ quotationId }: { quotationId: string }) {
+  const [photos, setPhotos] = useState<PhotoData[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [previewFiles, setPreviewFiles] = useState<{ file: File; preview: string }[]>([]);
+  const [lightbox, setLightbox] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+
+  const fetchPhotos = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/quotations/${quotationId}/photos`);
+      const data = await res.json();
+      setPhotos(Array.isArray(data) ? data : []);
+    } catch { setPhotos([]); }
+  }, [quotationId]);
+
+  useEffect(() => { fetchPhotos(); }, [fetchPhotos]);
+
+  const handleFileSelect = (files: FileList | null) => {
+    if (!files) return;
+    const newFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+    const previews = newFiles.map(file => ({
+      file,
+      preview: URL.createObjectURL(file),
+    }));
+    setPreviewFiles(prev => [...prev, ...previews]);
+  };
+
+  const removePreview = (index: number) => {
+    setPreviewFiles(prev => {
+      const updated = [...prev];
+      URL.revokeObjectURL(updated[index].preview);
+      updated.splice(index, 1);
+      return updated;
+    });
+  };
+
+  const handleUpload = async () => {
+    if (previewFiles.length === 0) return;
+    setUploading(true);
+    setMessage(null);
+    try {
+      const formData = new FormData();
+      previewFiles.forEach(pf => formData.append('photos', pf.file));
+      formData.append('photoType', 'BEFORE');
+      formData.append('uploadedBy', 'พนักงานออฟฟิศ');
+
+      const res = await fetch(`/api/quotations/${quotationId}/photos`, {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) throw new Error('Upload failed');
+
+      setMessage({ text: `อัพโหลดสำเร็จ ${previewFiles.length} รูป`, type: 'success' });
+      previewFiles.forEach(pf => URL.revokeObjectURL(pf.preview));
+      setPreviewFiles([]);
+      fetchPhotos();
+      setTimeout(() => setMessage(null), 3000);
+    } catch {
+      setMessage({ text: 'เกิดข้อผิดพลาดในการอัพโหลด', type: 'error' });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async (photoId: string) => {
+    if (!confirm('ต้องการลบรูปนี้?')) return;
+    try {
+      await fetch(`/api/quotations/${quotationId}/photos?photoId=${photoId}`, { method: 'DELETE' });
+      fetchPhotos();
+    } catch { /* ignore */ }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    handleFileSelect(e.dataTransfer.files);
+  };
+
+  const formatSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  return (
+    <>
+      <Box sx={{ px: { xs: 1, md: 2 }, pt: 2, pb: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
+        <Typography variant="h6" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+          <SectionIcon gradient="linear-gradient(135deg, #F59E0B, #EA580C)" icon="lucide:camera" />
+          รูปภาพก่อนทำงาน
+          {photos.length > 0 && (
+            <Chip label={`${photos.length} รูป`} size="small" sx={{
+              bgcolor: '#FEF3C7', color: '#D97706', fontWeight: 600, fontSize: '12px',
+            }} />
+          )}
+        </Typography>
+
+        {/* Drop Zone */}
+        <Box
+          onDragOver={(e: React.DragEvent) => { e.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={handleDrop}
+          onClick={() => document.getElementById('office-photo-input')?.click()}
+          sx={{
+            border: `2px dashed ${dragOver ? '#F59E0B' : '#E2E8F0'}`,
+            borderRadius: '12px', p: 3, textAlign: 'center', cursor: 'pointer',
+            transition: 'all 0.2s',
+            bgcolor: dragOver ? '#FFFBEB' : '#FAFBFC',
+            '&:hover': { borderColor: '#F59E0B', bgcolor: '#FFFBEB' },
+            mb: 2,
+          }}
+        >
+          <input
+            id="office-photo-input"
+            type="file"
+            multiple
+            accept="image/*"
+            onChange={(e) => handleFileSelect(e.target.files)}
+            style={{ display: 'none' }}
+          />
+          <FuseSvgIcon size={32} sx={{ color: '#F59E0B', mb: 1 }}>lucide:image-plus</FuseSvgIcon>
+          <Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#475569' }}>
+            กดเพื่อเลือกรูป หรือลากไฟล์มาวางที่นี่
+          </Typography>
+          <Typography sx={{ fontSize: '12px', color: '#94A3B8', mt: 0.5 }}>
+            รองรับไฟล์ JPG, PNG, HEIC • ไม่จำกัดจำนวน
+          </Typography>
+        </Box>
+
+        {/* Preview Files */}
+        {previewFiles.length > 0 && (
+          <Box sx={{ mb: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+              <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#64748B' }}>
+                เลือกแล้ว {previewFiles.length} รูป
+              </Typography>
+              <Button size="small" color="error" onClick={() => {
+                previewFiles.forEach(pf => URL.revokeObjectURL(pf.preview));
+                setPreviewFiles([]);
+              }} sx={{ textTransform: 'none', fontSize: '12px' }}>
+                ล้างทั้งหมด
+              </Button>
+            </Box>
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(100px, 1fr))', gap: 1 }}>
+              {previewFiles.map((pf, i) => (
+                <Box key={i} sx={{ position: 'relative' }}>
+                  <Box
+                    component="img"
+                    src={pf.preview}
+                    alt={pf.file.name}
+                    sx={{
+                      width: '100%', height: 80, objectFit: 'cover',
+                      borderRadius: '8px', border: '1px solid #E2E8F0',
+                    }}
+                  />
+                  <IconButton
+                    size="small"
+                    onClick={(e) => { e.stopPropagation(); removePreview(i); }}
+                    sx={{
+                      position: 'absolute', top: 2, right: 2,
+                      bgcolor: 'rgba(239, 68, 68, 0.9)', color: '#fff',
+                      width: 20, height: 20,
+                      '&:hover': { bgcolor: '#DC2626' },
+                    }}
+                  >
+                    <FuseSvgIcon size={12}>lucide:x</FuseSvgIcon>
+                  </IconButton>
+                </Box>
+              ))}
+            </Box>
+            <Button
+              variant="contained"
+              onClick={handleUpload}
+              disabled={uploading}
+              startIcon={<FuseSvgIcon size={16}>{uploading ? 'lucide:loader' : 'lucide:upload'}</FuseSvgIcon>}
+              fullWidth
+              sx={{
+                mt: 1.5, textTransform: 'none', fontWeight: 600, borderRadius: '10px',
+                background: uploading
+                  ? 'linear-gradient(135deg, #94A3B8, #64748B)'
+                  : 'linear-gradient(135deg, #F59E0B, #EA580C)',
+                boxShadow: uploading ? 'none' : '0 4px 14px rgba(245, 158, 11, 0.3)',
+                '&:hover': { background: 'linear-gradient(135deg, #EA580C, #C2410C)' },
+              }}
+            >
+              {uploading ? 'กำลังอัพโหลด...' : `อัพโหลด ${previewFiles.length} รูป`}
+            </Button>
+          </Box>
+        )}
+
+        {/* Message */}
+        {message && (
+          <Alert severity={message.type} sx={{ mb: 2, borderRadius: '10px' }}>
+            {message.text}
+          </Alert>
+        )}
+
+        {/* Uploaded Photos Gallery */}
+        {photos.length > 0 && (
+          <Box>
+            <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#64748B', mb: 1 }}>
+              รูปภาพที่อัพโหลดแล้ว ({photos.length})
+            </Typography>
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 1.5 }}>
+              {photos.map((photo) => (
+                <Box key={photo.id} sx={{
+                  borderRadius: '10px', overflow: 'hidden',
+                  border: '1px solid #E2E8F0', bgcolor: '#fff',
+                  transition: 'box-shadow 0.2s',
+                  '&:hover': { boxShadow: '0 4px 12px rgba(0,0,0,0.1)' },
+                }}>
+                  <Box
+                    sx={{ position: 'relative', cursor: 'pointer' }}
+                    onClick={() => setLightbox(photo.fileUrl)}
+                  >
+                    <Box
+                      component="img"
+                      src={photo.fileUrl}
+                      alt={photo.fileName}
+                      sx={{ width: '100%', height: 100, objectFit: 'cover', display: 'block' }}
+                    />
+                    <Chip
+                      label={photo.photoType === 'AFTER' ? 'หลังทำ' : 'ก่อนทำ'}
+                      size="small"
+                      sx={{
+                        position: 'absolute', top: 4, right: 4,
+                        bgcolor: photo.photoType === 'AFTER' ? 'rgba(34,197,94,0.9)' : 'rgba(56,189,248,0.9)',
+                        color: '#fff', fontSize: '10px', fontWeight: 700, height: 20,
+                      }}
+                    />
+                  </Box>
+                  <Box sx={{ p: 1 }}>
+                    <Typography sx={{
+                      fontSize: '11px', fontWeight: 500, color: '#475569',
+                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {photo.caption || photo.fileName}
+                    </Typography>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 0.5 }}>
+                      <Typography sx={{ fontSize: '10px', color: '#94A3B8' }}>
+                        {formatSize(photo.fileSize)}
+                      </Typography>
+                      <Tooltip title="ลบรูป" arrow>
+                        <IconButton size="small" onClick={() => handleDelete(photo.id)}
+                          sx={{ color: '#EF4444', p: 0.25 }}>
+                          <FuseSvgIcon size={14}>lucide:trash-2</FuseSvgIcon>
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+          </Box>
+        )}
+      </Box>
+
+      {/* Lightbox */}
+      <Dialog
+        open={Boolean(lightbox)}
+        onClose={() => setLightbox(null)}
+        maxWidth={false}
+        PaperProps={{
+          sx: {
+            bgcolor: 'transparent', boxShadow: 'none',
+            maxWidth: '95vw', maxHeight: '95vh',
+          },
+        }}
+        slotProps={{ backdrop: { sx: { bgcolor: 'rgba(0,0,0,0.9)' } } }}
+      >
+        {lightbox && (
+          <Box sx={{ position: 'relative' }}>
+            <Box
+              component="img"
+              src={lightbox}
+              alt="Preview"
+              sx={{
+                maxWidth: '90vw', maxHeight: '90vh', objectFit: 'contain',
+                borderRadius: '8px', display: 'block',
+              }}
+            />
+            <IconButton
+              onClick={() => setLightbox(null)}
+              sx={{
+                position: 'absolute', top: -16, right: -16,
+                bgcolor: 'rgba(255,255,255,0.2)', color: '#fff',
+                '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' },
+              }}
+            >
+              <FuseSvgIcon size={24}>lucide:x</FuseSvgIcon>
+            </IconButton>
+          </Box>
+        )}
+      </Dialog>
+    </>
+  );
 }
 
 export default EditQuotationPage;

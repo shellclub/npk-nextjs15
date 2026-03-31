@@ -19,12 +19,12 @@ export async function POST(
       return NextResponse.json({ error: 'Quotation not found' }, { status: 404 });
     }
 
-    // Generate new quotation number: npk-YYMMDD-XXX
+    // Generate new quotation number: NpkYYMMDD-XXXX
     const now = new Date();
     const yy = String(now.getFullYear()).slice(-2);
     const mm = String(now.getMonth() + 1).padStart(2, '0');
     const dd = String(now.getDate()).padStart(2, '0');
-    const prefix = `Npk-${yy}${mm}${dd}`;
+    const prefix = `Npk${yy}${mm}${dd}`;
 
     const lastQuotation = await prisma.quotation.findFirst({
       where: { quotationNumber: { startsWith: prefix } },
@@ -36,7 +36,7 @@ export async function POST(
       const lastSeq = parseInt(lastQuotation.quotationNumber.split('-').pop() || '0', 10);
       seq = lastSeq + 1;
     }
-    const quotationNumber = `${prefix}-${String(seq).padStart(3, '0')}`;
+    const quotationNumber = `${prefix}-${String(seq).padStart(4, '0')}`;
 
     // Resolve creator — use first admin as fallback
     let createdById = original.createdById;
