@@ -28,6 +28,7 @@ import FuseSvgIcon from '@fuse/core/FuseSvgIcon';
 import FusePageCarded from '@fuse/core/FusePageCarded';
 import { styled } from '@mui/material/styles';
 import { motion } from 'motion/react';
+import DatePickerField from '@/components/shared/DatePickerField';
 
 const Root = styled(FusePageCarded)(() => ({
   '& .container': { maxWidth: '100%!important' },
@@ -564,9 +565,8 @@ function NewQuotationPage() {
                 <TextField label="ชื่อโครงการ / งาน" value={projectName}
                   onChange={(e) => setProjectName(e.target.value)} fullWidth
                   InputProps={{ sx: { color: '#1D4ED8', fontWeight: 600 } }} />
-                <TextField label="วันที่" type="date" value={date}
-                  onChange={(e) => setDate(e.target.value)} fullWidth
-                  InputLabelProps={{ shrink: true }} />
+                <DatePickerField label="วันที่" value={date}
+                  onChange={(v) => setDate(v)} />
                 <TextField label="ยืนยันราคา (วัน)" type="number" value={validDays}
                   onChange={(e) => setValidDays(Number(e.target.value))} fullWidth />
               </Box>

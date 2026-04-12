@@ -126,6 +126,22 @@ const navigationConfig: FuseNavItemType[] = [
 		]
 	},
 	{
+		id: 'reports',
+		title: 'รายงาน',
+		subtitle: 'สรุปข้อมูลรายปี/เดือน',
+		type: 'group',
+		icon: 'lucide:bar-chart-3',
+		children: [
+			{
+				id: 'reports.monthly',
+				title: 'สรุปรายงานรายปี',
+				type: 'item',
+				icon: 'lucide:bar-chart-3',
+				url: '/apps/reports'
+			}
+		]
+	},
+	{
 		id: 'master-data',
 		title: 'ข้อมูลหลัก',
 		subtitle: 'ลูกค้า ช่าง บริษัท',
@@ -152,6 +168,13 @@ const navigationConfig: FuseNavItemType[] = [
 				type: 'item',
 				icon: 'lucide:settings',
 				url: '/apps/company-settings'
+			},
+			{
+				id: 'master.wo-statuses',
+				title: 'ตั้งค่าสถานะ WO',
+				type: 'item',
+				icon: 'lucide:tags',
+				url: '/apps/work-order-statuses'
 			}
 		]
 	}

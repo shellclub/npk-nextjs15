@@ -15,6 +15,7 @@ export async function GET(
         branch: true,
         createdBy: { select: { name: true } },
         items: { orderBy: { itemOrder: 'asc' } },
+        workOrders: { select: { woNumber: true, poNumber: true }, where: { status: { not: 'CANCELLED' } } },
       },
     });
 

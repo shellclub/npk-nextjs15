@@ -20,6 +20,7 @@ import Tooltip from '@mui/material/Tooltip';
 import CircularProgress from '@mui/material/CircularProgress';
 import MenuItem from '@mui/material/MenuItem';
 import Menu from '@mui/material/Menu';
+import Popover from '@mui/material/Popover';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Divider from '@mui/material/Divider';
@@ -37,36 +38,29 @@ import FuseSvgIcon from '@fuse/core/FuseSvgIcon';
 import FusePageCarded from '@fuse/core/FusePageCarded';
 import { styled } from '@mui/material/styles';
 import { motion } from 'motion/react';
+import DatePickerField from '@/components/shared/DatePickerField';
 
 const Root = styled(FusePageCarded)(() => ({ '& .container': { maxWidth: '100%!important' } }));
 
 type WorkOrder = {
-  id: string; woNumber: string; date: string; description?: string | null;
-  customerPO?: string | null;
+  id: string; woNumber: string; date: string;
+  poNumber?: string | null; poDate?: string | null;
+  startDate?: string | null; endDate?: string | null;
+  warrantyStartDate?: string | null; warrantyEndDate?: string | null;
+  teamName?: string | null;
+  description?: string | null; customerPO?: string | null;
   totalAmount: number; status: string;
-  quotation?: { quotationNumber: string; projectName?: string | null; customerGroup: { groupName: string } } | null;
+  quotation?: { quotationNumber: string; date?: string | null; projectName?: string | null; subtotal?: number | null; totalAmount?: number | null; customerGroup: { groupName: string } } | null;
   team?: { teamName: string; leaderName: string } | null;
   branch?: { name: string } | null;
   purchaseOrders?: { id: string; poNumber: string; totalAmount: number; status: string }[];
 };
-type Quotation = { id: string; quotationNumber: string; projectName?: string | null; customerGroup: { groupName: string }; totalAmount: number };
+type Quotation = { id: string; quotationNumber: string; projectName?: string | null; customerGroup: { groupName: string }; totalAmount: number; subtotal: number };
 type Team = { id: string; teamName: string; leaderName: string };
+type WOStatusConfig = { id: string; name: string; code: string; color: string; bgColor: string; isActive: boolean };
 
-const statusConfig: Record<string, { label: string; bgColor: string; textColor: string; borderColor: string }> = {
-  PENDING:     { label: 'รอดำเนินการ', bgColor: '#FEF3C7', textColor: '#D97706', borderColor: '#FDE68A' },
-  IN_PROGRESS: { label: 'กำลังดำเนินการ', bgColor: '#DBEAFE', textColor: '#2563EB', borderColor: '#93C5FD' },
-  COMPLETED:   { label: 'เสร็จสิ้น', bgColor: '#D1FAE5', textColor: '#059669', borderColor: '#6EE7B7' },
-  PAID:        { label: 'จ่ายแล้ว', bgColor: '#E0E7FF', textColor: '#4F46E5', borderColor: '#A5B4FC' },
-  CANCELLED:   { label: 'ยกเลิก', bgColor: '#FEE2E2', textColor: '#DC2626', borderColor: '#FCA5A5' },
-};
-
-const statusOptions = [
-  { value: 'ALL', label: 'แสดงทั้งหมด' },
-  { value: 'PENDING', label: 'รอดำเนินการ' },
-  { value: 'IN_PROGRESS', label: 'กำลังดำเนินการ' },
-  { value: 'COMPLETED', label: 'เสร็จสิ้น' },
-  { value: 'PAID', label: 'จ่ายแล้ว' },
-];
+// Fallback for statuses not found in config
+const fallbackStatus = { label: 'ไม่ระบุ', bgColor: '#F1F5F9', textColor: '#64748B', borderColor: '#E2E8F0' };
 
 function fmt(n: number | string) {
   return Number(n).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -84,15 +78,26 @@ function WorkOrdersPage() {
   const [selected, setSelected] = useState<string[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
 
+  // Dynamic WO statuses from settings
+  const [allStatuses, setAllStatuses] = useState<WOStatusConfig[]>([]);
+
+  // Status change popover
+  const [statusAnchor, setStatusAnchor] = useState<null | HTMLElement>(null);
+  const [statusChangeWO, setStatusChangeWO] = useState<WorkOrder | null>(null);
+
   // Create dialog
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
+  const [woStatuses, setWoStatuses] = useState<{ id: string; name: string; code: string; color: string; bgColor: string }[]>([]);
   const [form, setForm] = useState({
-    quotationId: '', teamId: '', date: new Date().toISOString().split('T')[0],
-    startDate: '', endDate: '', description: '', totalAmount: 0, notes: '',
-    customerPO: '',
+    woNumber: '', woDate: new Date().toISOString().split('T')[0],
+    poNumber: '', poDate: '',
+    quotationId: '', teamId: '', teamName: '', statusCode: '',
+    startDate: '', endDate: '',
+    warrantyStartDate: '', warrantyEndDate: '',
+    totalAmount: 0,
   });
 
   // Year/Month filter
@@ -109,8 +114,41 @@ function WorkOrdersPage() {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelTarget, setCancelTarget] = useState<WorkOrder | null>(null);
 
+  // Edit/View dialog
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editMode, setEditMode] = useState<'view' | 'edit'>('view');
+  const [editWO, setEditWO] = useState<WorkOrder | null>(null);
+  const [editSaving, setEditSaving] = useState(false);
+  const [editForm, setEditForm] = useState({
+    poNumber: '', poDate: '',
+    teamId: '', teamName: '', statusCode: '',
+    startDate: '', endDate: '',
+    warrantyStartDate: '', warrantyEndDate: '',
+    totalAmount: 0, description: '', notes: '',
+  });
+
   // Snackbar
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
+
+  // Load WO statuses from settings API
+  const loadStatuses = useCallback(async () => {
+    try {
+      const res = await fetch('/api/work-order-statuses');
+      const d = await res.json();
+      setAllStatuses(Array.isArray(d) ? d : []);
+    } catch { setAllStatuses([]); }
+  }, []);
+  useEffect(() => { loadStatuses(); }, [loadStatuses]);
+
+  // Build dynamic status config map & filter options from settings
+  const statusConfig = allStatuses.reduce<Record<string, { label: string; bgColor: string; textColor: string; borderColor: string }>>((acc, s) => {
+    acc[s.code] = { label: s.name, bgColor: s.bgColor, textColor: s.color, borderColor: `${s.color}40` };
+    return acc;
+  }, {});
+  const statusOptions = [
+    { value: 'ALL', label: 'แสดงทั้งหมด' },
+    ...allStatuses.filter(s => s.isActive).map(s => ({ value: s.code, label: s.name })),
+  ];
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -192,29 +230,134 @@ function WorkOrdersPage() {
     }
   };
 
+  // ── Open View/Edit dialog ──
+  const openViewDialog = (wo: WorkOrder) => {
+    setEditWO(wo);
+    setEditForm({
+      poNumber: wo.poNumber || '',
+      poDate: wo.poDate ? new Date(wo.poDate).toISOString().split('T')[0] : '',
+      teamId: wo.team ? (teams.find(t => t.teamName === wo.team?.teamName)?.id || '') : '',
+      teamName: wo.teamName || wo.team?.teamName || '',
+      statusCode: wo.status || '',
+      startDate: wo.startDate ? new Date(wo.startDate).toISOString().split('T')[0] : '',
+      endDate: wo.endDate ? new Date(wo.endDate).toISOString().split('T')[0] : '',
+      warrantyStartDate: wo.warrantyStartDate ? new Date(wo.warrantyStartDate).toISOString().split('T')[0] : '',
+      warrantyEndDate: wo.warrantyEndDate ? new Date(wo.warrantyEndDate).toISOString().split('T')[0] : '',
+      totalAmount: Number(wo.totalAmount) || Number(wo.quotation?.subtotal || wo.quotation?.totalAmount || 0),
+      description: wo.description || '',
+      notes: wo.quotation?.projectName || wo.description || '',
+    });
+    setEditMode('view');
+    setEditDialogOpen(true);
+    // Load teams & statuses for edit form
+    Promise.all([
+      fetch('/api/technicians').then(r => r.json()).catch(() => []),
+      fetch('/api/work-order-statuses').then(r => r.json()).catch(() => []),
+    ]).then(([tRes, sRes]) => {
+      setTeams(Array.isArray(tRes) ? tRes : []);
+      const statuses = Array.isArray(sRes) ? sRes.filter((s: any) => s.isActive) : [];
+      setWoStatuses(statuses);
+    });
+  };
+
+  const openEditDialog = (wo: WorkOrder) => {
+    openViewDialog(wo);
+    setEditMode('edit');
+  };
+
+  const handleEditSave = async () => {
+    if (!editWO) return;
+    setEditSaving(true);
+    try {
+      const body: Record<string, unknown> = {
+        poNumber: editForm.poNumber || null,
+        poDate: editForm.poDate || null,
+        teamId: editForm.teamId || null,
+        teamName: editForm.teamName || null,
+        status: editForm.statusCode || undefined,
+        startDate: editForm.startDate || null,
+        endDate: editForm.endDate || null,
+        warrantyStartDate: editForm.warrantyStartDate || null,
+        warrantyEndDate: editForm.warrantyEndDate || null,
+        totalAmount: editForm.totalAmount,
+        description: editForm.description || null,
+      };
+      const res = await fetch(`/api/work-orders/${editWO.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error('Failed');
+      setEditDialogOpen(false);
+      setSnackbar({ open: true, message: `แก้ไข ${editWO.woNumber} เรียบร้อย`, severity: 'success' });
+      load();
+    } catch {
+      setSnackbar({ open: true, message: 'เกิดข้อผิดพลาดในการแก้ไข', severity: 'error' });
+    } finally { setEditSaving(false); }
+  };
+
   // Create dialog
   const openDialog = async () => {
     setDialogOpen(true);
-    const [qRes, tRes] = await Promise.all([
-      fetch('/api/quotations?status=APPROVED').then(r => r.json()).catch(() => []),
+    const [qRes, tRes, sRes] = await Promise.all([
+      fetch('/api/quotations').then(r => r.json()).catch(() => []),
       fetch('/api/technicians').then(r => r.json()).catch(() => []),
+      fetch('/api/work-order-statuses').then(r => r.json()).catch(() => []),
     ]);
     setQuotations(Array.isArray(qRes) ? qRes : []);
     setTeams(Array.isArray(tRes) ? tRes : []);
+    const statuses = Array.isArray(sRes) ? sRes.filter((s: any) => s.isActive) : [];
+    setWoStatuses(statuses);
+    // Set default status
+    const defaultStatus = statuses.find((s: any) => s.isDefault);
+    if (defaultStatus) {
+      setForm(prev => ({ ...prev, statusCode: defaultStatus.code }));
+    }
   };
 
   const handleSave = async () => {
+    // Validate required fields
+    if (!form.statusCode) {
+      setSnackbar({ open: true, message: 'กรุณาเลือกสถานะ', severity: 'error' });
+      return;
+    }
+    if (!form.teamId && !form.teamName) {
+      setSnackbar({ open: true, message: 'กรุณาเลือกหรือกรอกทีมช่าง', severity: 'error' });
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch('/api/work-orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, createdById: 'system' }),
+        body: JSON.stringify({
+          woNumber: form.woNumber || undefined,
+          date: form.woDate,
+          poNumber: form.poNumber || undefined,
+          poDate: form.poDate || undefined,
+          quotationId: form.quotationId || undefined,
+          teamId: form.teamId || undefined,
+          teamName: form.teamName || undefined,
+          status: form.statusCode,
+          startDate: form.startDate || undefined,
+          endDate: form.endDate || undefined,
+          warrantyStartDate: form.warrantyStartDate || undefined,
+          warrantyEndDate: form.warrantyEndDate || undefined,
+          totalAmount: form.totalAmount,
+          createdById: 'system',
+        }),
       });
       if (!res.ok) throw new Error('Failed');
       const newWO = await res.json();
       setDialogOpen(false);
-      setForm({ quotationId: '', teamId: '', date: new Date().toISOString().split('T')[0], startDate: '', endDate: '', description: '', totalAmount: 0, notes: '', customerPO: '' });
+      setForm({
+        woNumber: '', woDate: new Date().toISOString().split('T')[0],
+        poNumber: '', poDate: '',
+        quotationId: '', teamId: '', teamName: '', statusCode: '',
+        startDate: '', endDate: '',
+        warrantyStartDate: '', warrantyEndDate: '',
+        totalAmount: 0,
+      });
       setSnackbar({ open: true, message: `สร้าง ${newWO.woNumber} เรียบร้อย`, severity: 'success' });
       load();
     } catch {
@@ -321,76 +464,109 @@ function WorkOrdersPage() {
           <TableContainer sx={{ flex: 1 }}>
             <Table stickyHeader>
               <TableHead>
-                <TableRow sx={{ '& th': { fontSize: '14px', fontWeight: 700, color: '#475569', borderBottom: '2px solid #E2E8F0', py: 1.5, bgcolor: '#F8FAFC', whiteSpace: 'nowrap' } }}>
+                <TableRow sx={{ '& th': { fontSize: '13px', fontWeight: 700, color: '#475569', borderBottom: '2px solid #E2E8F0', py: 1.5, bgcolor: '#F8FAFC', whiteSpace: 'nowrap' } }}>
                   <TableCell padding="checkbox" sx={{ pl: 2 }}>
                     <Checkbox checked={selected.length === data.length && data.length > 0}
                       indeterminate={selected.length > 0 && selected.length < data.length}
                       onChange={toggleAll} size="small" />
                   </TableCell>
-                  <TableCell sx={{ width: 50 }}>#</TableCell>
-                  <TableCell>เลขที่ WO</TableCell>
-                  <TableCell>วันที่</TableCell>
-                  <TableCell>อ้างอิง QT</TableCell>
-                  <TableCell>ลูกค้า</TableCell>
-                  <TableCell>ชื่อโครงการ/งาน</TableCell>
-                  <TableCell>PO ลูกค้า</TableCell>
+                  <TableCell sx={{ width: 40 }}>#</TableCell>
+                  <TableCell><div>เลขที่ใบเสนอ</div><div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 500 }}>วันที่</div></TableCell>
+                  <TableCell><div>ลูกค้า</div><div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 500 }}>สาขา</div></TableCell>
+                  <TableCell>ชื่อโครงการ</TableCell>
+                  <TableCell><div>เลข WO</div><div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 500 }}>วันที่</div></TableCell>
+                  <TableCell><div>เลข PO</div><div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 500 }}>วันที่</div></TableCell>
                   <TableCell>ทีมช่าง</TableCell>
+                  <TableCell><div>วันเริ่ม</div><div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 500 }}>วันสิ้นสุด</div></TableCell>
+                  <TableCell><div>เริ่มประกัน</div><div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 500 }}>สิ้นสุดประกัน</div></TableCell>
                   <TableCell align="right">ยอดรวม (บาท)</TableCell>
                   <TableCell align="center">สถานะ</TableCell>
-                  <TableCell align="center" sx={{ width: 70 }}>จัดการ</TableCell>
+                  <TableCell align="center" sx={{ width: 60 }}>จัดการ</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {filteredByDate.map((wo, idx) => {
-                  const sc = statusConfig[wo.status] || statusConfig['PENDING'];
+                  const sc = statusConfig[wo.status] || fallbackStatus;
                   const isCancelled = wo.status === 'CANCELLED';
+                  const displayTeam = wo.teamName || wo.team?.teamName || '-';
+                  const subtotal = wo.quotation?.subtotal ? Number(wo.quotation.subtotal) : Number(wo.totalAmount);
                   return (
                     <TableRow key={wo.id} hover selected={selected.includes(wo.id)}
+                      onClick={() => openViewDialog(wo)}
                       sx={{
                         cursor: 'pointer', transition: 'all 0.15s ease',
                         opacity: isCancelled ? 0.5 : 1,
                         '&:hover': { bgcolor: '#F0F9FF' },
-                        '& td': { fontSize: '14px', color: '#334155', py: 1.5, borderBottom: '1px solid #F1F5F9' },
+                        '& td': { fontSize: '13px', color: '#334155', py: 1.2, borderBottom: '1px solid #F1F5F9' },
                       }}>
                       <TableCell padding="checkbox" sx={{ pl: 2 }} onClick={(e) => e.stopPropagation()}>
                         <Checkbox checked={selected.includes(wo.id)} onChange={() => toggleSelect(wo.id)} size="small" />
                       </TableCell>
                       <TableCell sx={{ color: '#94A3B8', fontWeight: 600 }}>{idx + 1}</TableCell>
+                      {/* เลขที่ใบเสนอ / วันที่ */}
                       <TableCell>
-                        <Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#0284C7' }}>{wo.woNumber}</Typography>
-                      </TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap' }}>{fmtDate(wo.date)}</TableCell>
-                      <TableCell>
-                        {wo.quotation?.quotationNumber ? (
-                          <Chip label={wo.quotation.quotationNumber} size="small"
-                            sx={{ fontSize: '12px', height: 24, bgcolor: '#F0F9FF', color: '#0369A1', border: '1px solid #BAE6FD' }} />
+                        {wo.quotation ? (
+                          <>
+                            <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#0369A1' }}>{wo.quotation.quotationNumber}</Typography>
+                            <Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>{wo.quotation.date ? fmtDate(wo.quotation.date) : '-'}</Typography>
+                          </>
                         ) : '-'}
                       </TableCell>
-                      <TableCell sx={{ fontWeight: 500 }}>
-                        {wo.quotation?.customerGroup?.groupName || '-'}
+                      {/* ลูกค้า / สาขา */}
+                      <TableCell>
+                        <Typography sx={{ fontSize: '13px', fontWeight: 500 }}>{wo.quotation?.customerGroup?.groupName || '-'}</Typography>
+                        <Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>{wo.branch?.name || '-'}</Typography>
                       </TableCell>
-                      <TableCell sx={{ maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#059669' }}>
+                      {/* ชื่อโครงการ */}
+                      <TableCell sx={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#059669', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {wo.quotation?.projectName || wo.description || '-'}
                         </Typography>
                       </TableCell>
-                      <TableCell sx={{ fontSize: '13px', color: '#64748B' }}>
-                        {wo.customerPO || '-'}
+                      {/* เลข WO / วันที่ */}
+                      <TableCell>
+                        <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#0284C7' }}>{wo.woNumber}</Typography>
+                        <Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>{fmtDate(wo.date)}</Typography>
                       </TableCell>
-                      <TableCell sx={{ fontWeight: 500 }}>{wo.team?.teamName || '-'}</TableCell>
+                      {/* เลข PO / วันที่ */}
+                      <TableCell>
+                        <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#7C3AED' }}>{wo.poNumber || '-'}</Typography>
+                        <Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>{wo.poDate ? fmtDate(wo.poDate) : '-'}</Typography>
+                      </TableCell>
+                      {/* ทีมช่าง */}
+                      <TableCell sx={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{displayTeam}</TableCell>
+                      {/* วันเริ่ม / วันสิ้นสุด */}
+                      <TableCell>
+                        <Typography sx={{ fontSize: '12px' }}>{wo.startDate ? fmtDate(wo.startDate) : '-'}</Typography>
+                        <Typography sx={{ fontSize: '12px', color: '#94A3B8' }}>{wo.endDate ? fmtDate(wo.endDate) : '-'}</Typography>
+                      </TableCell>
+                      {/* วันเริ่มประกัน / วันสิ้นสุดประกัน */}
+                      <TableCell>
+                        <Typography sx={{ fontSize: '12px' }}>{wo.warrantyStartDate ? fmtDate(wo.warrantyStartDate) : '-'}</Typography>
+                        <Typography sx={{ fontSize: '12px', color: '#94A3B8' }}>{wo.warrantyEndDate ? fmtDate(wo.warrantyEndDate) : '-'}</Typography>
+                      </TableCell>
+                      {/* ยอดรวม (ก่อน VAT) */}
                       <TableCell align="right" sx={{
-                        fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: '15px !important',
+                        fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: '14px !important',
                         color: isCancelled ? '#94A3B8' : '#1E293B',
                         textDecoration: isCancelled ? 'line-through' : 'none',
                       }}>
-                        {fmt(wo.totalAmount)}
+                        {fmt(subtotal)}
                       </TableCell>
-                      <TableCell align="center">
-                        <Chip label={sc.label} size="small" sx={{
-                          fontSize: '12px', fontWeight: 600,
-                          bgcolor: sc.bgColor, color: sc.textColor,
-                          border: `1px solid ${sc.borderColor}`, borderRadius: '8px',
-                        }} />
+                      {/* สถานะ */}
+                      <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                        <Chip label={sc.label} size="small"
+                          onClick={(e) => {
+                            setStatusAnchor(e.currentTarget as HTMLElement);
+                            setStatusChangeWO(wo);
+                          }}
+                          sx={{
+                            fontSize: '11px', fontWeight: 600, cursor: 'pointer',
+                            bgcolor: sc.bgColor, color: sc.textColor,
+                            border: `1px solid ${sc.borderColor}`, borderRadius: '8px',
+                            transition: 'all 0.15s ease',
+                            '&:hover': { filter: 'brightness(0.92)', transform: 'scale(1.05)' },
+                          }} />
                       </TableCell>
                       <TableCell align="center" onClick={(e) => e.stopPropagation()}>
                         <Tooltip title="จัดการ" arrow>
@@ -426,6 +602,21 @@ function WorkOrdersPage() {
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
         slotProps={{ paper: { sx: { borderRadius: '12px', minWidth: 220, boxShadow: '0 8px 30px rgba(0,0,0,0.12)', py: 0.5 } } }}>
+
+        {/* View / Edit */}
+        {menuWO && (
+          <>
+            <MenuItem onClick={() => { handleMenuClose(); openViewDialog(menuWO); }} sx={{ py: 1.2, gap: 1.5 }}>
+              <ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#0284C7' }}>lucide:eye</FuseSvgIcon></ListItemIcon>
+              <ListItemText>ดูรายละเอียด</ListItemText>
+            </MenuItem>
+            <MenuItem onClick={() => { handleMenuClose(); openEditDialog(menuWO); }} sx={{ py: 1.2, gap: 1.5 }}>
+              <ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#F59E0B' }}>lucide:pencil</FuseSvgIcon></ListItemIcon>
+              <ListItemText>แก้ไข</ListItemText>
+            </MenuItem>
+            <Divider sx={{ my: 0.5 }} />
+          </>
+        )}
 
         {/* Status transitions depending on current status */}
         {menuWO && menuWO.status === 'PENDING' && (
@@ -490,6 +681,217 @@ function WorkOrdersPage() {
         </DialogActions>
       </Dialog>
 
+      {/* ========== Status Change Popover ========== */}
+      <Popover
+        open={Boolean(statusAnchor)}
+        anchorEl={statusAnchor}
+        onClose={() => { setStatusAnchor(null); setStatusChangeWO(null); }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'center' }}
+        slotProps={{ paper: { sx: { borderRadius: '12px', minWidth: 200, boxShadow: '0 8px 30px rgba(0,0,0,0.15)', py: 0.5, mt: 0.5 } } }}
+      >
+        <Box sx={{ px: 2, py: 1.5, borderBottom: '1px solid #F1F5F9' }}>
+          <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#475569' }}>
+            เปลี่ยนสถานะ
+          </Typography>
+          {statusChangeWO && (
+            <Typography sx={{ fontSize: '12px', color: '#94A3B8', mt: 0.25 }}>
+              {statusChangeWO.woNumber}
+            </Typography>
+          )}
+        </Box>
+        {allStatuses.filter(s => s.isActive).map(s => {
+          const isCurrentStatus = statusChangeWO?.status === s.code;
+          return (
+            <MenuItem
+              key={s.code}
+              onClick={async () => {
+                if (!statusChangeWO || isCurrentStatus) return;
+                setStatusAnchor(null);
+                setActionLoading(true);
+                try {
+                  const res = await fetch(`/api/work-orders/${statusChangeWO.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: s.code }),
+                  });
+                  if (!res.ok) throw new Error('Failed');
+                  setSnackbar({ open: true, message: `${statusChangeWO.woNumber} → ${s.name}`, severity: 'success' });
+                  load();
+                } catch {
+                  setSnackbar({ open: true, message: 'เกิดข้อผิดพลาด', severity: 'error' });
+                } finally {
+                  setActionLoading(false);
+                  setStatusChangeWO(null);
+                }
+              }}
+              sx={{
+                py: 1, gap: 1.5, fontSize: '14px',
+                bgcolor: isCurrentStatus ? `${s.bgColor}` : 'transparent',
+                fontWeight: isCurrentStatus ? 700 : 500,
+                '&:hover': { bgcolor: s.bgColor },
+              }}
+            >
+              <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: s.color, flexShrink: 0 }} />
+              <Typography sx={{ fontSize: '14px', fontWeight: isCurrentStatus ? 700 : 500 }}>
+                {s.name}
+              </Typography>
+              {isCurrentStatus && (
+                <FuseSvgIcon size={16} sx={{ color: s.color, ml: 'auto' }}>lucide:check</FuseSvgIcon>
+              )}
+            </MenuItem>
+          );
+        })}
+      </Popover>
+
+      {/* ========== View/Edit Dialog ========== */}
+      <Dialog open={editDialogOpen} onClose={() => setEditDialogOpen(false)} maxWidth="md" fullWidth
+        PaperProps={{ sx: { borderRadius: '16px' } }}>
+        <DialogTitle sx={{ fontSize: '20px', fontWeight: 700, pb: 1, display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'space-between' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <FuseSvgIcon sx={{ color: editMode === 'edit' ? '#F59E0B' : '#0284C7' }} size={24}>
+              {editMode === 'edit' ? 'lucide:pencil' : 'lucide:eye'}
+            </FuseSvgIcon>
+            {editMode === 'edit' ? 'แก้ไข' : 'รายละเอียด'} {editWO?.woNumber}
+          </Box>
+          {editMode === 'view' && (
+            <Button variant="outlined" size="small" startIcon={<FuseSvgIcon size={16}>lucide:pencil</FuseSvgIcon>}
+              onClick={() => setEditMode('edit')}
+              sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, fontSize: '13px', borderColor: '#F59E0B', color: '#F59E0B', '&:hover': { bgcolor: '#FFFBEB', borderColor: '#D97706' } }}>
+              แก้ไข
+            </Button>
+          )}
+        </DialogTitle>
+        <Divider />
+        <DialogContent>
+          <div className="space-y-8 mt-8">
+            {/* Info Header */}
+            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, bgcolor: '#F8FAFC', borderRadius: '12px', p: 2, border: '1px solid #E2E8F0' }}>
+              <Box>
+                <Typography sx={{ fontSize: '12px', color: '#94A3B8', fontWeight: 500 }}>เลข WO</Typography>
+                <Typography sx={{ fontSize: '16px', fontWeight: 700, color: '#0284C7' }}>{editWO?.woNumber}</Typography>
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: '12px', color: '#94A3B8', fontWeight: 500 }}>วันที่ WO</Typography>
+                <Typography sx={{ fontSize: '15px', fontWeight: 600 }}>{editWO ? fmtDate(editWO.date) : '-'}</Typography>
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: '12px', color: '#94A3B8', fontWeight: 500 }}>อ้างอิงใบเสนอราคา</Typography>
+                <Typography sx={{ fontSize: '15px', fontWeight: 600, color: '#0369A1' }}>{editWO?.quotation?.quotationNumber || '-'}</Typography>
+              </Box>
+              <Box>
+                <Typography sx={{ fontSize: '12px', color: '#94A3B8', fontWeight: 500 }}>ลูกค้า</Typography>
+                <Typography sx={{ fontSize: '15px', fontWeight: 600 }}>{editWO?.quotation?.customerGroup?.groupName || '-'}</Typography>
+              </Box>
+              <Box sx={{ gridColumn: '1 / -1' }}>
+                <Typography sx={{ fontSize: '12px', color: '#94A3B8', fontWeight: 500 }}>ชื่อโครงการ</Typography>
+                <Typography sx={{ fontSize: '15px', fontWeight: 600, color: '#059669' }}>{editWO?.quotation?.projectName || editWO?.description || '-'}</Typography>
+              </Box>
+            </Box>
+
+            {/* PO Number / Date */}
+            <div className="grid grid-cols-2 gap-8">
+              <TextField label="เลข PO" value={editForm.poNumber}
+                onChange={(e) => setEditForm({ ...editForm, poNumber: e.target.value })}
+                fullWidth size="medium" sx={fieldSx}
+                InputProps={{ readOnly: editMode === 'view' }} />
+              <DatePickerField label="วันที่ PO" value={editForm.poDate}
+                onChange={(v) => setEditForm({ ...editForm, poDate: v })}
+                readOnly={editMode === 'view'} />
+            </div>
+
+            {/* Status */}
+            <FormControl fullWidth size="medium" disabled={editMode === 'view'}>
+              <InputLabel>สถานะ</InputLabel>
+              <Select value={editForm.statusCode}
+                onChange={(e) => setEditForm({ ...editForm, statusCode: e.target.value })}
+                label="สถานะ" sx={{ borderRadius: '10px' }}>
+                {woStatuses.map(s => (
+                  <MenuItem key={s.code} value={s.code}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: s.color }} />
+                      {s.name}
+                    </Box>
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            {/* Team */}
+            <div className="grid grid-cols-2 gap-8">
+              <FormControl fullWidth size="medium" disabled={editMode === 'view'}>
+                <InputLabel>เลือกทีมช่าง</InputLabel>
+                <Select value={editForm.teamId}
+                  onChange={(e) => {
+                    const tId = e.target.value;
+                    const t = teams.find(x => x.id === tId);
+                    setEditForm({ ...editForm, teamId: tId, teamName: t ? t.teamName : '' });
+                  }}
+                  label="เลือกทีมช่าง" sx={{ borderRadius: '10px' }}>
+                  <MenuItem value="">- ไม่เลือก -</MenuItem>
+                  {teams.map(t => (
+                    <MenuItem key={t.id} value={t.id}>{t.teamName} ({t.leaderName})</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <TextField label="หรือ กรอกชื่อทีมช่าง" value={editForm.teamName}
+                onChange={(e) => setEditForm({ ...editForm, teamName: e.target.value, teamId: '' })}
+                fullWidth size="medium" sx={fieldSx}
+                InputProps={{ readOnly: editMode === 'view' }} />
+            </div>
+
+            {/* Start/End dates */}
+            <div className="grid grid-cols-2 gap-8">
+              <DatePickerField label="วันเริ่มงาน" value={editForm.startDate}
+                onChange={(v) => setEditForm({ ...editForm, startDate: v })}
+                readOnly={editMode === 'view'} />
+              <DatePickerField label="วันสิ้นสุดงาน" value={editForm.endDate}
+                onChange={(v) => setEditForm({ ...editForm, endDate: v })}
+                readOnly={editMode === 'view'} />
+            </div>
+
+            {/* Warranty dates */}
+            <div className="grid grid-cols-2 gap-8">
+              <DatePickerField label="วันเริ่มประกัน" value={editForm.warrantyStartDate}
+                onChange={(v) => setEditForm({ ...editForm, warrantyStartDate: v })}
+                readOnly={editMode === 'view'} />
+              <DatePickerField label="วันสิ้นสุดประกัน" value={editForm.warrantyEndDate}
+                onChange={(v) => setEditForm({ ...editForm, warrantyEndDate: v })}
+                readOnly={editMode === 'view'} />
+            </div>
+
+            {/* Total Amount */}
+            <TextField label="ยอดรวม ก่อน VAT (บาท)" type="number" value={editForm.totalAmount}
+              onChange={(e) => setEditForm({ ...editForm, totalAmount: Number(e.target.value) })}
+              fullWidth size="medium" sx={fieldSx}
+              InputProps={{ readOnly: editMode === 'view' }} />
+
+            {/* Description */}
+            <TextField label="รายละเอียด/หมายเหตุ" value={editForm.description}
+              onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+              fullWidth size="medium" multiline rows={2} sx={fieldSx}
+              InputProps={{ readOnly: editMode === 'view' }} />
+          </div>
+        </DialogContent>
+        <Divider />
+        <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
+          <Button onClick={() => setEditDialogOpen(false)} variant="outlined"
+            sx={{ borderRadius: '10px', textTransform: 'none', fontSize: '15px', fontWeight: 600, color: '#64748B', borderColor: '#E2E8F0' }}>
+            {editMode === 'view' ? 'ปิด' : 'ยกเลิก'}
+          </Button>
+          {editMode === 'edit' && (
+            <Button variant="contained" onClick={handleEditSave} disabled={editSaving}
+              sx={{
+                borderRadius: '10px', textTransform: 'none', fontSize: '15px', px: 3, fontWeight: 700,
+                background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+                '&:hover': { background: 'linear-gradient(135deg, #D97706 0%, #B45309 100%)' },
+              }}>
+              {editSaving ? 'กำลังบันทึก...' : 'บันทึกการแก้ไข'}
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
+
       {/* ========== Create Dialog ========== */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth
         PaperProps={{ sx: { borderRadius: '16px' } }}>
@@ -499,49 +901,115 @@ function WorkOrdersPage() {
         </DialogTitle>
         <Divider />
         <DialogContent>
-          <div className="space-y-16 mt-8">
-            <FormControl fullWidth>
+          <div className="space-y-8 mt-8">
+            {/* Row 1: WO Number + Date | PO Number + Date */}
+            <div className="grid grid-cols-2 gap-8">
+              <div className="space-y-8">
+                <TextField label="เลข WO (ระบบสร้างอัตโนมัติ)" value={form.woNumber}
+                  onChange={(e) => setForm({ ...form, woNumber: e.target.value })}
+                  fullWidth size="medium" sx={fieldSx}
+                  placeholder="ว่างไว้ = ระบบสร้างอัตโนมัติ" />
+                <DatePickerField label="วันที่ WO" value={form.woDate}
+                  onChange={(v) => setForm({ ...form, woDate: v })} />
+              </div>
+              <div className="space-y-8">
+                <TextField label="เลข PO" value={form.poNumber}
+                  onChange={(e) => setForm({ ...form, poNumber: e.target.value })}
+                  fullWidth size="medium" sx={fieldSx}
+                  placeholder="เลข PO จากลูกค้า" />
+                <DatePickerField label="วันที่ PO" value={form.poDate}
+                  onChange={(v) => setForm({ ...form, poDate: v })} />
+              </div>
+            </div>
+
+            {/* Row 2: Reference Quotation */}
+            <FormControl fullWidth size="medium">
               <InputLabel>อ้างอิงใบเสนอราคา</InputLabel>
               <Select value={form.quotationId}
-                onChange={(e) => setForm({ ...form, quotationId: e.target.value })}
+                onChange={(e) => {
+                  const qId = e.target.value;
+                  const q = quotations.find(x => x.id === qId);
+                  setForm({
+                    ...form,
+                    quotationId: qId,
+                    totalAmount: q ? Number(q.subtotal || q.totalAmount) : 0,
+                  });
+                }}
                 label="อ้างอิงใบเสนอราคา" sx={{ borderRadius: '10px' }}>
-                <MenuItem value="">- ไม่ระบุ -</MenuItem>
+                <MenuItem value="">- ค้นหาเพื่ออ้างอิง -</MenuItem>
                 {quotations.map(q => (
-                  <MenuItem key={q.id} value={q.id}>{q.quotationNumber} — {q.customerGroup?.groupName}</MenuItem>
+                  <MenuItem key={q.id} value={q.id}>
+                    {q.quotationNumber} — {q.customerGroup?.groupName} {q.projectName ? `(${q.projectName})` : ''}
+                  </MenuItem>
                 ))}
               </Select>
             </FormControl>
-            <FormControl fullWidth>
-              <InputLabel>ทีมช่าง</InputLabel>
-              <Select value={form.teamId}
-                onChange={(e) => setForm({ ...form, teamId: e.target.value })}
-                label="ทีมช่าง" sx={{ borderRadius: '10px' }}>
-                <MenuItem value="">- ไม่ระบุ -</MenuItem>
-                {teams.map(t => (
-                  <MenuItem key={t.id} value={t.id}>{t.teamName} ({t.leaderName})</MenuItem>
+
+            {/* Row 3: Status (required) */}
+            <FormControl fullWidth size="medium" required error={!form.statusCode}>
+              <InputLabel>กำหนดสถานะ *</InputLabel>
+              <Select value={form.statusCode}
+                onChange={(e) => setForm({ ...form, statusCode: e.target.value })}
+                label="กำหนดสถานะ *" sx={{ borderRadius: '10px' }}>
+                {woStatuses.map(s => (
+                  <MenuItem key={s.code} value={s.code}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: s.color }} />
+                      {s.name}
+                    </Box>
+                  </MenuItem>
                 ))}
               </Select>
+              {!form.statusCode && (
+                <Typography sx={{ fontSize: '12px', color: '#DC2626', mt: 0.5, ml: 1.5 }}>บังคับให้ระบุ</Typography>
+              )}
             </FormControl>
-            <TextField label="วันที่" type="date" value={form.date}
-              onChange={(e) => setForm({ ...form, date: e.target.value })}
-              fullWidth InputLabelProps={{ shrink: true }} sx={fieldSx} />
-            <div className="grid grid-cols-2 gap-16">
-              <TextField label="วันเริ่มงาน" type="date" value={form.startDate}
-                onChange={(e) => setForm({ ...form, startDate: e.target.value })}
-                fullWidth InputLabelProps={{ shrink: true }} sx={fieldSx} />
-              <TextField label="วันสิ้นสุด" type="date" value={form.endDate}
-                onChange={(e) => setForm({ ...form, endDate: e.target.value })}
-                fullWidth InputLabelProps={{ shrink: true }} sx={fieldSx} />
+
+            {/* Row 4: Team - dropdown or free text */}
+            <div className="grid grid-cols-2 gap-8">
+              <FormControl fullWidth size="medium">
+                <InputLabel>เลือกทีมช่าง</InputLabel>
+                <Select value={form.teamId}
+                  onChange={(e) => {
+                    const tId = e.target.value;
+                    const t = teams.find(x => x.id === tId);
+                    setForm({ ...form, teamId: tId, teamName: t ? t.teamName : '' });
+                  }}
+                  label="เลือกทีมช่าง" sx={{ borderRadius: '10px' }}>
+                  <MenuItem value="">- ไม่เลือก -</MenuItem>
+                  {teams.map(t => (
+                    <MenuItem key={t.id} value={t.id}>{t.teamName} ({t.leaderName})</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <TextField label="หรือ กรอกชื่อทีมช่าง" value={form.teamName}
+                onChange={(e) => setForm({ ...form, teamName: e.target.value, teamId: '' })}
+                fullWidth size="medium" sx={fieldSx}
+                placeholder="พิมพ์ชื่อทีมช่าง" />
             </div>
-            <TextField label="รายละเอียดงาน" value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              multiline rows={3} fullWidth sx={fieldSx} />
-            <TextField label="ยอดรวม (บาท)" type="number" value={form.totalAmount}
+
+            {/* Row 5: Start/End dates */}
+            <div className="grid grid-cols-2 gap-8">
+              <DatePickerField label="วันเริ่มงาน" value={form.startDate}
+                onChange={(v) => setForm({ ...form, startDate: v })} />
+              <DatePickerField label="วันสิ้นสุดงาน" value={form.endDate}
+                onChange={(v) => setForm({ ...form, endDate: v })} />
+            </div>
+
+            {/* Row 6: Warranty Start/End dates */}
+            <div className="grid grid-cols-2 gap-8">
+              <DatePickerField label="วันเริ่มประกัน" value={form.warrantyStartDate}
+                onChange={(v) => setForm({ ...form, warrantyStartDate: v })} />
+              <DatePickerField label="วันสิ้นสุดประกัน" value={form.warrantyEndDate}
+                onChange={(v) => setForm({ ...form, warrantyEndDate: v })} />
+            </div>
+
+            {/* Row 7: Total Amount */}
+            <TextField label="ยอดรวม ก่อน VAT (บาท)" type="number" value={form.totalAmount}
               onChange={(e) => setForm({ ...form, totalAmount: Number(e.target.value) })}
-              fullWidth sx={fieldSx} />
-            <TextField label="เลข PO ลูกค้า (ถ้ามี)" value={form.customerPO}
-              onChange={(e) => setForm({ ...form, customerPO: e.target.value })}
-              fullWidth sx={fieldSx} placeholder="เช่น WO-XXXXX / PO-XXXXX" />
+              fullWidth size="medium" sx={fieldSx}
+              helperText="แสดงยอดค่างานก่อน VAT ขึ้นอัตโนมัติตามใบเสนอราคา"
+              InputProps={{ readOnly: !!form.quotationId }} />
           </div>
         </DialogContent>
         <Divider />

@@ -331,6 +331,7 @@ function QuotationsPage() {
         customerGroup: data.customerGroup,
         branch: data.branch,
         createdBy: data.createdBy,
+        workOrders: data.workOrders || [],
         items: (data.items || []).map((item: any) => ({
           itemType: item.itemType,
           description: item.description,
@@ -463,7 +464,7 @@ function QuotationsPage() {
                   <TableCell>ลูกค้า / สาขา</TableCell>
                   <TableCell>ชื่อโครงการ</TableCell>
                   <TableCell>ผู้ติดต่อ</TableCell>
-                  <TableCell sx={{ maxWidth: 220 }}>ชื่อใบเสนอราคา</TableCell>
+
                   <TableCell align="right">ยอดรวม</TableCell>
                   <TableCell align="center">สถานะ</TableCell>
                   <TableCell align="center" sx={{ width: 70 }}>จัดการ</TableCell>
@@ -530,16 +531,7 @@ function QuotationsPage() {
                           {q.contactPhone || ''}
                         </Typography>
                       </TableCell>
-                      {/* ชื่อใบเสนอราคา */}
-                      <TableCell>
-                        <Typography sx={{
-                          fontSize: '14px', color: isCancelled ? '#9CA3AF' : '#475569',
-                          textDecoration: isCancelled ? 'line-through' : 'none',
-                          maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        }}>
-                          {q.projectName || '-'}
-                        </Typography>
-                      </TableCell>
+
                       {/* ยอดรวม */}
                       <TableCell align="right" sx={{
                         fontWeight: 700, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap',

@@ -180,6 +180,7 @@ model Quotation {
   items           QuotationItem[]
   workOrders      WorkOrder[]
   photos          QuotationPhoto[]
+  purchaseOrders  PurchaseOrder[]
 }
 
 enum QuotationStatus {
@@ -208,24 +209,45 @@ model QuotationItem {
 }
 
 // ========================================
+// ตั้งค่าสถานะ Work Order (Configurable)
+// ========================================
+model WorkOrderStatusConfig {
+  id          String   @id @default(cuid())
+  name        String   // ชื่อสถานะ (เช่น รอดำเนินการ, กำลังดำเนินการ)
+  code        String   @unique // CODE เช่น PENDING, IN_PROGRESS
+  color       String   @default("#64748B") // สีของสถานะ
+  bgColor     String   @default("#F1F5F9") // สีพื้นหลัง badge
+  sortOrder   Int      @default(0) // ลำดับการแสดงผล
+  isDefault   Boolean  @default(false) // สถานะเริ่มต้น
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ========================================
 // ตอบรับทำงาน (Work Orders) - WO/PO
 // ========================================
 model WorkOrder {
   id              String           @id @default(cuid())
   woNumber        String           @unique // เลขที่ WO
+  poNumber        String?          // เลข PO จากลูกค้า
+  poDate          DateTime?        // วันที่ PO
   quotationId     String?
   quotation       Quotation?       @relation(fields: [quotationId], references: [id])
   branchId        String?
   branch          CustomerBranch?  @relation(fields: [branchId], references: [id])
   teamId          String?
   team            TechnicianTeam?  @relation(fields: [teamId], references: [id])
-  date            DateTime
+  teamName        String?          // ชื่อทีมช่าง (กรอกเอง)
+  date            DateTime         // วันที่ WO
   startDate       DateTime?        // วันเริ่มงาน
   endDate         DateTime?        // วันสิ้นสุดงาน
-  customerPO      String?          // เลข PO/WO ของลูกค้า
+  warrantyStartDate DateTime?      // วันเริ่มประกัน
+  warrantyEndDate   DateTime?      // วันสิ้นสุดประกัน
+  customerPO      String?          // เลข PO/WO ของลูกค้า (legacy)
   description     String?          // รายละเอียดงาน
   totalAmount     Decimal          @default(0) @db.Decimal(12, 2)
-  status          WorkOrderStatus  @default(PENDING)
+  status          String           @default("PENDING") // สถานะ (จาก WorkOrderStatusConfig)
   notes           String?
   createdById     String
   createdBy       User             @relation(fields: [createdById], references: [id])
@@ -236,25 +258,24 @@ model WorkOrder {
   invoices        Invoice[]
 }
 
-enum WorkOrderStatus {
-  PENDING
-  IN_PROGRESS
-  COMPLETED
-  PAID
-  CANCELLED
-}
-
 // ========================================
 // ใบสั่งซื้อให้ช่าง (Purchase Orders)
 // ========================================
 model PurchaseOrder {
   id              String           @id @default(cuid())
-  poNumber        String           @unique // เลขที่ PO
+  poNumber        String           @unique // เลขที่ PO เช่น PO260319/Npk-001
   workOrderId     String?
   workOrder       WorkOrder?       @relation(fields: [workOrderId], references: [id])
+  quotationId     String?
+  quotation       Quotation?       @relation(fields: [quotationId], references: [id])
   teamId          String?
   team            TechnicianTeam?  @relation(fields: [teamId], references: [id])
   date            DateTime
+  startDate       DateTime?        // วันเริ่มงาน
+  endDate         DateTime?        // วันสิ้นสุดงาน
+  warrantyStartDate DateTime?      // วันเริ่มประกัน
+  warrantyEndDate   DateTime?      // วันสิ้นสุดประกัน
+  contractorQuoteUrl String?       // URL ไฟล์ใบเสนอราคาช่าง
   totalAmount     Decimal          @default(0) @db.Decimal(12, 2)
   status          POStatus         @default(DRAFT)
   notes           String?
@@ -262,6 +283,7 @@ model PurchaseOrder {
   updatedAt       DateTime         @updatedAt
 
   items           PurchaseOrderItem[]
+  adjustments     POAdjustment[]
 }
 
 enum POStatus {
@@ -282,6 +304,18 @@ model PurchaseOrderItem {
   quantity        Decimal       @db.Decimal(10, 2)
   unitPrice       Decimal       @db.Decimal(12, 2)
   amount          Decimal       @db.Decimal(12, 2)
+}
+
+// รายการปรับยอด PO (เพิ่ม/ลด) — ลบไม่ได้เพื่อ audit trail
+model POAdjustment {
+  id              String        @id @default(cuid())
+  purchaseOrderId String
+  purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  adjustmentType  String        // ADD หรือ DEDUCT
+  description     String        // รายละเอียดงานเพิ่ม/ลด
+  amount          Decimal       @db.Decimal(12, 2) // จำนวนเงิน (เป็นบวกเสมอ)
+  createdBy       String?       // ชื่อคนที่ key
+  createdAt       DateTime      @default(now())
 }
 
 // ========================================

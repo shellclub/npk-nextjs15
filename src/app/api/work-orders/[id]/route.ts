@@ -40,10 +40,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (body.description !== undefined) data.description = body.description;
     if (body.totalAmount !== undefined) data.totalAmount = body.totalAmount;
     if (body.teamId !== undefined) data.teamId = body.teamId || null;
+    if (body.teamName !== undefined) data.teamName = body.teamName || null;
+    if (body.poNumber !== undefined) data.poNumber = body.poNumber || null;
+    if (body.poDate !== undefined) data.poDate = body.poDate ? new Date(body.poDate) : null;
     if (body.startDate !== undefined) data.startDate = body.startDate ? new Date(body.startDate) : null;
     if (body.endDate !== undefined) data.endDate = body.endDate ? new Date(body.endDate) : null;
+    if (body.warrantyStartDate !== undefined) data.warrantyStartDate = body.warrantyStartDate ? new Date(body.warrantyStartDate) : null;
+    if (body.warrantyEndDate !== undefined) data.warrantyEndDate = body.warrantyEndDate ? new Date(body.warrantyEndDate) : null;
     if (body.notes !== undefined) data.notes = body.notes;
     if (body.customerPO !== undefined) data.customerPO = body.customerPO || null;
+
+    console.log('PATCH body:', JSON.stringify(body));
+    console.log('PATCH data:', JSON.stringify(data));
 
     const updated = await prisma.workOrder.update({
       where: { id },
@@ -57,8 +65,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     return NextResponse.json(updated);
   } catch (error) {
-    console.error('PATCH /api/work-orders/[id] error:', error);
-    return NextResponse.json({ error: 'Failed to update work order' }, { status: 500 });
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('PATCH /api/work-orders/[id] error:', msg);
+    return NextResponse.json({ error: 'Failed to update work order', detail: msg }, { status: 500 });
   }
 }
 

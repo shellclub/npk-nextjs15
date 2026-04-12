@@ -27,6 +27,9 @@ export async function GET(request: NextRequest) {
           select: {
             quotationNumber: true,
             projectName: true,
+            date: true,
+            subtotal: true,
+            totalAmount: true,
             customerGroup: { select: { groupName: true } },
           },
         },
@@ -81,13 +84,18 @@ export async function POST(request: NextRequest) {
 
     const workOrder = await prisma.workOrder.create({
       data: {
-        woNumber,
+        woNumber: body.woNumber || woNumber,
+        poNumber: body.poNumber || null,
+        poDate: body.poDate ? new Date(body.poDate) : null,
         quotationId: body.quotationId || null,
         branchId: body.branchId || null,
         teamId: body.teamId || null,
+        teamName: body.teamName || null,
         date: new Date(body.date || now),
         startDate: body.startDate ? new Date(body.startDate) : null,
         endDate: body.endDate ? new Date(body.endDate) : null,
+        warrantyStartDate: body.warrantyStartDate ? new Date(body.warrantyStartDate) : null,
+        warrantyEndDate: body.warrantyEndDate ? new Date(body.warrantyEndDate) : null,
         description: body.description || null,
         totalAmount: body.totalAmount || 0,
         status: body.status || 'PENDING',

@@ -29,6 +29,7 @@ export async function GET(
         createdBy: { select: { name: true } },
         items: { orderBy: { itemOrder: 'asc' } },
         photos: { orderBy: { createdAt: 'asc' } },
+        workOrders: { select: { woNumber: true, poNumber: true }, where: { status: { not: 'CANCELLED' } } },
       },
     });
 
@@ -348,10 +349,43 @@ export async function GET(
         <td class="label" style="text-align:right;">โทร :</td>
         <td class="value" style="text-align:right;">${q.contactPhone || '-'}</td>
       </tr>
-      <tr>
+      ${(() => {
+        const wos = (q.workOrders || []).filter(w => w.woNumber);
+        const pos = (q.workOrders || []).filter(w => w.poNumber);
+        if (wos.length === 0 && pos.length === 0) return '';
+        let rows = '';
+        if (wos.length > 0) {
+          rows += `<tr>
+            <td class="label">ชื่อโครงการ :</td>
+            <td class="value-green">${q.projectName || '-'}</td>
+            <td class="label" style="text-align:right;">W/O :</td>
+            <td class="value-blue" style="text-align:right;">${wos.map(w => w.woNumber).join(', ')}</td>
+          </tr>`;
+          if (pos.length > 0) {
+            rows += `<tr>
+              <td></td><td></td>
+              <td class="label" style="text-align:right;">P/O :</td>
+              <td class="value-blue" style="text-align:right;">${pos.map(w => w.poNumber).join(', ')}</td>
+            </tr>`;
+          }
+        } else {
+          rows += `<tr>
+            <td class="label">ชื่อโครงการ :</td>
+            <td class="value-green" colspan="3">${q.projectName || '-'}</td>
+          </tr>`;
+          if (pos.length > 0) {
+            rows += `<tr>
+              <td></td><td></td>
+              <td class="label" style="text-align:right;">P/O :</td>
+              <td class="value-blue" style="text-align:right;">${pos.map(w => w.poNumber).join(', ')}</td>
+            </tr>`;
+          }
+        }
+        return rows;
+      })() || `<tr>
         <td class="label">ชื่อโครงการ :</td>
         <td class="value-green" colspan="3">${q.projectName || '-'}</td>
-      </tr>
+      </tr>`}
     </table>
 
     <!-- Greeting -->

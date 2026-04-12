@@ -70,6 +70,10 @@ export interface QuotationPDFData {
   customerGroup?: { groupName: string; headOfficeAddress?: string | null } | null;
   branch?: { code?: string | null; name: string } | null;
   createdBy?: { name: string } | null;
+  workOrders?: Array<{
+    woNumber: string;
+    poNumber?: string | null;
+  }>;
   items: Array<{
     itemType?: string | null;
     description: string;
@@ -184,18 +188,7 @@ export function generateQuotationPDF(data: QuotationPDFData): jsPDF {
   doc.text(displayQN, rightValueX, y);
   y += 5.5;
 
-  // Row 2: อ้างถึง / วันที่
-  doc.setFont('THSarabunNew', 'bold');
-  doc.text('อ้างถึง :', leftCol, y);
-  doc.setFont('THSarabunNew', 'normal');
-  doc.text(data.contactName || '-', leftValueX, y);
-  doc.setFont('THSarabunNew', 'bold');
-  doc.text('วันที่', rightLabelX, y);
-  doc.setFont('THSarabunNew', 'normal');
-  doc.text(thaiDate(data.date), rightValueX, y);
-  y += 5.5;
-
-  // Row 3: สาขา / W/O
+  // Row 2: สาขา / วันที่
   const branchDisplay = data.branch
     ? `${data.branch.code || ''} ${data.branch.name}`.trim()
     : '-';
@@ -204,19 +197,58 @@ export function generateQuotationPDF(data: QuotationPDFData): jsPDF {
   doc.setFont('THSarabunNew', 'normal');
   doc.text(branchDisplay, leftValueX, y);
   doc.setFont('THSarabunNew', 'bold');
-  doc.text('W/O', rightLabelX, y);
+  doc.text('วันที่', rightLabelX, y);
   doc.setFont('THSarabunNew', 'normal');
-  doc.text(data.customerPO || '', rightValueX, y);
+  doc.text(thaiDate(data.date), rightValueX, y);
   y += 5.5;
 
-  // Row 4: ชื่อโครงการ / P/O
+  // Row 3: ที่อยู่ / ชื่อผู้ติดต่อ
+  doc.setFont('THSarabunNew', 'bold');
+  doc.text('ที่อยู่ :', leftCol, y);
+  doc.setFont('THSarabunNew', 'normal');
+  const addressText = data.address || data.customerGroup?.headOfficeAddress || '-';
+  const addrLines = doc.splitTextToSize(addressText, rightLabelX - leftValueX - 5);
+  doc.text(addrLines[0] || '-', leftValueX, y);
+  doc.setFont('THSarabunNew', 'bold');
+  doc.text('ชื่อผู้ติดต่อ', rightLabelX, y);
+  doc.setFont('THSarabunNew', 'normal');
+  doc.text(data.contactName || '-', rightValueX, y);
+  y += 5.5;
+
+  // Row 4: ยืนยันราคา / เบอร์โทร
+  doc.setFont('THSarabunNew', 'bold');
+  doc.text('ยืนยันราคา :', leftCol, y);
+  doc.setFont('THSarabunNew', 'normal');
+  doc.text('30 วันนับจากวันที่เสนอราคา', leftValueX + 5, y);
+  doc.setFont('THSarabunNew', 'bold');
+  doc.text('เบอร์โทร :', rightLabelX, y);
+  doc.setFont('THSarabunNew', 'normal');
+  doc.text(data.contactPhone || '-', rightValueX, y);
+  y += 5.5;
+
+  // Row 5: ชื่อโครงการ / WO (if exists)
+  const woNumbers = (data.workOrders || []).map(w => w.woNumber).filter(Boolean);
+  const poNumbers = (data.workOrders || []).map(w => w.poNumber).filter(Boolean) as string[];
   doc.setFont('THSarabunNew', 'bold');
   doc.text('ชื่อโครงการ :', leftCol, y);
   doc.setFont('THSarabunNew', 'normal');
   doc.text(data.projectName || '-', leftValueX + 5, y);
-  doc.setFont('THSarabunNew', 'bold');
-  doc.text('P/O', rightLabelX, y);
+  if (woNumbers.length > 0) {
+    doc.setFont('THSarabunNew', 'bold');
+    doc.text('W/O :', rightLabelX, y);
+    doc.setFont('THSarabunNew', 'normal');
+    doc.text(woNumbers.join(', '), rightValueX, y);
+  }
   y += 5.5;
+
+  // Row 6: P/O (if exists)
+  if (poNumbers.length > 0) {
+    doc.setFont('THSarabunNew', 'bold');
+    doc.text('P/O :', rightLabelX, y);
+    doc.setFont('THSarabunNew', 'normal');
+    doc.text(poNumbers.join(', '), rightValueX, y);
+    y += 5.5;
+  }
 
   // Row 5: บริษัทฯ มีความยินดีใคร่ขอเสนอราคา...
   doc.setFont('THSarabunNew', 'normal');

@@ -1,8 +1,7 @@
 'use client';
 
 import { SnackbarProvider } from 'notistack';
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { enUS } from 'date-fns/locale/en-US';
+import { AdapterDateFnsBE, thaiLocaleText } from '@/utils/AdapterDateFnsBE';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import ErrorBoundary from '@fuse/utils/ErrorBoundary';
 import { FuseSettingsProvider } from '@fuse/core/FuseSettings/FuseSettingsProvider';
@@ -43,8 +42,8 @@ function App(props: AppProps) {
 			<AppContext value={AppContextValue}>
 				{/* Date Picker Localization Provider */}
 				<LocalizationProvider
-					dateAdapter={AdapterDateFns}
-					adapterLocale={enUS}
+					dateAdapter={AdapterDateFnsBE}
+					localeText={thaiLocaleText}
 				>
 					<QueryClientProvider client={queryClient}>
 						<FuseSettingsProvider>
