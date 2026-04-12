@@ -375,6 +375,10 @@ function PurchaseOrdersPage() {
 					<ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#0284C7' }}>lucide:eye</FuseSvgIcon></ListItemIcon>
 					<ListItemText>ดูรายละเอียด</ListItemText>
 				</MenuItem>
+				<MenuItem onClick={() => { handleMenuClose(); if (menuPO) router.push(`/apps/purchase-orders/${menuPO.id}/print`); }} sx={{ py: 1.2, gap: 1.5 }}>
+					<ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#8B5CF6' }}>lucide:printer</FuseSvgIcon></ListItemIcon>
+					<ListItemText>พิมพ์</ListItemText>
+				</MenuItem>
 				{menuPO && menuPO.status !== 'CANCELLED' && (
 					<MenuItem onClick={handleEdit} sx={{ py: 1.2, gap: 1.5 }}>
 						<ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#0EA5E9' }}>lucide:pencil</FuseSvgIcon></ListItemIcon>

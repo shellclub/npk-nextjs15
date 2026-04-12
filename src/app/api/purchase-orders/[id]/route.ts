@@ -51,6 +51,7 @@ export async function GET(
           },
         },
         team: true,
+        items: { orderBy: [{ itemOrder: 'asc' }, { createdAt: 'asc' }] },
         adjustments: { orderBy: { createdAt: 'asc' } },
       },
     });
@@ -92,7 +93,9 @@ export async function PATCH(
         warrantyStartDate: body.warrantyStartDate !== undefined ? (body.warrantyStartDate ? new Date(body.warrantyStartDate) : null) : undefined,
         warrantyEndDate: body.warrantyEndDate !== undefined ? (body.warrantyEndDate ? new Date(body.warrantyEndDate) : null) : undefined,
         contractorQuoteUrl: body.contractorQuoteUrl !== undefined ? body.contractorQuoteUrl : undefined,
-        totalAmount: body.totalAmount !== undefined ? body.totalAmount : undefined,
+        discountPercent: body.discountPercent !== undefined ? body.discountPercent : undefined,
+        vatPercent: body.vatPercent !== undefined ? body.vatPercent : undefined,
+        conditions: body.conditions !== undefined ? body.conditions : undefined,
         status: body.status || undefined,
         notes: body.notes !== undefined ? body.notes : undefined,
       },
@@ -100,6 +103,7 @@ export async function PATCH(
         workOrder: true,
         quotation: true,
         team: true,
+        items: { orderBy: [{ itemOrder: 'asc' }, { createdAt: 'asc' }] },
         adjustments: { orderBy: { createdAt: 'asc' } },
       },
     });

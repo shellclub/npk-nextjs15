@@ -106,9 +106,12 @@ export async function POST(request: NextRequest) {
         warrantyStartDate: body.warrantyStartDate ? new Date(body.warrantyStartDate) : null,
         warrantyEndDate: body.warrantyEndDate ? new Date(body.warrantyEndDate) : null,
         contractorQuoteUrl: body.contractorQuoteUrl || null,
+        discountPercent: body.discountPercent || 0,
+        vatPercent: body.vatPercent ?? 7,
         totalAmount: body.totalAmount || 0,
         status: body.status || 'DRAFT',
         notes: body.notes || null,
+        conditions: body.conditions || null,
         // Create initial adjustments if provided
         adjustments: body.adjustments?.length > 0 ? {
           createMany: {
