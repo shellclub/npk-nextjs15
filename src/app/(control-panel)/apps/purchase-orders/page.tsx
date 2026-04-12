@@ -221,8 +221,8 @@ function PurchaseOrdersPage() {
 									<TableCell sx={{ bgcolor: '#FFFFF0 !important' }}>PO ลูกค้า</TableCell>
 									<TableCell>วันเริ่ม / สิ้นสุด</TableCell>
 									<TableCell>ประกัน</TableCell>
-									<TableCell align="center">สถานะ</TableCell>
 									<TableCell align="right">ยอดรวม (บาท)</TableCell>
+									<TableCell align="center">สถานะ</TableCell>
 									<TableCell align="center" sx={{ width: 60 }}>จัดการ</TableCell>
 								</TableRow>
 							</TableHead>
@@ -325,17 +325,17 @@ function PurchaseOrdersPage() {
 												<Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>{fmtDate(po.warrantyEndDate)}</Typography>
 											</TableCell>
 
-											{/* สถานะ */}
-											<TableCell align="center">
-												<Chip label={sc.label} size="small" sx={{ fontSize: '11px', fontWeight: 600, bgcolor: sc.bgColor, color: sc.textColor, border: `1px solid ${sc.borderColor}`, borderRadius: '8px', minWidth: 64 }} />
-											</TableCell>
-
 											{/* ยอดรวม */}
 											<TableCell align="right" sx={{
 												fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: '14px !important',
 												color: isCancelled ? '#94A3B8' : '#1E293B',
 											}}>
 												{fmt(poTotal)}
+											</TableCell>
+
+											{/* สถานะ */}
+											<TableCell align="center">
+												<Chip label={sc.label} size="small" sx={{ fontSize: '11px', fontWeight: 600, bgcolor: sc.bgColor, color: sc.textColor, border: `1px solid ${sc.borderColor}`, borderRadius: '8px', minWidth: 64 }} />
 											</TableCell>
 
 											{/* จัดการ */}
