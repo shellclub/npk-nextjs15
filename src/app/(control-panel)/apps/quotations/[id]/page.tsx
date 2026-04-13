@@ -31,6 +31,7 @@ import FusePageCarded from '@fuse/core/FusePageCarded';
 import { styled } from '@mui/material/styles';
 import { motion } from 'motion/react';
 import DatePickerField from '@/components/shared/DatePickerField';
+import { useAlert } from '@/components/shared/AlertProvider';
 
 const Root = styled(FusePageCarded)(() => ({
   '& .container': { maxWidth: '100%!important' },
@@ -82,6 +83,7 @@ const SectionIcon = ({ gradient, icon }: { gradient: string; icon: string }) => 
 function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const router = useRouter();
+  const alert = useAlert();
   const [customers, setCustomers] = useState<CustomerGroup[]>([]);
   const [saving, setSaving] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
@@ -350,9 +352,10 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
         }),
       });
       if (!res.ok) throw new Error('Failed to save');
-      router.push('/apps/quotations');
+      alert.showSuccess('บันทึกเรียบร้อย', `ใบเสนอราคา ${quotationNumber} ถูกบันทึกแล้ว`);
+      setTimeout(() => router.push('/apps/quotations'), 1500);
     } catch {
-      setError('เกิดข้อผิดพลาดในการบันทึก กรุณาลองใหม่');
+      alert.showError('เกิดข้อผิดพลาด', 'ไม่สามารถบันทึกได้ กรุณาลองใหม่');
     } finally {
       setSaving(false);
     }
@@ -383,6 +386,7 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
       setCustomerGroupId(created.id);
       setBranchId('');
       setContactPerson(created.contactName || '');
+      alert.showSuccess('เพิ่มลูกค้าสำเร็จ', `${created.groupName} ถูกเพิ่มแล้ว`);
       setAddCustomerOpen(false);
     } catch {
       setNewCustomerError('เกิดข้อผิดพลาด กรุณาลองใหม่');
@@ -414,6 +418,7 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
       fetchCustomers();
       setBranchId(created.id);
       setAddBranchOpen(false);
+      alert.showSuccess('เพิ่มสาขาสำเร็จ', `${created.code}: ${created.name} ถูกเพิ่มแล้ว`);
     } catch {
       setNewBranchError('เกิดข้อผิดพลาดในการบันทึก');
     }
@@ -445,6 +450,7 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
       setContactPerson(created.name);
       setContactPhone(created.phone || '');
       setAddContactOpen(false);
+      alert.showSuccess('เพิ่มผู้ติดต่อสำเร็จ', `${created.name} ถูกเพิ่มแล้ว`);
     } catch {
       setNewContactError('เกิดข้อผิดพลาดในการบันทึก');
     } finally {

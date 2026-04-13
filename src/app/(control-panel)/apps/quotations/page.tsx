@@ -32,8 +32,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogActions from '@mui/material/DialogActions';
-import Snackbar from '@mui/material/Snackbar';
-import Alert from '@mui/material/Alert';
+import { useAlert } from '@/components/shared/AlertProvider';
 import FuseSvgIcon from '@fuse/core/FuseSvgIcon';
 import FusePageCarded from '@fuse/core/FusePageCarded';
 import { styled } from '@mui/material/styles';
@@ -106,7 +105,7 @@ function QuotationsPage() {
   const [actionLoading, setActionLoading] = useState(false);
 
   // Snackbar
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
+  const alert = useAlert();
 
   // PDF Preview popup
   const [pdfOpen, setPdfOpen] = useState(false);
@@ -168,10 +167,10 @@ function QuotationsPage() {
       const res = await fetch(`/api/quotations/${menuQuotation.id}/duplicate`, { method: 'POST' });
       if (!res.ok) throw new Error('Failed to duplicate');
       const newQ = await res.json();
-      setSnackbar({ open: true, message: `สร้างซ้ำสำเร็จ → ${newQ.quotationNumber}`, severity: 'success' });
+      alert.showSuccess('สร้างซ้ำสำเร็จ', `สร้างซ้ำ → ${newQ.quotationNumber} เรียบร้อย`);
       fetchQuotations();
     } catch {
-      setSnackbar({ open: true, message: 'เกิดข้อผิดพลาดในการสร้างซ้ำ', severity: 'error' });
+      alert.showError('เกิดข้อผิดพลาด', 'ไม่สามารถสร้างซ้ำได้ กรุณาลองใหม่');
     } finally {
       setActionLoading(false);
     }
@@ -365,10 +364,10 @@ function QuotationsPage() {
     try {
       const res = await fetch(`/api/quotations/${cancelTarget.id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to cancel');
-      setSnackbar({ open: true, message: `ยกเลิก ${cancelTarget.quotationNumber} เรียบร้อย`, severity: 'success' });
+      alert.showSuccess('ยกเลิกเรียบร้อย', `${cancelTarget.quotationNumber} ถูกยกเลิกแล้ว`);
       fetchQuotations();
     } catch {
-      setSnackbar({ open: true, message: 'เกิดข้อผิดพลาดในการยกเลิก', severity: 'error' });
+      alert.showError('เกิดข้อผิดพลาด', 'ไม่สามารถยกเลิกได้ กรุณาลองใหม่');
     } finally {
       setActionLoading(false);
       setCancelDialogOpen(false);
@@ -640,13 +639,7 @@ function QuotationsPage() {
         </DialogActions>
       </Dialog>
 
-      {/* Success/Error Snackbar */}
-      <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(prev => ({ ...prev, open: false }))}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
-        <Alert severity={snackbar.severity} sx={{ borderRadius: '12px', fontSize: '15px', fontWeight: 500 }}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+
 
       {/* ── FlowAccount-style PDF Preview Dialog ── */}
       <Dialog

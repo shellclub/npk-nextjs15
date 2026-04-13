@@ -256,6 +256,7 @@ model WorkOrder {
 
   purchaseOrders  PurchaseOrder[]
   invoices        Invoice[]
+  completedWork   CompletedWork?
 }
 
 // ========================================
@@ -458,4 +459,44 @@ model QuotationPhoto {
   photoType     String    @default("BEFORE") // BEFORE = ก่อนทำงาน, AFTER = หลังทำงาน
   uploadedBy    String?   // ชื่อผู้อัพโหลด
   createdAt     DateTime  @default(now())
+}
+
+// ========================================
+// งานเสร็จแล้ว (Completed Works)
+// ========================================
+model CompletedWork {
+  id              String              @id @default(cuid())
+  workOrderId     String              @unique
+  workOrder       WorkOrder           @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  completionDate  DateTime            @default(now())
+  status          String              @default("COMPLETED") // COMPLETED, PENDING_PAYMENT, PAID
+  notes           String?
+  hasPhotos       Boolean             @default(false)
+  hasWorkReceipt  Boolean             @default(false)
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  photos          CompletedWorkPhoto[]
+  serviceItems    ServiceReportItem[]
+}
+
+model CompletedWorkPhoto {
+  id              String        @id @default(cuid())
+  completedWorkId String
+  completedWork   CompletedWork @relation(fields: [completedWorkId], references: [id], onDelete: Cascade)
+  fileName        String
+  fileUrl         String
+  fileSize        Int           @default(0)
+  photoType       String        @default("WORK") // WORK = รูปงาน, RECEIPT = ใบรับงาน
+  caption         String?
+  createdAt       DateTime      @default(now())
+}
+
+model ServiceReportItem {
+  id              String        @id @default(cuid())
+  completedWorkId String
+  completedWork   CompletedWork @relation(fields: [completedWorkId], references: [id], onDelete: Cascade)
+  itemNo          Int           // ลำดับที่
+  description     String        // รายการแจ้งแก้ไข/ปรับปรุง/ซ่อมแซม
+  createdAt       DateTime      @default(now())
 }

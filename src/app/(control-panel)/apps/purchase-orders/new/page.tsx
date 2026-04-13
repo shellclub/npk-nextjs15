@@ -9,8 +9,7 @@ import TextField from '@mui/material/TextField';
 import IconButton from '@mui/material/IconButton';
 import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
-import Snackbar from '@mui/material/Snackbar';
-import Alert from '@mui/material/Alert';
+import { useAlert } from '@/components/shared/AlertProvider';
 import Autocomplete from '@mui/material/Autocomplete';
 import CircularProgress from '@mui/material/CircularProgress';
 import Table from '@mui/material/Table';
@@ -43,7 +42,7 @@ type AdjustmentEntry = { adjustmentType: 'ADD' | 'DEDUCT'; description: string; 
 function NewPurchaseOrderPage() {
 	const router = useRouter();
 	const [saving, setSaving] = useState(false);
-	const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
+	const alert = useAlert();
 
 	// Reference search
 	const [refSearch, setRefSearch] = useState('');
@@ -121,7 +120,7 @@ function NewPurchaseOrderPage() {
 		const desc = type === 'ADD' ? addDesc : deductDesc;
 		const amt = type === 'ADD' ? parseFloat(addAmount) : parseFloat(deductAmount);
 		if (!desc.trim() || isNaN(amt) || amt <= 0) {
-			setSnackbar({ open: true, message: 'กรุณากรอกรายละเอียดและจำนวนเงิน', severity: 'error' });
+			alert.showWarning('กรุณากรอกรายละเอียด', 'กรุณากรอกรายละเอียดและจำนวนเงิน');
 			return;
 		}
 		setAdjustments(prev => [...prev, { adjustmentType: type, description: desc, amount: amt }]);
@@ -131,7 +130,7 @@ function NewPurchaseOrderPage() {
 
 	const handleSave = async () => {
 		if (adjustments.length === 0) {
-			setSnackbar({ open: true, message: 'กรุณาเพิ่มรายการงานอย่างน้อย 1 รายการ', severity: 'error' });
+			alert.showWarning('กรุณาเพิ่มรายการ', 'ต้องมีรายการงานอย่างน้อย 1 รายการ');
 			return;
 		}
 
@@ -173,10 +172,10 @@ function NewPurchaseOrderPage() {
 				});
 			}
 
-			setSnackbar({ open: true, message: `สร้าง ${newPO.poNumber} เรียบร้อย`, severity: 'success' });
+			alert.showSuccess('สร้างเรียบร้อย', `${newPO.poNumber} ถูกสร้างแล้ว`);
 			setTimeout(() => router.push('/apps/purchase-orders'), 1500);
 		} catch {
-			setSnackbar({ open: true, message: 'เกิดข้อผิดพลาดในการสร้าง PO', severity: 'error' });
+			alert.showError('เกิดข้อผิดพลาด', 'ไม่สามารถสร้าง PO ได้ กรุณาลองใหม่');
 		} finally { setSaving(false); }
 	};
 
@@ -513,11 +512,7 @@ function NewPurchaseOrderPage() {
 
 				</motion.div>
 			</Box>
-			<Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(p => ({ ...p, open: false }))} anchorOrigin={{ vertical: 'top', horizontal: 'right' }}>
-				<Alert severity={snackbar.severity} variant="filled" onClose={() => setSnackbar(p => ({ ...p, open: false }))} sx={{ borderRadius: '10px', fontSize: '14px', fontWeight: 500 }}>
-					{snackbar.message}
-				</Alert>
-			</Snackbar>
+
 		</Paper>
 	);
 

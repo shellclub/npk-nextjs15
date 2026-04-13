@@ -8,8 +8,7 @@ import Button from '@mui/material/Button';
 import TextField from '@mui/material/TextField';
 import IconButton from '@mui/material/IconButton';
 import Box from '@mui/material/Box';
-import Snackbar from '@mui/material/Snackbar';
-import Alert from '@mui/material/Alert';
+import { useAlert } from '@/components/shared/AlertProvider';
 import Chip from '@mui/material/Chip';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
@@ -70,7 +69,7 @@ function PurchaseOrderDetailPage() {
 	const [po, setPo] = useState<PO | null>(null);
 	const [loading, setLoading] = useState(true);
 	const [saving, setSaving] = useState(false);
-	const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
+	const alert = useAlert();
 
 	// Price editing: { itemId: { materialPrice, labourPrice } }
 	const [priceEdits, setPriceEdits] = useState<Record<string, { materialPrice: string; labourPrice: string }>>({});
@@ -119,13 +118,13 @@ function PurchaseOrderDetailPage() {
 			});
 			const data = await res.json();
 			if (data.success) {
-				setSnackbar({ open: true, message: 'นำเข้ารายการจากใบเสนอราคาเรียบร้อย', severity: 'success' });
+				alert.showSuccess('นำเข้าเรียบร้อย', 'รายการจากใบเสนอราคาถูกนำเข้าแล้ว');
 				fetchPO();
 			} else {
-				setSnackbar({ open: true, message: data.error || 'เกิดข้อผิดพลาด', severity: 'error' });
+				alert.showError('เกิดข้อผิดพลาด', data.error || 'ไม่สามารถนำเข้ารายการได้');
 			}
 		} catch {
-			setSnackbar({ open: true, message: 'เกิดข้อผิดพลาด', severity: 'error' });
+			alert.showError('เกิดข้อผิดพลาด', 'ไม่สามารถนำเข้ารายการได้');
 		} finally { setSaving(false); }
 	};
 
@@ -145,20 +144,20 @@ function PurchaseOrderDetailPage() {
 			});
 			const data = await res.json();
 			if (data.success) {
-				setSnackbar({ open: true, message: 'บันทึกราคาเรียบร้อย (ล็อคแล้ว)', severity: 'success' });
+				alert.showSuccess('บันทึกเรียบร้อย', 'ราคาถูกบันทึกและล็อคแล้ว ไม่สามารถแก้ไขได้');
 				fetchPO();
 			} else {
-				setSnackbar({ open: true, message: data.error || 'เกิดข้อผิดพลาด', severity: 'error' });
+				alert.showError('เกิดข้อผิดพลาด', data.error || 'ไม่สามารถบันทึกราคาได้');
 			}
 		} catch {
-			setSnackbar({ open: true, message: 'เกิดข้อผิดพลาด', severity: 'error' });
+			alert.showError('เกิดข้อผิดพลาด', 'ไม่สามารถบันทึกราคาได้');
 		} finally { setSaving(false); }
 	};
 
 	// Add adjustment item
 	const handleAddAdjustment = async () => {
 		if (!adjDesc.trim()) {
-			setSnackbar({ open: true, message: 'กรุณากรอกรายละเอียด', severity: 'error' });
+			alert.showWarning('กรุณากรอกรายละเอียด');
 			return;
 		}
 		setSaving(true);
@@ -178,15 +177,15 @@ function PurchaseOrderDetailPage() {
 			});
 			const data = await res.json();
 			if (data.success) {
-				setSnackbar({ open: true, message: 'เพิ่มรายการปรับแก้เรียบร้อย', severity: 'success' });
+				alert.showSuccess('เพิ่มรายการเรียบร้อย', 'รายการปรับแก้ถูกบันทึกและล็อคแล้ว');
 				setAdjOpen(false);
 				setAdjDesc(''); setAdjQty('1'); setAdjUnit('งาน'); setAdjMat(''); setAdjLab(''); setAdjIsNegative(false);
 				fetchPO();
 			} else {
-				setSnackbar({ open: true, message: data.error || 'เกิดข้อผิดพลาด', severity: 'error' });
+				alert.showError('เกิดข้อผิดพลาด', data.error || 'ไม่สามารถเพิ่มรายการได้');
 			}
 		} catch {
-			setSnackbar({ open: true, message: 'เกิดข้อผิดพลาด', severity: 'error' });
+			alert.showError('เกิดข้อผิดพลาด', 'ไม่สามารถเพิ่มรายการได้');
 		} finally { setSaving(false); }
 	};
 
@@ -508,11 +507,7 @@ function PurchaseOrderDetailPage() {
 				</DialogActions>
 			</Dialog>
 
-			<Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(p => ({ ...p, open: false }))} anchorOrigin={{ vertical: 'top', horizontal: 'right' }}>
-				<Alert severity={snackbar.severity} variant="filled" onClose={() => setSnackbar(p => ({ ...p, open: false }))} sx={{ borderRadius: '10px', fontSize: '14px', fontWeight: 500 }}>
-					{snackbar.message}
-				</Alert>
-			</Snackbar>
+
 		</Paper>
 	);
 

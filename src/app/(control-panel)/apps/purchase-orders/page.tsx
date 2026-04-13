@@ -29,8 +29,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import Divider from '@mui/material/Divider';
-import Snackbar from '@mui/material/Snackbar';
-import Alert from '@mui/material/Alert';
+import { useAlert } from '@/components/shared/AlertProvider';
 import CircularProgress from '@mui/material/CircularProgress';
 import FuseSvgIcon from '@fuse/core/FuseSvgIcon';
 import FusePageCarded from '@fuse/core/FusePageCarded';
@@ -81,7 +80,7 @@ function PurchaseOrdersPage() {
 	const [actionLoading, setActionLoading] = useState(false);
 
 	// Snackbar
-	const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
+	const alert = useAlert();
 
 	const fetchData = useCallback(async () => {
 		setLoading(true);
@@ -125,10 +124,10 @@ function PurchaseOrdersPage() {
 				method: 'PATCH', headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ status: 'APPROVED' }),
 			});
-			setSnackbar({ open: true, message: `อนุมัติ ${menuPO.poNumber} เรียบร้อย`, severity: 'success' });
+			alert.showSuccess('อนุมัติเรียบร้อย', `${menuPO.poNumber} ได้รับการอนุมัติแล้ว`);
 			fetchData();
 		} catch {
-			setSnackbar({ open: true, message: 'เกิดข้อผิดพลาด', severity: 'error' });
+			alert.showError('เกิดข้อผิดพลาด', 'ไม่สามารถอนุมัติได้ กรุณาลองใหม่');
 		} finally { setActionLoading(false); handleMenuClose(); }
 	};
 
@@ -143,10 +142,10 @@ function PurchaseOrdersPage() {
 		setActionLoading(true);
 		try {
 			await fetch(`/api/purchase-orders/${cancelTarget.id}`, { method: 'DELETE' });
-			setSnackbar({ open: true, message: `ยกเลิก ${cancelTarget.poNumber} เรียบร้อย`, severity: 'success' });
+			alert.showSuccess('ยกเลิกเรียบร้อย', `${cancelTarget.poNumber} ถูกยกเลิกแล้ว`);
 			fetchData();
 		} catch {
-			setSnackbar({ open: true, message: 'เกิดข้อผิดพลาด', severity: 'error' });
+			alert.showError('เกิดข้อผิดพลาด', 'ไม่สามารถยกเลิกได้ กรุณาลองใหม่');
 		} finally { setActionLoading(false); setCancelOpen(false); }
 	};
 
@@ -426,12 +425,7 @@ function PurchaseOrdersPage() {
 				</DialogActions>
 			</Dialog>
 
-			{/* Snackbar */}
-			<Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(p => ({ ...p, open: false }))} anchorOrigin={{ vertical: 'top', horizontal: 'right' }}>
-				<Alert severity={snackbar.severity} variant="filled" onClose={() => setSnackbar(p => ({ ...p, open: false }))} sx={{ borderRadius: '10px', fontSize: '14px', fontWeight: 500 }}>
-					{snackbar.message}
-				</Alert>
-			</Snackbar>
+
 		</Paper>
 	);
 
