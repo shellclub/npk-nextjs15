@@ -589,7 +589,7 @@ function addPhotoReportPage(doc: jsPDF, data: QuotationPDFData) {
     doc.setTextColor(0, 0, 0);
     doc.setFont('THSarabunNew', 'bold');
     doc.setFontSize(16);
-    doc.text('บริษัท เอ็นพีเค เซอร์วิส แอนด์ ซัพพลาย จำกัด', textCenterX, y + 5, { align: 'center' });
+    doc.text('บริษัท ทรีดับเบิลยู เซอร์วิส แอนด์ ซัพพลาย จำกัด', textCenterX, y + 5, { align: 'center' });
     doc.setFontSize(13);
     doc.text('NPK SERVICE & SUPPLY CO.,LTD.', textCenterX, y + 10, { align: 'center' });
     doc.setFont('THSarabunNew', 'normal');

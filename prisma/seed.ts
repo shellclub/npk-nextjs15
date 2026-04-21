@@ -817,6 +817,95 @@ async function main() {
     console.log('✅ Withholding Tax (50 ทวิ):', whtData.length, 'รายการ');
   }
 
+  // ========================================
+  // 13. สถานะ Work Order (WorkOrderStatusConfig)
+  // ========================================
+  const woStatusDefaults = [
+    { name: 'รอดำเนินการ', code: 'PENDING', color: '#D97706', bgColor: '#FEF3C7', sortOrder: 1, isDefault: true },
+    { name: 'กำลังดำเนินการ', code: 'IN_PROGRESS', color: '#2563EB', bgColor: '#DBEAFE', sortOrder: 2 },
+    { name: 'เสร็จสิ้น', code: 'COMPLETED', color: '#059669', bgColor: '#D1FAE5', sortOrder: 3 },
+    { name: 'จ่ายแล้ว', code: 'PAID', color: '#4F46E5', bgColor: '#E0E7FF', sortOrder: 4 },
+    { name: 'ยกเลิก', code: 'CANCELLED', color: '#DC2626', bgColor: '#FEE2E2', sortOrder: 5 },
+  ];
+
+  for (const s of woStatusDefaults) {
+    await prisma.workOrderStatusConfig.upsert({
+      where: { code: s.code },
+      update: { name: s.name, color: s.color, bgColor: s.bgColor, sortOrder: s.sortOrder },
+      create: s,
+    });
+  }
+  console.log('✅ WorkOrderStatusConfig:', woStatusDefaults.length, 'สถานะ');
+
+  // ========================================
+  // 14. งานเสร็จแล้ว (Completed Works) - สำหรับ WO ที่เสร็จ
+  // ========================================
+  const existingCW = await prisma.completedWork.count();
+  if (existingCW > 0) {
+    console.log('⏭️ Completed Work มีอยู่แล้ว, ข้าม');
+  } else {
+    const completedWOs = await prisma.workOrder.findMany({
+      where: { status: { in: ['COMPLETED', 'PAID'] } },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    if (completedWOs.length > 0) {
+      const cwData = [
+        {
+          woIndex: 0,
+          completionDate: new Date('2026-03-07'),
+          status: 'PAID',
+          notes: 'งานเสร็จตามกำหนด ลูกค้ารับมอบงานเรียบร้อย',
+          hasPhotos: true,
+          hasWorkReceipt: true,
+          serviceItems: [
+            { itemNo: 1, description: 'ติดตั้งกล้อง CCTV จำนวน 16 ตัว ตามจุดที่กำหนด' },
+            { itemNo: 2, description: 'ติดตั้งเครื่องบันทึก DVR และ HDD' },
+            { itemNo: 3, description: 'เดินสาย RG6 และสายไฟ ครบทุกจุด' },
+            { itemNo: 4, description: 'ตั้งค่าระบบดูผ่านมือถือ และ Monitor' },
+            { itemNo: 5, description: 'ทดสอบระบบทั้งหมดเรียบร้อย' },
+          ],
+        },
+        {
+          woIndex: 1,
+          completionDate: new Date('2026-03-10'),
+          status: 'PAID',
+          notes: 'ติดตั้ง WiFi เสร็จสมบูรณ์ ทดสอบสัญญาณครบทุกจุด',
+          hasPhotos: true,
+          hasWorkReceipt: false,
+          serviceItems: [
+            { itemNo: 1, description: 'ติดตั้ง Access Point จำนวน 20 ตัว' },
+            { itemNo: 2, description: 'ติดตั้ง Switch PoE 2 เครื่อง' },
+            { itemNo: 3, description: 'ตั้งค่า Captive Portal สำหรับ Free WiFi' },
+            { itemNo: 4, description: 'ทดสอบความแรงสัญญาณ WiFi ทุกจุด' },
+          ],
+        },
+      ];
+
+      for (const cw of cwData) {
+        const wo = completedWOs[cw.woIndex % completedWOs.length];
+        await prisma.completedWork.create({
+          data: {
+            workOrderId: wo.id,
+            completionDate: cw.completionDate,
+            status: cw.status,
+            notes: cw.notes,
+            hasPhotos: cw.hasPhotos,
+            hasWorkReceipt: cw.hasWorkReceipt,
+            serviceItems: {
+              createMany: {
+                data: cw.serviceItems,
+              },
+            },
+          },
+        });
+      }
+      console.log('✅ Completed Work:', cwData.length, 'รายการ');
+    } else {
+      console.log('⚠️ ข้ามการสร้าง Completed Work (ไม่พบ WO ที่เสร็จ)');
+    }
+  }
+
   console.log('\n🎉 Seed ข้อมูลเสร็จสมบูรณ์!');
 }
 
