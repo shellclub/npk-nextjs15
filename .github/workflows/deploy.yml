@@ -18,6 +18,16 @@ jobs:
           script: |
             cd /root/npk-nextjs15
             git pull origin main
-            docker compose down -v
+            docker compose down
             docker compose up -d --build
-            echo "✅ Deploy complete (DB reset + re-seed)!"
+            echo "⏳ Waiting for containers to start..."
+            sleep 30
+            echo "📋 Docker container status:"
+            docker compose ps
+            echo "📋 Migrate container logs:"
+            docker compose logs migrate 2>&1 | tail -50
+            echo "📋 App container logs:"
+            docker compose logs app 2>&1 | tail -30
+            echo "📋 Postgres container logs:"
+            docker compose logs postgres 2>&1 | tail -10
+            echo "✅ Deploy complete!"
