@@ -522,10 +522,10 @@ async function main() {
           date: new Date('2026-03-05'), status: 'APPROVED' as const,
           notes: 'สั่งวัสดุติดตั้ง CCTV สาขา Rayong',
           items: [
-            { description: 'กล้อง CCTV Hikvision 2MP', unit: 'ตัว', quantity: 16, unitPrice: 1800 },
-            { description: 'DVR 16CH Hikvision', unit: 'เครื่อง', quantity: 1, unitPrice: 8500 },
-            { description: 'HDD WD Purple 4TB', unit: 'ตัว', quantity: 2, unitPrice: 3200 },
-            { description: 'สาย RG6 + อุปกรณ์', unit: 'ล็อต', quantity: 1, unitPrice: 9500 },
+            { description: 'กล้อง CCTV Hikvision 2MP', unit: 'ตัว', quantity: 16, materialPrice: 1800 },
+            { description: 'DVR 16CH Hikvision', unit: 'เครื่อง', quantity: 1, materialPrice: 8500 },
+            { description: 'HDD WD Purple 4TB', unit: 'ตัว', quantity: 2, materialPrice: 3200 },
+            { description: 'สาย RG6 + อุปกรณ์', unit: 'ล็อต', quantity: 1, materialPrice: 9500 },
           ],
         },
         {
@@ -533,10 +533,10 @@ async function main() {
           date: new Date('2026-03-08'), status: 'APPROVED' as const,
           notes: 'สั่ง AP และ Switch สำหรับ Free WiFi Zone',
           items: [
-            { description: 'Access Point UniFi U6 Pro', unit: 'ตัว', quantity: 20, unitPrice: 4800 },
-            { description: 'Switch USW-Pro-24-PoE', unit: 'เครื่อง', quantity: 2, unitPrice: 21000 },
-            { description: 'UniFi Cloud Gateway Ultra', unit: 'เครื่อง', quantity: 1, unitPrice: 6200 },
-            { description: 'สาย UTP Cat6 พร้อมอุปกรณ์', unit: 'ล็อต', quantity: 1, unitPrice: 7500 },
+            { description: 'Access Point UniFi U6 Pro', unit: 'ตัว', quantity: 20, materialPrice: 4800 },
+            { description: 'Switch USW-Pro-24-PoE', unit: 'เครื่อง', quantity: 2, materialPrice: 21000 },
+            { description: 'UniFi Cloud Gateway Ultra', unit: 'เครื่อง', quantity: 1, materialPrice: 6200 },
+            { description: 'สาย UTP Cat6 พร้อมอุปกรณ์', unit: 'ล็อต', quantity: 1, materialPrice: 7500 },
           ],
         },
         {
@@ -544,9 +544,9 @@ async function main() {
           date: new Date('2026-03-12'), status: 'DRAFT' as const,
           notes: 'สั่งอุปกรณ์ Access Control',
           items: [
-            { description: 'เครื่องสแกนลายนิ้วมือ ZKTeco', unit: 'เครื่อง', quantity: 4, unitPrice: 11000 },
-            { description: 'Magnetic Lock 600lbs', unit: 'ตัว', quantity: 4, unitPrice: 2500 },
-            { description: 'Power Supply 12V 5A', unit: 'ตัว', quantity: 4, unitPrice: 1800 },
+            { description: 'เครื่องสแกนลายนิ้วมือ ZKTeco', unit: 'เครื่อง', quantity: 4, materialPrice: 11000 },
+            { description: 'Magnetic Lock 600lbs', unit: 'ตัว', quantity: 4, materialPrice: 2500 },
+            { description: 'Power Supply 12V 5A', unit: 'ตัว', quantity: 4, materialPrice: 1800 },
           ],
         },
       ];
@@ -554,7 +554,7 @@ async function main() {
       for (const po of poList) {
         const wo = allWO[po.workOrderIndex % allWO.length];
         const team = allTeams2[po.teamIndex % allTeams2.length];
-        const totalAmount = po.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+        const totalAmount = po.items.reduce((s, i) => s + i.quantity * i.materialPrice, 0);
         await prisma.purchaseOrder.create({
           data: {
             poNumber: po.poNumber,
@@ -571,8 +571,11 @@ async function main() {
                   description: item.description,
                   unit: item.unit,
                   quantity: item.quantity,
-                  unitPrice: item.unitPrice,
-                  amount: item.quantity * item.unitPrice,
+                  materialPrice: item.materialPrice,
+                  labourPrice: 0,
+                  totalMaterial: item.quantity * item.materialPrice,
+                  totalLabour: 0,
+                  amount: item.quantity * item.materialPrice,
                 })),
               },
             },
