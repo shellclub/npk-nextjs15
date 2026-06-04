@@ -159,7 +159,7 @@
     "lint": "eslint ./src --config ./eslint.config.mjs",
     "lint:fix": "eslint --fix ./src --config ./eslint.config.mjs",
     "build-docs": "npx tsx  \"./src/app/(public)/documentation/lib/utils/build-mui-docs.ts\"",
-    "postinstall": "node src/utils/node-scripts/fuse-react-message.js",
+    "postinstall": "prisma generate && node src/utils/node-scripts/fuse-react-message.js",
     "poststart": "node src/utils/node-scripts/fuse-react-message.js",
     "audit": "npm audit --production"
   },
