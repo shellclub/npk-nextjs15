@@ -47,7 +47,10 @@ export async function POST(request: Request) {
     return NextResponse.json(customer, { status: 201 });
   } catch (error) {
     console.error('POST /api/customers error:', error);
-    const message = error instanceof Error ? error.message : 'Failed to create customer';
-    return NextResponse.json({ error: message }, { status: 500 });
+    // Prisma unique constraint error
+    if (error && typeof error === 'object' && 'code' in error && (error as { code: string }).code === 'P2002') {
+      return NextResponse.json({ error: 'ชื่อลูกค้านี้มีอยู่แล้วในระบบ' }, { status: 409 });
+    }
+    return NextResponse.json({ error: 'ไม่สามารถบันทึกข้อมูลลูกค้าได้ กรุณาลองใหม่อีกครั้ง' }, { status: 500 });
   }
 }

@@ -9,7 +9,6 @@ import TextField from '@mui/material/TextField';
 import IconButton from '@mui/material/IconButton';
 import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
-import { useAlert } from '@/components/shared/AlertProvider';
 import Autocomplete from '@mui/material/Autocomplete';
 import CircularProgress from '@mui/material/CircularProgress';
 import Table from '@mui/material/Table';
@@ -18,6 +17,10 @@ import TableCell from '@mui/material/TableCell';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
 import Chip from '@mui/material/Chip';
+import Checkbox from '@mui/material/Checkbox';
+import Alert from '@mui/material/Alert';
+import Tooltip from '@mui/material/Tooltip';
+import Snackbar from '@mui/material/Snackbar';
 import FuseSvgIcon from '@fuse/core/FuseSvgIcon';
 import FusePageCarded from '@fuse/core/FusePageCarded';
 import { styled } from '@mui/material/styles';
@@ -37,12 +40,45 @@ function fmt(n: number | string) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type RefResult = any;
 type TeamOption = { id: string; teamName: string; leaderName: string; leaderPhone?: string; leaderAddress?: string };
-type AdjustmentEntry = { adjustmentType: 'ADD' | 'DEDUCT'; description: string; amount: number };
+
+type POLineItem = {
+	tempId: number;
+	itemType: 'HEADER' | 'ITEM';
+	description: string;
+	unit: string;
+	quantity: number;
+	materialPrice: number;
+	labourPrice: number;
+	amount: number; // computed (0 for HEADERs)
+	fromQuotation: boolean;
+};
+
+type POGroup = {
+	id: number;
+	team: TeamOption | null;
+	selectedItems: Set<number>; // tempId ของรายการที่เลือก
+	notes: string;
+	startDate: string;
+	endDate: string;
+	warrantyStart: string;
+	warrantyEnd: string;
+};
+
+let lineCounter = 0;
+const nextId = () => ++lineCounter;
+
+function computeAmount(item: Omit<POLineItem, 'amount'>): number {
+	if (item.itemType === 'HEADER') return 0;
+	const unit = item.materialPrice + item.labourPrice;
+	return unit * item.quantity;
+}
 
 function NewPurchaseOrderPage() {
 	const router = useRouter();
 	const [saving, setSaving] = useState(false);
-	const alert = useAlert();
+	const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'warning' }>({ open: false, message: '', severity: 'success' });
+	const showMsg = (message: string, severity: 'success' | 'error' | 'warning' = 'success') =>
+		setSnackbar({ open: true, message, severity });
 
 	// Reference search
 	const [refSearch, setRefSearch] = useState('');
@@ -51,32 +87,22 @@ function NewPurchaseOrderPage() {
 	const [selectedRef, setSelectedRef] = useState<RefResult | null>(null);
 	const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
-	// Team
+	// Team list
 	const [teams, setTeams] = useState<TeamOption[]>([]);
-	const [selectedTeam, setSelectedTeam] = useState<TeamOption | null>(null);
 
-	// Form fields
-	const [startDate, setStartDate] = useState('');
-	const [endDate, setEndDate] = useState('');
-	const [warrantyStart, setWarrantyStart] = useState('');
-	const [warrantyEnd, setWarrantyEnd] = useState('');
-	const [notes, setNotes] = useState('');
+	// Line items (editable table from quotation)
+	const [lineItems, setLineItems] = useState<POLineItem[]>([]);
 
-	// Contractor quote file
+	// PO groups (each group = one team with selected items)
+	const [poGroups, setPoGroups] = useState<POGroup[]>([
+		{ id: 1, team: null, selectedItems: new Set(), notes: '', startDate: '', endDate: '', warrantyStart: '', warrantyEnd: '' },
+	]);
+
+	// Upload
 	const [quoteFile, setQuoteFile] = useState<File | null>(null);
-	const [quotePreview, setQuotePreview] = useState('');
 
-	// Adjustments (งานเพิ่ม/ลด)
-	const [addDesc, setAddDesc] = useState('');
-	const [addAmount, setAddAmount] = useState('');
-	const [deductDesc, setDeductDesc] = useState('');
-	const [deductAmount, setDeductAmount] = useState('');
-	const [adjustments, setAdjustments] = useState<AdjustmentEntry[]>([]);
-
-	// Calculate total
-	const totalAdds = adjustments.filter(a => a.adjustmentType === 'ADD').reduce((s, a) => s + a.amount, 0);
-	const totalDeducts = adjustments.filter(a => a.adjustmentType === 'DEDUCT').reduce((s, a) => s + a.amount, 0);
-	const grandTotal = totalAdds - totalDeducts;
+	// Notes
+	const [globalNotes, setGlobalNotes] = useState('');
 
 	// Fetch teams
 	useEffect(() => {
@@ -102,84 +128,203 @@ function NewPurchaseOrderPage() {
 		return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
 	}, [refSearch, searchRef]);
 
-	const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-		const file = e.target.files?.[0];
-		if (file) {
-			setQuoteFile(file);
-			if (file.type.startsWith('image/')) {
-				const reader = new FileReader();
-				reader.onload = () => setQuotePreview(reader.result as string);
-				reader.readAsDataURL(file);
-			} else {
-				setQuotePreview('');
-			}
-		}
-	};
-
-	const handleAddAdjustment = (type: 'ADD' | 'DEDUCT') => {
-		const desc = type === 'ADD' ? addDesc : deductDesc;
-		const amt = type === 'ADD' ? parseFloat(addAmount) : parseFloat(deductAmount);
-		if (!desc.trim() || isNaN(amt) || amt <= 0) {
-			alert.showWarning('กรุณากรอกรายละเอียด', 'กรุณากรอกรายละเอียดและจำนวนเงิน');
+	// When a quotation is selected → populate line items (include HEADERs)
+	const handleSelectRef = (val: RefResult | null) => {
+		setSelectedRef(val);
+		if (!val || !val.items?.length) {
+			setLineItems([]);
 			return;
 		}
-		setAdjustments(prev => [...prev, { adjustmentType: type, description: desc, amount: amt }]);
-		if (type === 'ADD') { setAddDesc(''); setAddAmount(''); }
-		else { setDeductDesc(''); setDeductAmount(''); }
+		const newItems: POLineItem[] = val.items.map((it: RefResult) => {
+			const isHeader = it.itemType === 'HEADER';
+			const matP = isHeader ? 0 : Number(it.materialPrice || it.unitPrice || 0);
+			const labP = isHeader ? 0 : Number(it.labourPrice || 0);
+			const qty = isHeader ? 0 : Number(it.quantity || 1);
+			const item = {
+				tempId: nextId(),
+				itemType: (isHeader ? 'HEADER' : 'ITEM') as 'HEADER' | 'ITEM',
+				description: it.description || '',
+				unit: isHeader ? '' : (it.unit || ''),
+				quantity: qty,
+				materialPrice: matP,
+				labourPrice: labP,
+				fromQuotation: true,
+			};
+			return { ...item, amount: computeAmount(item) };
+		});
+		setLineItems(newItems);
+		// Auto-select all ITEM (not HEADER) for group 1
+		const itemIds = new Set(newItems.filter(it => it.itemType === 'ITEM').map(it => it.tempId));
+		setPoGroups(prev => prev.map((g, i) =>
+			i === 0 ? { ...g, selectedItems: itemIds } : g
+		));
 	};
 
+	// --- Line item CRUD ---
+	const updateLineItem = (tempId: number, field: keyof POLineItem, value: string | number) => {
+		setLineItems(prev => prev.map(it => {
+			if (it.tempId !== tempId) return it;
+			const updated = { ...it, [field]: value };
+			updated.amount = computeAmount(updated);
+			return updated;
+		}));
+	};
+
+	const addLineItem = () => {
+		const newItem: POLineItem = {
+			tempId: nextId(),
+			itemType: 'ITEM',
+			description: '',
+			unit: '',
+			quantity: 1,
+			materialPrice: 0,
+			labourPrice: 0,
+			amount: 0,
+			fromQuotation: false,
+		};
+		setLineItems(prev => [...prev, newItem]);
+		// Add to all groups by default
+		setPoGroups(prev => prev.map(g => ({
+			...g,
+			selectedItems: new Set([...g.selectedItems, newItem.tempId]),
+		})));
+	};
+
+	const removeLineItem = (tempId: number) => {
+		setLineItems(prev => prev.filter(it => it.tempId !== tempId));
+		setPoGroups(prev => prev.map(g => {
+			const s = new Set(g.selectedItems);
+			s.delete(tempId);
+			return { ...g, selectedItems: s };
+		}));
+	};
+
+	// --- PO Group management ---
+	const addPoGroup = () => {
+		const allIds = new Set(lineItems.map(it => it.tempId));
+		setPoGroups(prev => [...prev, {
+			id: Date.now(),
+			team: null,
+			selectedItems: allIds, // default: all items
+			notes: '',
+			startDate: '',
+			endDate: '',
+			warrantyStart: '',
+			warrantyEnd: '',
+		}]);
+	};
+
+	const removePoGroup = (id: number) => {
+		setPoGroups(prev => prev.filter(g => g.id !== id));
+	};
+
+	const updateGroup = (id: number, field: keyof POGroup, value: unknown) => {
+		setPoGroups(prev => prev.map(g => g.id === id ? { ...g, [field]: value } : g));
+	};
+
+	const toggleGroupItem = (groupId: number, tempId: number) => {
+		setPoGroups(prev => prev.map(g => {
+			if (g.id !== groupId) return g;
+			const s = new Set(g.selectedItems);
+			if (s.has(tempId)) s.delete(tempId); else s.add(tempId);
+			return { ...g, selectedItems: s };
+		}));
+	};
+
+	const selectAllForGroup = (groupId: number) => {
+		const all = new Set(lineItems.filter(it => it.itemType === 'ITEM').map(it => it.tempId));
+		setPoGroups(prev => prev.map(g => g.id === groupId ? { ...g, selectedItems: all } : g));
+	};
+
+	const clearAllForGroup = (groupId: number) => {
+		setPoGroups(prev => prev.map(g => g.id === groupId ? { ...g, selectedItems: new Set() } : g));
+	};
+
+	// Compute total for a group (ITEM only)
+	const groupTotal = (g: POGroup) =>
+		lineItems.filter(it => it.itemType === 'ITEM' && g.selectedItems.has(it.tempId)).reduce((s, it) => s + it.amount, 0);
+
+	// Count selectable (non-HEADER) items
+	const selectableItems = lineItems.filter(it => it.itemType === 'ITEM');
+
+	// --- Save: creates one PO per group ---
 	const handleSave = async () => {
-		if (adjustments.length === 0) {
-			alert.showWarning('กรุณาเพิ่มรายการ', 'ต้องมีรายการงานอย่างน้อย 1 รายการ');
-			return;
-		}
+		if (selectableItems.length === 0) { showMsg('กรุณาเพิ่มรายการงานอย่างน้อย 1 รายการ', 'warning'); return; }
+		if (poGroups.some(g => g.selectedItems.size === 0)) { showMsg('ทีมช่างทุกกลุ่มต้องมีรายการงานอย่างน้อย 1 รายการ', 'warning'); return; }
 
 		setSaving(true);
 		try {
-			// Upload file first if exists
-			let contractorQuoteUrl = '';
-			// We'll upload after PO is created
+			for (const group of poGroups) {
+				// Collect selected ITEM tempIds
+				const selectedSet = group.selectedItems;
 
-			const body = {
-				quotationId: selectedRef?.quotationId || null,
-				workOrderId: selectedRef?.workOrderId || null,
-				teamId: selectedTeam?.id || null,
-				date: new Date().toISOString(),
-				startDate: startDate || null,
-				endDate: endDate || null,
-				warrantyStartDate: warrantyStart || null,
-				warrantyEndDate: warrantyEnd || null,
-				totalAmount: grandTotal,
-				notes: notes || null,
-				adjustments,
-			};
+				// Build items for this group:
+				// Include all HEADERs that have at least one selected ITEM after them,
+				// and only selected ITEMs
+				const groupItemIds = new Set(lineItems
+					.filter(it => it.itemType === 'ITEM' && selectedSet.has(it.tempId))
+					.map(it => it.tempId));
 
-			const res = await fetch('/api/purchase-orders', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify(body),
-			});
-			if (!res.ok) throw new Error('Failed to create PO');
-			const newPO = await res.json();
+				// Walk lineItems: include HEADER if any following item (until next HEADER) is selected
+				const filteredItems: typeof lineItems = [];
+				for (let i = 0; i < lineItems.length; i++) {
+					const it = lineItems[i];
+					if (it.itemType === 'HEADER') {
+						// Check if any ITEM between this header and the next header is selected
+						let hasSelected = false;
+						for (let j = i + 1; j < lineItems.length; j++) {
+							if (lineItems[j].itemType === 'HEADER') break;
+							if (groupItemIds.has(lineItems[j].tempId)) { hasSelected = true; break; }
+						}
+						if (hasSelected) filteredItems.push(it);
+					} else if (groupItemIds.has(it.tempId)) {
+						filteredItems.push(it);
+					}
+				}
 
-			// Upload file if exists
-			if (quoteFile) {
-				const formData = new FormData();
-				formData.append('file', quoteFile);
-				await fetch(`/api/purchase-orders/${newPO.id}/upload`, {
+				const total = filteredItems.filter(it => it.itemType === 'ITEM').reduce((s, it) => s + it.amount, 0);
+
+				const body = {
+					quotationId: selectedRef?.quotationId || null,
+					workOrderId: selectedRef?.workOrderId || null,
+					teamId: group.team?.id || null,
+					date: new Date().toISOString(),
+					startDate: group.startDate || null,
+					endDate: group.endDate || null,
+					warrantyStartDate: group.warrantyStart || null,
+					warrantyEndDate: group.warrantyEnd || null,
+					subtotal: total,
+					totalAmount: total,
+					notes: group.notes || globalNotes || null,
+					// Send real items (HEADER + ITEM rows) — saved as PurchaseOrderItem
+					items: filteredItems.map((it, idx) => ({
+						itemOrder: idx,
+						itemType: it.itemType,
+						description: it.description,
+						unit: it.unit,
+						quantity: it.itemType === 'HEADER' ? 0 : it.quantity,
+						materialPrice: it.itemType === 'HEADER' ? 0 : it.materialPrice,
+						labourPrice: it.itemType === 'HEADER' ? 0 : it.labourPrice,
+					})),
+				};
+
+				const res = await fetch('/api/purchase-orders', {
 					method: 'POST',
-					body: formData,
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify(body),
 				});
+				if (!res.ok) throw new Error('Failed');
 			}
 
-			alert.showSuccess('สร้างเรียบร้อย', `${newPO.poNumber} ถูกสร้างแล้ว`);
+			showMsg(`สร้าง ${poGroups.length} ใบสั่งซื้อเรียบร้อยแล้ว`, 'success');
 			setTimeout(() => router.push('/apps/purchase-orders'), 1500);
 		} catch {
-			alert.showError('เกิดข้อผิดพลาด', 'ไม่สามารถสร้าง PO ได้ กรุณาลองใหม่');
+			showMsg('ไม่สามารถสร้าง PO ได้ กรุณาลองใหม่', 'error');
 		} finally { setSaving(false); }
 	};
 
-	// Generate display PO number (preview)
+
+	// Generate preview PO number
 	const now = new Date();
 	const yy = String(now.getFullYear()).slice(-2);
 	const mm = String(now.getMonth() + 1).padStart(2, '0');
@@ -203,9 +348,9 @@ function NewPurchaseOrderPage() {
 					</motion.span>
 				</div>
 				<Paper sx={{ px: 2, py: 1, borderRadius: '10px', border: '1px solid #E2E8F0', bgcolor: '#F8FAFC' }} elevation={0}>
-					<Typography sx={{ fontSize: '12px', color: '#94A3B8' }}>ใช้แบบที่</Typography>
+					<Typography sx={{ fontSize: '12px', color: '#94A3B8' }}>เลขที่ (ตัวอย่าง)</Typography>
 					<Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#0284C7' }}>{previewPO}</Typography>
-					<Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>ยืนรับอัตโนมัติพร้อมวันที่ปัจจุบันที่สร้าง</Typography>
+					<Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>สร้างอัตโนมัติเมื่อบันทึก</Typography>
 				</Paper>
 			</div>
 		</div>
@@ -213,21 +358,23 @@ function NewPurchaseOrderPage() {
 
 	const content = (
 		<Paper className="flex h-full w-full flex-auto flex-col overflow-auto rounded-b-none" elevation={0}>
-			<Box sx={{ px: { xs: 2, md: 3 }, py: 2, maxWidth: 900, mx: 'auto', width: '100%' }}>
+			<Box sx={{ px: { xs: 2, md: 3 }, py: 2, maxWidth: 1100, mx: 'auto', width: '100%' }}>
 				<motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>
 
-					{/* ══════ 1. อ้างอิงใบเสนอราคา ══════ */}
-					<Box sx={{ mb: 3, p: 2.5, borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+					{/* ══ 1. อ้างอิงใบเสนอราคา ══ */}
+					<Box sx={{ mb: 3, p: 2.5, borderRadius: '14px', border: '1px solid #E2E8F0', bgcolor: '#FAFBFC' }}>
 						<Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-							<FuseSvgIcon sx={{ color: '#0EA5E9' }} size={18}>lucide:search</FuseSvgIcon>
-							<Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#0EA5E9' }}>อ้างอิงใบเสนอราคา</Typography>
+							<Box sx={{ width: 28, height: 28, borderRadius: '8px', background: 'linear-gradient(135deg,#0EA5E9,#0284C7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+								<FuseSvgIcon sx={{ color: '#fff' }} size={16}>lucide:search</FuseSvgIcon>
+							</Box>
+							<Typography sx={{ fontSize: '15px', fontWeight: 700, color: '#0284C7' }}>อ้างอิงใบเสนอราคา</Typography>
 						</Box>
 						<Autocomplete
 							options={refResults}
 							getOptionLabel={(op: RefResult) => op?.label || ''}
 							loading={refLoading}
 							onInputChange={(_, val) => setRefSearch(val)}
-							onChange={(_, val) => setSelectedRef(val)}
+							onChange={(_, val) => handleSelectRef(val)}
 							renderInput={(params) => (
 								<TextField {...params} placeholder="ค้นหาด้วย เลขใบเสนอราคา, WO, PO หรือ ชื่อลูกค้า..."
 									sx={fieldSx}
@@ -258,136 +405,357 @@ function NewPurchaseOrderPage() {
 							)}
 							noOptionsText="ไม่พบข้อมูล"
 						/>
-
-						{/* Show selected reference info */}
 						{selectedRef && (
 							<Paper sx={{ mt: 2, p: 2, borderRadius: '10px', border: '1px solid #D1FAE5', bgcolor: '#F0FDF4' }} elevation={0}>
-								<Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mb: 1 }}>
+								<Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 1 }}>
 									<Box>
 										<Typography sx={{ fontSize: '11px', color: '#6B7280' }}>ใบเสนอราคา</Typography>
 										<Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#0284C7' }}>{selectedRef.quotationNumber}</Typography>
 									</Box>
 									<Box>
 										<Typography sx={{ fontSize: '11px', color: '#6B7280' }}>ลูกค้า</Typography>
-										<Typography sx={{ fontSize: '14px', fontWeight: 600 }}>{selectedRef.customerName}</Typography>
+										<Typography sx={{ fontSize: '13px', fontWeight: 600 }}>{selectedRef.customerName}</Typography>
 									</Box>
-									{selectedRef.branchName && (
-										<Box>
-											<Typography sx={{ fontSize: '11px', color: '#6B7280' }}>สาขา</Typography>
-											<Typography sx={{ fontSize: '13px' }}>{selectedRef.branchName}</Typography>
-										</Box>
-									)}
 									{selectedRef.projectName && (
 										<Box>
-											<Typography sx={{ fontSize: '11px', color: '#6B7280' }}>ชื่อโครงการ</Typography>
+											<Typography sx={{ fontSize: '11px', color: '#6B7280' }}>โครงการ</Typography>
 											<Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#059669' }}>{selectedRef.projectName}</Typography>
 										</Box>
 									)}
 									{selectedRef.woNumber && (
 										<Box>
 											<Typography sx={{ fontSize: '11px', color: '#6B7280' }}>เลข WO</Typography>
-											<Chip label={selectedRef.woNumber} size="small" sx={{ fontSize: '12px', bgcolor: '#D1FAE5', color: '#166534', fontWeight: 600 }} />
-										</Box>
-									)}
-									{selectedRef.poNumber && (
-										<Box>
-											<Typography sx={{ fontSize: '11px', color: '#6B7280' }}>PO ลูกค้า</Typography>
-											<Chip label={selectedRef.poNumber} size="small" sx={{ fontSize: '12px', bgcolor: '#FEF3C7', color: '#92400E', fontWeight: 600 }} />
+											<Chip label={selectedRef.woNumber} size="small" sx={{ bgcolor: '#D1FAE5', color: '#166534', fontWeight: 700, fontSize: '12px' }} />
 										</Box>
 									)}
 									<Box>
-										<Typography sx={{ fontSize: '11px', color: '#6B7280' }}>ยอดใบเสนอราคา</Typography>
-										<Typography sx={{ fontSize: '15px', fontWeight: 700, color: '#1E293B' }}>{fmt(selectedRef.subtotal)} บาท</Typography>
+										<Typography sx={{ fontSize: '11px', color: '#6B7280' }}>ยอดใบเสนอ</Typography>
+										<Typography sx={{ fontSize: '15px', fontWeight: 700 }}>{fmt(selectedRef.subtotal)} บาท</Typography>
 									</Box>
 								</Box>
-
-								{/* Items preview */}
-								{selectedRef.items?.length > 0 && (
-									<Box sx={{ mt: 1.5 }}>
-										<Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#6B7280', mb: 0.5 }}>รายการงาน:</Typography>
-										<Box sx={{ maxHeight: 150, overflow: 'auto', fontSize: '12px' }}>
-											{selectedRef.items.filter((it: RefResult) => it.itemType !== 'HEADER').slice(0, 10).map((item: RefResult, i: number) => (
-												<Typography key={item.id || i} sx={{ fontSize: '12px', color: '#475569', pl: 1 }}>
-													• {item.description} {item.quantity > 0 && `(${item.quantity} ${item.unit || ''})`}
-												</Typography>
-											))}
-											{selectedRef.items.length > 10 && (
-												<Typography sx={{ fontSize: '12px', color: '#94A3B8', pl: 1 }}>... อีก {selectedRef.items.length - 10} รายการ</Typography>
-											)}
-										</Box>
-									</Box>
-								)}
 							</Paper>
 						)}
 					</Box>
 
-					{/* ══════ 2. ทีมช่าง ══════ */}
-					<Box sx={{ mb: 3, p: 2.5, borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-						<Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-							<FuseSvgIcon sx={{ color: '#F59E0B' }} size={18}>lucide:users</FuseSvgIcon>
-							<Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#F59E0B' }}>ทีมช่าง</Typography>
+					{/* ══ 2. รายการงาน (editable table) ══ */}
+					<Box sx={{ mb: 3, p: 2.5, borderRadius: '14px', border: '1px solid #E2E8F0' }}>
+						<Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+							<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+								<Box sx={{ width: 28, height: 28, borderRadius: '8px', background: 'linear-gradient(135deg,#8B5CF6,#7C3AED)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+									<FuseSvgIcon sx={{ color: '#fff' }} size={16}>lucide:list</FuseSvgIcon>
+								</Box>
+								<Typography sx={{ fontSize: '15px', fontWeight: 700, color: '#7C3AED' }}>รายการงาน</Typography>
+								<Chip label={`${selectableItems.length} รายการ`} size="small" sx={{ bgcolor: '#EDE9FE', color: '#6D28D9', fontWeight: 600, fontSize: '11px' }} />
+							</Box>
+							<Button variant="outlined" size="small" startIcon={<FuseSvgIcon size={16}>lucide:plus</FuseSvgIcon>}
+								onClick={addLineItem}
+								sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600, borderColor: '#7C3AED', color: '#7C3AED', '&:hover': { bgcolor: '#EDE9FE' } }}>
+								เพิ่มรายการ
+							</Button>
 						</Box>
-						<Autocomplete
-							options={teams}
-							getOptionLabel={(op) => `${op.leaderName} (${op.teamName})`}
-							value={selectedTeam}
-							onChange={(_, val) => setSelectedTeam(val)}
-							renderInput={(params) => <TextField {...params} label="เลือกหัวหน้าทีม" placeholder="เลือกหัวหน้าทีม" sx={fieldSx} />}
-						/>
-						{selectedTeam?.leaderAddress && (
-							<TextField label="ที่อยู่" fullWidth value={selectedTeam.leaderAddress} InputProps={{ readOnly: true }}
-								sx={{ mt: 1.5, ...fieldSx, '& .MuiOutlinedInput-root': { borderRadius: '10px', bgcolor: '#F8FAFC' } }} />
+
+						{lineItems.length === 0 ? (
+							<Box sx={{ py: 4, textAlign: 'center', color: '#94A3B8' }}>
+								<FuseSvgIcon size={40} sx={{ mb: 1, color: '#CBD5E1' }}>lucide:clipboard-list</FuseSvgIcon>
+								<Typography sx={{ fontSize: '14px' }}>ยังไม่มีรายการ — เลือกใบเสนอราคาด้านบน หรือกด "+ เพิ่มรายการ"</Typography>
+							</Box>
+						) : (
+							<Box sx={{ overflowX: 'auto' }}>
+								<Table size="small" sx={{ '& td, & th': { fontSize: '13px', py: 0.8 }, minWidth: 750 }}>
+									<TableHead>
+										<TableRow sx={{ '& th': { fontWeight: 700, color: '#475569', bgcolor: '#F8FAFC', borderBottom: '2px solid #E2E8F0', whiteSpace: 'nowrap' } }}>
+											<TableCell sx={{ width: 36, textAlign: 'center' }}>#</TableCell>
+											<TableCell>รายละเอียด</TableCell>
+											<TableCell sx={{ width: 70 }}>หน่วย</TableCell>
+											<TableCell sx={{ width: 80 }} align="right">จำนวน</TableCell>
+											<TableCell sx={{ width: 110 }} align="right">ราคาวัสดุ</TableCell>
+											<TableCell sx={{ width: 110 }} align="right">ค่าแรง</TableCell>
+											<TableCell sx={{ width: 120 }} align="right">รวม</TableCell>
+											<TableCell sx={{ width: 44 }}></TableCell>
+										</TableRow>
+									</TableHead>
+									<TableBody>
+									{lineItems.map((item, idx) => {
+										const isHeader = item.itemType === 'HEADER';
+										if (isHeader) {
+											// HEADER row — yellow background, spans all columns
+											return (
+												<TableRow key={item.tempId} sx={{ bgcolor: '#FFF8E1', '& td': { borderBottom: '1px solid #FDE68A' } }}>
+													<TableCell sx={{ textAlign: 'center', color: '#D97706', fontWeight: 800, fontSize: '12px !important' }}>
+														{idx + 1}
+													</TableCell>
+													<TableCell colSpan={5}>
+														<TextField
+															value={item.description} size="small" fullWidth
+															onChange={(e) => updateLineItem(item.tempId, 'description', e.target.value)}
+															placeholder="ชื่อหัวข้อ"
+															sx={{
+																'& .MuiOutlinedInput-root': { borderRadius: '6px', fontSize: '13px', fontWeight: 700, color: '#92400E' },
+																'& fieldset': { border: '1px solid transparent' },
+																'&:hover fieldset': { border: '1px solid #FDE68A' },
+															}}
+														/>
+													</TableCell>
+													<TableCell align="right" sx={{ color: '#D97706', fontWeight: 700 }}>—</TableCell>
+													<TableCell align="center">
+														<Tooltip title="ลบหัวข้อ">
+															<IconButton size="small" onClick={() => removeLineItem(item.tempId)}
+																sx={{ color: '#94A3B8', '&:hover': { color: '#EF4444', bgcolor: '#FEF2F2' } }}>
+																<FuseSvgIcon size={16}>lucide:trash-2</FuseSvgIcon>
+															</IconButton>
+														</Tooltip>
+													</TableCell>
+												</TableRow>
+											);
+										}
+										// ITEM row — normal editable
+										return (
+											<TableRow key={item.tempId}
+												sx={{
+													'& td': { borderBottom: '1px solid #F1F5F9' },
+													bgcolor: item.fromQuotation ? 'transparent' : '#FFFBEB',
+												}}>
+												<TableCell sx={{ textAlign: 'center', color: '#94A3B8', fontWeight: 600 }}>{idx + 1}</TableCell>
+												<TableCell>
+													<TextField
+														value={item.description} size="small" fullWidth
+														onChange={(e) => updateLineItem(item.tempId, 'description', e.target.value)}
+														sx={{ '& .MuiOutlinedInput-root': { borderRadius: '6px', fontSize: '13px' }, '& fieldset': { border: '1px solid transparent' }, '&:hover fieldset': { border: '1px solid #E2E8F0' }, '& .Mui-focused fieldset': { border: '1px solid #7C3AED !important' } }}
+														placeholder="รายละเอียดงาน"
+													/>
+												</TableCell>
+												<TableCell>
+													<TextField
+														value={item.unit} size="small"
+														onChange={(e) => updateLineItem(item.tempId, 'unit', e.target.value)}
+														sx={{ width: 60, '& .MuiOutlinedInput-root': { borderRadius: '6px', fontSize: '13px' }, '& fieldset': { border: '1px solid transparent' }, '&:hover fieldset': { border: '1px solid #E2E8F0' } }}
+														placeholder="หน่วย"
+													/>
+												</TableCell>
+												<TableCell align="right">
+													<TextField
+														value={item.quantity} size="small" type="number"
+														onChange={(e) => updateLineItem(item.tempId, 'quantity', Number(e.target.value))}
+														inputProps={{ style: { textAlign: 'right' }, min: 0 }}
+														sx={{ width: 70, '& .MuiOutlinedInput-root': { borderRadius: '6px', fontSize: '13px' }, '& fieldset': { border: '1px solid transparent' }, '&:hover fieldset': { border: '1px solid #E2E8F0' } }}
+													/>
+												</TableCell>
+												<TableCell align="right">
+													<TextField
+														value={item.materialPrice} size="small" type="number"
+														onChange={(e) => updateLineItem(item.tempId, 'materialPrice', Number(e.target.value))}
+														inputProps={{ style: { textAlign: 'right' }, min: 0 }}
+														sx={{ width: 100, '& .MuiOutlinedInput-root': { borderRadius: '6px', fontSize: '13px' }, '& fieldset': { border: '1px solid transparent' }, '&:hover fieldset': { border: '1px solid #E2E8F0' } }}
+													/>
+												</TableCell>
+												<TableCell align="right">
+													<TextField
+														value={item.labourPrice} size="small" type="number"
+														onChange={(e) => updateLineItem(item.tempId, 'labourPrice', Number(e.target.value))}
+														inputProps={{ style: { textAlign: 'right' }, min: 0 }}
+														sx={{ width: 100, '& .MuiOutlinedInput-root': { borderRadius: '6px', fontSize: '13px' }, '& fieldset': { border: '1px solid transparent' }, '&:hover fieldset': { border: '1px solid #E2E8F0' } }}
+													/>
+												</TableCell>
+												<TableCell align="right" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#1E293B', whiteSpace: 'nowrap' }}>
+													{fmt(item.amount)}
+												</TableCell>
+												<TableCell align="center">
+													<Tooltip title="ลบรายการ">
+														<IconButton size="small" onClick={() => removeLineItem(item.tempId)}
+															sx={{ color: '#94A3B8', '&:hover': { color: '#EF4444', bgcolor: '#FEF2F2' } }}>
+															<FuseSvgIcon size={16}>lucide:trash-2</FuseSvgIcon>
+														</IconButton>
+													</Tooltip>
+												</TableCell>
+											</TableRow>
+										);
+									})}
+									</TableBody>
+								</Table>
+								<Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1, px: 1 }}>
+									<Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#1E293B' }}>
+										ยอดรวมทั้งหมด: <Box component="span" sx={{ color: '#7C3AED', fontSize: '16px' }}>{fmt(lineItems.filter(it => it.itemType === 'ITEM').reduce((s, it) => s + it.amount, 0))}</Box> บาท
+									</Typography>
+								</Box>
+							</Box>
 						)}
 					</Box>
 
-					{/* ══════ 3. วันประกัน ══════ */}
-					<Box sx={{ mb: 3, p: 2.5, borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-						<Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-							<FuseSvgIcon sx={{ color: '#8B5CF6' }} size={18}>lucide:shield-check</FuseSvgIcon>
-							<Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#8B5CF6' }}>วันประกัน</Typography>
+					{/* ══ 3. กลุ่มทีมช่าง (หลายทีมได้) ══ */}
+					<Box sx={{ mb: 3 }}>
+						<Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+							<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+								<Box sx={{ width: 28, height: 28, borderRadius: '8px', background: 'linear-gradient(135deg,#F59E0B,#D97706)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+									<FuseSvgIcon sx={{ color: '#fff' }} size={16}>lucide:users</FuseSvgIcon>
+								</Box>
+								<Typography sx={{ fontSize: '15px', fontWeight: 700, color: '#D97706' }}>ทีมช่าง & การแบ่งงาน</Typography>
+								<Chip label={`${poGroups.length} ทีม`} size="small" sx={{ bgcolor: '#FEF3C7', color: '#92400E', fontWeight: 600, fontSize: '11px' }} />
+							</Box>
+							<Button variant="outlined" size="small" startIcon={<FuseSvgIcon size={16}>lucide:plus</FuseSvgIcon>}
+								onClick={addPoGroup}
+								sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600, borderColor: '#F59E0B', color: '#D97706', '&:hover': { bgcolor: '#FEF3C7' } }}>
+								+ เพิ่มทีม
+							</Button>
 						</Box>
-						<Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-							<DatePickerField label="เริ่มประกัน" value={warrantyStart} onChange={setWarrantyStart} />
-							<DatePickerField label="สิ้นสุดประกัน" value={warrantyEnd} onChange={setWarrantyEnd} />
-						</Box>
+						<Alert severity="info" sx={{ mb: 2, borderRadius: '10px', fontSize: '13px' }}>
+							แต่ละทีมจะสร้าง <strong>ใบสั่งซื้อแยก</strong> — เลือกรายการงานที่ต้องการให้แต่ละทีมรับผิดชอบ
+						</Alert>
+
+						{poGroups.map((group, gIdx) => {
+							const groupLineItems = lineItems.filter(it => group.selectedItems.has(it.tempId));
+							const total = groupLineItems.reduce((s, it) => s + it.amount, 0);
+							return (
+								<Paper key={group.id} elevation={0} sx={{
+									mb: 2, borderRadius: '14px',
+									border: `2px solid ${gIdx === 0 ? '#F59E0B' : '#E2E8F0'}`,
+									overflow: 'hidden',
+								}}>
+									{/* Group header */}
+									<Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2.5, py: 1.5, bgcolor: gIdx === 0 ? '#FFFBEB' : '#FAFBFC', borderBottom: '1px solid #E2E8F0' }}>
+										<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+											<Box sx={{ width: 24, height: 24, borderRadius: '50%', bgcolor: '#F59E0B', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+												<Typography sx={{ fontSize: '12px', fontWeight: 800, color: '#fff' }}>{gIdx + 1}</Typography>
+											</Box>
+											<Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#92400E' }}>
+												ใบสั่งซื้อที่ {gIdx + 1}
+											</Typography>
+											<Chip label={`ยอด ${fmt(total)} บาท`} size="small"
+												sx={{ bgcolor: total > 0 ? '#D1FAE5' : '#F1F5F9', color: total > 0 ? '#166534' : '#64748B', fontWeight: 700, fontSize: '12px' }} />
+										</Box>
+										{poGroups.length > 1 && (
+											<IconButton size="small" onClick={() => removePoGroup(group.id)}
+												sx={{ color: '#94A3B8', '&:hover': { color: '#EF4444', bgcolor: '#FEF2F2' } }}>
+												<FuseSvgIcon size={18}>lucide:x</FuseSvgIcon>
+											</IconButton>
+										)}
+									</Box>
+
+									<Box sx={{ p: 2.5 }}>
+										{/* Team selector */}
+										<Autocomplete
+											options={teams}
+											getOptionLabel={(op) => `${op.leaderName} (${op.teamName})`}
+											value={group.team}
+											onChange={(_, val) => updateGroup(group.id, 'team', val)}
+											renderInput={(params) => (
+												<TextField {...params} label="เลือกทีมช่าง" placeholder="เลือกทีมช่าง" sx={fieldSx}
+													InputProps={{ ...params.InputProps, startAdornment: <FuseSvgIcon size={18} sx={{ color: '#F59E0B', mr: 0.5 }}>lucide:user-check</FuseSvgIcon> }}
+												/>
+											)}
+											sx={{ mb: 2 }}
+										/>
+										{group.team?.leaderAddress && (
+											<TextField label="ที่อยู่ทีมช่าง" fullWidth value={group.team.leaderAddress} InputProps={{ readOnly: true }}
+												sx={{ mb: 2, ...fieldSx, '& .MuiOutlinedInput-root': { borderRadius: '10px', bgcolor: '#F8FAFC' } }} />
+										)}
+
+										{/* Item selection for this group */}
+										{lineItems.length > 0 && (
+											<Box sx={{ mb: 2 }}>
+												<Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+													<Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#475569' }}>
+														เลือกรายการงาน ({group.selectedItems.size}/{selectableItems.length})
+													</Typography>
+													<Box sx={{ display: 'flex', gap: 1 }}>
+														<Button size="small" onClick={() => selectAllForGroup(group.id)}
+															sx={{ fontSize: '11px', textTransform: 'none', color: '#0284C7', minWidth: 0 }}>เลือกทั้งหมด</Button>
+														<Button size="small" onClick={() => clearAllForGroup(group.id)}
+															sx={{ fontSize: '11px', textTransform: 'none', color: '#94A3B8', minWidth: 0 }}>ยกเลิกทั้งหมด</Button>
+													</Box>
+												</Box>
+												<Box sx={{ border: '1px solid #E2E8F0', borderRadius: '10px', overflow: 'hidden' }}>
+													{lineItems.map((item, idx) => {
+														const isHeader = item.itemType === 'HEADER';
+														if (isHeader) {
+															// HEADER: show as a non-selectable section label
+															return (
+																<Box key={item.tempId}
+																	sx={{
+																		display: 'flex', alignItems: 'center', gap: 1.5, px: 1.5, py: 0.7,
+																		bgcolor: '#FFF8E1',
+																		borderBottom: idx < lineItems.length - 1 ? '1px solid #FDE68A' : 'none',
+																	}}>
+																	<FuseSvgIcon size={14} sx={{ color: '#D97706', flexShrink: 0 }}>lucide:chevron-right</FuseSvgIcon>
+																	<Typography sx={{ fontSize: '12px', fontWeight: 800, color: '#92400E', flex: 1 }}>
+																		{item.description || '(หัวข้อ)'}
+																	</Typography>
+																</Box>
+															);
+														}
+														// ITEM: show with checkbox
+														const checked = group.selectedItems.has(item.tempId);
+														return (
+															<Box key={item.tempId}
+																onClick={() => toggleGroupItem(group.id, item.tempId)}
+																sx={{
+																	display: 'flex', alignItems: 'center', gap: 1.5, px: 1.5, py: 0.8,
+																	cursor: 'pointer', transition: 'all 0.15s',
+																	bgcolor: checked ? '#EFF6FF' : 'transparent',
+																	borderBottom: idx < lineItems.length - 1 ? '1px solid #F1F5F9' : 'none',
+																	'&:hover': { bgcolor: checked ? '#DBEAFE' : '#F8FAFC' },
+																}}>
+																<Checkbox checked={checked} size="small" sx={{ p: 0, color: '#CBD5E1', '&.Mui-checked': { color: '#2563EB' } }} />
+																<Typography sx={{ fontSize: '13px', flex: 1, color: checked ? '#1E293B' : '#94A3B8' }}>
+																	{idx + 1}. {item.description || '(ไม่มีชื่อ)'}
+																	{item.unit && <Box component="span" sx={{ color: '#94A3B8', ml: 0.5 }}>({item.quantity} {item.unit})</Box>}
+																</Typography>
+																<Typography sx={{ fontSize: '12px', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: checked ? '#2563EB' : '#CBD5E1', whiteSpace: 'nowrap' }}>
+																	{fmt(item.amount)} ฿
+																</Typography>
+															</Box>
+														);
+													})}
+												</Box>
+											</Box>
+										)}
+
+										{/* Dates */}
+										<Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 2 }}>
+											<DatePickerField label="วันเริ่มงาน" value={group.startDate}
+												onChange={(v) => updateGroup(group.id, 'startDate', v)} />
+											<DatePickerField label="วันสิ้นสุด" value={group.endDate}
+												onChange={(v) => updateGroup(group.id, 'endDate', v)} />
+											<DatePickerField label="เริ่มประกัน" value={group.warrantyStart}
+												onChange={(v) => updateGroup(group.id, 'warrantyStart', v)} />
+											<DatePickerField label="สิ้นสุดประกัน" value={group.warrantyEnd}
+												onChange={(v) => updateGroup(group.id, 'warrantyEnd', v)} />
+										</Box>
+
+										<TextField label="หมายเหตุ (สำหรับทีมนี้)" fullWidth multiline rows={2}
+											value={group.notes}
+											onChange={(e) => updateGroup(group.id, 'notes', e.target.value)}
+											sx={fieldSx} />
+
+										{/* Group total summary */}
+										<Box sx={{ mt: 2, p: 1.5, borderRadius: '10px', bgcolor: '#F0FDF4', border: '1px solid #BBF7D0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+											<Typography sx={{ fontSize: '13px', color: '#059669', fontWeight: 600 }}>
+												ยอดรวมใบสั่งซื้อนี้ ({group.selectedItems.size} รายการ)
+											</Typography>
+											<Typography sx={{ fontSize: '16px', fontWeight: 800, color: '#166534', fontVariantNumeric: 'tabular-nums' }}>
+												{fmt(groupTotal(group))} บาท
+											</Typography>
+										</Box>
+									</Box>
+								</Paper>
+							);
+						})}
 					</Box>
 
-					{/* ══════ 4. วันเริ่มงาน / สิ้นสุด ══════ */}
-					<Box sx={{ mb: 3, p: 2.5, borderRadius: '12px', border: '1px solid #E2E8F0' }}>
+					{/* ══ 4. อัพโหลดใบเสนอราคาช่าง ══ */}
+					<Box sx={{ mb: 3, p: 2.5, borderRadius: '14px', border: '1px solid #E2E8F0' }}>
 						<Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-							<FuseSvgIcon sx={{ color: '#059669' }} size={18}>lucide:calendar</FuseSvgIcon>
-							<Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#059669' }}>ระยะเวลางาน</Typography>
+							<Box sx={{ width: 28, height: 28, borderRadius: '8px', background: 'linear-gradient(135deg,#0284C7,#0369A1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+								<FuseSvgIcon sx={{ color: '#fff' }} size={16}>lucide:upload</FuseSvgIcon>
+							</Box>
+							<Typography sx={{ fontSize: '15px', fontWeight: 700, color: '#0284C7' }}>อัพโหลดใบเสนอราคาช่าง (ถ้ามี)</Typography>
 						</Box>
-						<Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
-							<DatePickerField label="วันเริ่มงาน" value={startDate} onChange={setStartDate} />
-							<DatePickerField label="วันสิ้นสุด" value={endDate} onChange={setEndDate} />
-						</Box>
-					</Box>
-
-					{/* ══════ 5. อัพโหลดใบเสนอราคาช่าง ══════ */}
-					<Box sx={{ mb: 3, p: 2.5, borderRadius: '12px', border: '1px solid #E2E8F0' }}>
-						<Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-							<FuseSvgIcon sx={{ color: '#0284C7' }} size={18}>lucide:upload</FuseSvgIcon>
-							<Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#0284C7' }}>อัพโหลด ใบเสนอราคาช่าง</Typography>
-						</Box>
-						<Box
-							sx={{
-								border: '2px dashed #CBD5E1', borderRadius: '10px', p: 3,
-								display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1,
-								bgcolor: '#FAFBFC', cursor: 'pointer',
-								'&:hover': { borderColor: '#0284C7', bgcolor: '#F0F9FF' },
-								transition: 'all 0.2s',
-							}}
-							onClick={() => document.getElementById('quote-file-input')?.click()}
-						>
-							<input id="quote-file-input" type="file" accept="image/*,.pdf" style={{ display: 'none' }} onChange={handleFileChange} />
+						<Box sx={{ border: '2px dashed #CBD5E1', borderRadius: '10px', p: 3, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, bgcolor: '#FAFBFC', cursor: 'pointer', '&:hover': { borderColor: '#0284C7', bgcolor: '#F0F9FF' }, transition: 'all 0.2s' }}
+							onClick={() => document.getElementById('quote-file-input')?.click()}>
+							<input id="quote-file-input" type="file" accept="image/*,.pdf" style={{ display: 'none' }} onChange={(e) => setQuoteFile(e.target.files?.[0] || null)} />
 							{quoteFile ? (
 								<>
 									<FuseSvgIcon sx={{ color: '#22C55E' }} size={32}>lucide:check-circle</FuseSvgIcon>
 									<Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#22C55E' }}>{quoteFile.name}</Typography>
-									{quotePreview && (
-										<img src={quotePreview} alt="Preview" style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 8, marginTop: 8 }} />
-									)}
 								</>
 							) : (
 								<>
@@ -398,125 +766,65 @@ function NewPurchaseOrderPage() {
 						</Box>
 					</Box>
 
-					{/* ══════ 6. ยอดค่างานรวม ══════ */}
-					<Box sx={{ mb: 3, p: 2.5, borderRadius: '12px', border: '2px solid #0284C7', bgcolor: '#F0F9FF' }}>
-						<Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-							<Typography sx={{ fontSize: '16px', fontWeight: 700, color: '#0284C7' }}>ยอดค่างานรวม (บาท)</Typography>
-							<Typography sx={{ fontSize: '24px', fontWeight: 800, color: '#1E293B', fontVariantNumeric: 'tabular-nums' }}>
-								{fmt(grandTotal)}
+					{/* ══ หมายเหตุทั่วไป ══ */}
+					<TextField label="หมายเหตุทั่วไป" fullWidth multiline rows={2}
+						value={globalNotes} onChange={(e) => setGlobalNotes(e.target.value)}
+						sx={{ mb: 3, ...fieldSx }} />
+
+					{/* ══ Summary ══ */}
+					<Box sx={{ mb: 3, p: 2, borderRadius: '14px', border: '2px solid #0284C7', bgcolor: '#F0F9FF' }}>
+						<Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#0284C7', mb: 1 }}>สรุปการสร้างใบสั่งซื้อ</Typography>
+						{poGroups.map((g, i) => (
+							<Box key={g.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 0.5 }}>
+								<Typography sx={{ fontSize: '13px', color: '#475569' }}>
+									ใบที่ {i + 1}: {g.team ? `${g.team.leaderName} (${g.team.teamName})` : <Box component="span" sx={{ color: '#F59E0B' }}>ยังไม่ได้เลือกทีม</Box>}
+									{' '}— {g.selectedItems.size} รายการ
+								</Typography>
+								<Typography sx={{ fontSize: '14px', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#0284C7' }}>
+									{fmt(groupTotal(g))} บาท
+								</Typography>
+							</Box>
+						))}
+						<Divider sx={{ my: 1 }} />
+						<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+							<Typography sx={{ fontSize: '15px', fontWeight: 700, color: '#0284C7' }}>ยอดรวมทั้งหมด</Typography>
+							<Typography sx={{ fontSize: '22px', fontWeight: 800, color: '#1E293B', fontVariantNumeric: 'tabular-nums' }}>
+								{fmt(poGroups.reduce((s, g) => s + groupTotal(g), 0))} บาท
 							</Typography>
 						</Box>
-						<Typography sx={{ fontSize: '12px', color: '#64748B', mt: 0.5 }}>
-							แก้ไขไม่ได้ = งานเพิ่ม ({fmt(totalAdds)}) - งานลด ({fmt(totalDeducts)}) อัตโนมัติ
-						</Typography>
 					</Box>
 
-					{/* ══════ 7. รายการปรับยอด ══════ */}
-					{adjustments.length > 0 && (
-						<Box sx={{ mb: 2 }}>
-							<Table size="small" sx={{ '& td, & th': { fontSize: '13px', py: 0.8 } }}>
-								<TableHead>
-									<TableRow sx={{ '& th': { fontWeight: 700, color: '#475569', bgcolor: '#F8FAFC', borderBottom: '2px solid #E2E8F0' } }}>
-										<TableCell>#</TableCell>
-										<TableCell>ประเภท</TableCell>
-										<TableCell>รายละเอียด</TableCell>
-										<TableCell align="right">จำนวนเงิน</TableCell>
-									</TableRow>
-								</TableHead>
-								<TableBody>
-									{adjustments.map((adj, i) => (
-										<TableRow key={i} sx={{ '& td': { borderBottom: '1px solid #F1F5F9' } }}>
-											<TableCell sx={{ color: '#94A3B8' }}>{i + 1}</TableCell>
-											<TableCell>
-												<Chip
-													label={adj.adjustmentType === 'ADD' ? 'งานเพิ่ม' : 'งานลด'}
-													size="small"
-													sx={{
-														fontSize: '11px', fontWeight: 600,
-														bgcolor: adj.adjustmentType === 'ADD' ? '#D1FAE5' : '#FEE2E2',
-														color: adj.adjustmentType === 'ADD' ? '#166534' : '#DC2626',
-													}}
-												/>
-											</TableCell>
-											<TableCell>{adj.description}</TableCell>
-											<TableCell align="right" sx={{
-												fontWeight: 600, fontVariantNumeric: 'tabular-nums',
-												color: adj.adjustmentType === 'ADD' ? '#059669' : '#DC2626',
-											}}>
-												{adj.adjustmentType === 'ADD' ? '+' : '-'}{fmt(adj.amount)}
-											</TableCell>
-										</TableRow>
-									))}
-								</TableBody>
-							</Table>
-						</Box>
-					)}
-
-					{/* ══════ 8. รายละเอียดงานเพิ่ม ══════ */}
-					<Box sx={{ mb: 2, p: 2, borderRadius: '12px', border: '1.5px solid #22C55E', bgcolor: '#FAFFF5' }}>
-						<Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#22C55E', mb: 1.5 }}>รายละเอียดงานเพิ่ม</Typography>
-						<Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
-							<TextField size="small" label="รายละเอียด" value={addDesc}
-								onChange={(e) => setAddDesc(e.target.value)} sx={{ flex: 2, ...fieldSx }}
-								placeholder="เช่น งานเพิ่มเติมชั้น 3" />
-							<TextField size="small" label="จำนวนเงินที่เพิ่ม" value={addAmount}
-								onChange={(e) => setAddAmount(e.target.value)} sx={{ flex: 1, ...fieldSx }}
-								inputProps={{ inputMode: 'decimal' }} placeholder="0.00" />
-							<Button variant="contained" size="medium" onClick={() => handleAddAdjustment('ADD')}
-								sx={{
-									borderRadius: '10px', textTransform: 'none', fontWeight: 700, mt: 0.3,
-									bgcolor: '#22C55E', '&:hover': { bgcolor: '#16A34A' }, minWidth: 80,
-								}}>
-								<FuseSvgIcon size={18}>lucide:plus</FuseSvgIcon> เพิ่ม
-							</Button>
-						</Box>
-					</Box>
-
-					{/* ══════ 9. รายละเอียดงานลด ══════ */}
-					<Box sx={{ mb: 3, p: 2, borderRadius: '12px', border: '1.5px solid #DC2626', bgcolor: '#FFFBFB' }}>
-						<Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#DC2626', mb: 1.5 }}>รายละเอียดงานลด</Typography>
-						<Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
-							<TextField size="small" label="รายละเอียด" value={deductDesc}
-								onChange={(e) => setDeductDesc(e.target.value)} sx={{ flex: 2, ...fieldSx }}
-								placeholder="เช่น ตัดงานชั้น 2 ออก" />
-							<TextField size="small" label="จำนวนเงินที่ลด" value={deductAmount}
-								onChange={(e) => setDeductAmount(e.target.value)} sx={{ flex: 1, ...fieldSx }}
-								inputProps={{ inputMode: 'decimal' }} placeholder="0.00" />
-							<Button variant="contained" size="medium" onClick={() => handleAddAdjustment('DEDUCT')}
-								sx={{
-									borderRadius: '10px', textTransform: 'none', fontWeight: 700, mt: 0.3,
-									bgcolor: '#DC2626', '&:hover': { bgcolor: '#B91C1C' }, minWidth: 80,
-								}}>
-								<FuseSvgIcon size={18}>lucide:minus</FuseSvgIcon> ลด
-							</Button>
-						</Box>
-					</Box>
-
-					{/* ══════ หมายเหตุ ══════ */}
-					<TextField label="หมายเหตุ" fullWidth multiline rows={2} value={notes}
-						onChange={(e) => setNotes(e.target.value)} sx={{ mb: 3, ...fieldSx }} />
-
-					{/* ══════ Buttons ══════ */}
+					{/* ══ Buttons ══ */}
 					<Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1.5, pb: 3 }}>
 						<Button variant="outlined" size="large" onClick={() => router.back()}
-							sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, fontSize: '15px', px: 4, color: '#64748B', borderColor: '#E2E8F0' }}>ยกเลิก</Button>
+							sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, fontSize: '15px', px: 4, color: '#64748B', borderColor: '#E2E8F0' }}>
+							ยกเลิก
+						</Button>
 						<Button variant="contained" size="large" onClick={handleSave} disabled={saving}
-							sx={{
-								borderRadius: '10px', textTransform: 'none', fontWeight: 700, fontSize: '15px', px: 4,
-								background: 'linear-gradient(135deg, #22C55E 0%, #16A34A 100%)',
-								'&:hover': { background: 'linear-gradient(135deg, #16A34A 0%, #15803D 100%)' },
-							}}>
-							{saving ? 'กำลังบันทึก...' : 'บันทึก'}
+							sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700, fontSize: '15px', px: 4, background: 'linear-gradient(135deg, #22C55E 0%, #16A34A 100%)', '&:hover': { background: 'linear-gradient(135deg, #16A34A 0%, #15803D 100%)' } }}>
+							{saving ? 'กำลังบันทึก...' : `บันทึก ${poGroups.length > 1 ? `(${poGroups.length} ใบ)` : ''}`}
 						</Button>
 					</Box>
 
 				</motion.div>
 			</Box>
-
 		</Paper>
 	);
 
-	return <Root header={header} content={content} scroll="content" />;
+	return (
+		<>
+			<Root header={header} content={content} scroll="content" />
+			<Snackbar open={snackbar.open} autoHideDuration={4000}
+				onClose={() => setSnackbar(p => ({ ...p, open: false }))}
+				anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
+				<Alert severity={snackbar.severity} variant="filled"
+					onClose={() => setSnackbar(p => ({ ...p, open: false }))}
+					sx={{ borderRadius: '10px', fontSize: '14px', fontWeight: 500 }}>
+					{snackbar.message}
+				</Alert>
+			</Snackbar>
+		</>
+	);
 }
 
 export default NewPurchaseOrderPage;

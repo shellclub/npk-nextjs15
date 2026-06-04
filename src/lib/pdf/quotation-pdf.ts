@@ -263,16 +263,48 @@ export function generateQuotationPDF(data: QuotationPDFData): jsPDF {
   const subCountMap: Record<number, number> = {};
   const tableBody: any[][] = [];
 
+  // First pass: identify which headers have sub-items
+  const headersWithChildren = new Set<number>();
+  data.items.forEach((item) => {
+    if ((item.itemType || 'ITEM') !== 'HEADER' && item.parentIndex !== undefined && item.parentIndex !== null && item.parentIndex >= 0) {
+      headersWithChildren.add(item.parentIndex);
+    }
+  });
+
   data.items.forEach((item, i) => {
     const isHeader = (item.itemType || 'ITEM') === 'HEADER';
 
     if (isHeader) {
       headerCount++;
       subCountMap[i] = 0;
-      tableBody.push([
-        { content: '', styles: { halign: 'center' } },
-        { content: item.description, colSpan: 8, styles: { fontStyle: 'bold' } },
-      ]);
+
+      if (headersWithChildren.has(i)) {
+        // Header WITH sub-items: description-only row
+        tableBody.push([
+          { content: '', styles: { halign: 'center' } },
+          { content: item.description, colSpan: 8, styles: { fontStyle: 'bold' } },
+        ]);
+      } else {
+        // Header WITHOUT sub-items: show with prices like a regular item, but bold
+        const matPrice = Number(item.materialPrice || 0);
+        const labPrice = Number(item.labourPrice || 0);
+        const qty = Number(item.quantity);
+        const matTotal = qty * matPrice;
+        const labTotal = qty * labPrice;
+        const amount = matTotal + labTotal;
+
+        tableBody.push([
+          { content: `${headerCount}`, styles: { halign: 'center', fontStyle: 'bold' } },
+          { content: item.description, styles: { fontStyle: 'bold' } },
+          { content: String(qty), styles: { halign: 'center' } },
+          { content: item.unit || '', styles: { halign: 'center' } },
+          matPrice > 0 ? fmt(matPrice) : '',
+          labPrice > 0 ? fmt(labPrice) : '',
+          matTotal > 0 ? fmt(matTotal) : '',
+          labTotal > 0 ? fmt(labTotal) : '',
+          fmt(amount),
+        ]);
+      }
       return;
     }
 

@@ -37,6 +37,16 @@ export async function GET(request: NextRequest) {
         team: { select: { teamName: true, leaderName: true } },
         createdBy: { select: { name: true } },
         purchaseOrders: { select: { id: true, poNumber: true, totalAmount: true } },
+        invoices: {
+          select: {
+            id: true,
+            invoiceNumber: true,
+            date: true,
+            taxInvoice: { select: { id: true, taxInvoiceNumber: true, date: true } },
+          },
+          take: 1,
+          orderBy: { createdAt: 'asc' },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });

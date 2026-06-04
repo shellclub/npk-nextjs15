@@ -107,12 +107,13 @@ export async function POST(request: NextRequest) {
         warrantyEndDate: body.warrantyEndDate ? new Date(body.warrantyEndDate) : null,
         contractorQuoteUrl: body.contractorQuoteUrl || null,
         discountPercent: body.discountPercent || 0,
-        vatPercent: body.vatPercent ?? 7,
+        vatPercent: body.vatPercent ?? 0,
+        subtotal: body.subtotal || body.totalAmount || 0,
         totalAmount: body.totalAmount || 0,
         status: body.status || 'DRAFT',
         notes: body.notes || null,
         conditions: body.conditions || null,
-        // Create initial adjustments if provided
+        // Create adjustments if provided (legacy)
         adjustments: body.adjustments?.length > 0 ? {
           createMany: {
             data: body.adjustments.map((adj: { adjustmentType: string; description: string; amount: number; createdBy?: string }) => ({
@@ -128,9 +129,56 @@ export async function POST(request: NextRequest) {
         workOrder: true,
         quotation: true,
         team: true,
+        items: true,
         adjustments: true,
       },
     });
+
+    // Create PurchaseOrderItem rows if items provided
+    if (body.items?.length > 0) {
+      const itemRows = body.items.map((it: {
+        itemType?: string;
+        itemOrder?: number;
+        parentIndex?: number | null;
+        description: string;
+        unit?: string;
+        quantity?: number;
+        materialPrice?: number;
+        labourPrice?: number;
+      }, idx: number) => {
+        const isHeader = (it.itemType || 'ITEM') === 'HEADER';
+        const qty = isHeader ? 0 : Number(it.quantity || 1);
+        const matP = isHeader ? 0 : Number(it.materialPrice || 0);
+        const labP = isHeader ? 0 : Number(it.labourPrice || 0);
+        const totalMat = qty * matP;
+        const totalLab = qty * labP;
+        const amount = totalMat + totalLab;
+        return {
+          purchaseOrderId: purchaseOrder.id,
+          itemOrder: it.itemOrder ?? idx,
+          itemType: it.itemType || 'ITEM',
+          parentIndex: it.parentIndex ?? null,
+          description: it.description || '',
+          unit: it.unit || '',
+          quantity: qty,
+          materialPrice: matP,
+          labourPrice: labP,
+          totalMaterial: totalMat,
+          totalLabour: totalLab,
+          amount,
+          isLocked: false,
+          isAdjustment: false,
+        };
+      });
+      await prisma.purchaseOrderItem.createMany({ data: itemRows });
+
+      // Recalculate totals
+      const subtotal = itemRows.reduce((s: number, it: { amount: number }) => s + it.amount, 0);
+      await prisma.purchaseOrder.update({
+        where: { id: purchaseOrder.id },
+        data: { subtotal, totalAmount: subtotal },
+      });
+    }
 
     return NextResponse.json(purchaseOrder, { status: 201 });
   } catch (error) {

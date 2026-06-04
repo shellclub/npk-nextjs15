@@ -49,6 +49,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(contact, { status: 201 });
   } catch (error) {
     console.error('POST /api/contacts error:', error);
-    return NextResponse.json({ error: 'Failed to create contact' }, { status: 500 });
+    if (error && typeof error === 'object' && 'code' in error && (error as { code: string }).code === 'P2002') {
+      return NextResponse.json({ error: 'ผู้ติดต่อนี้มีอยู่แล้วในระบบ' }, { status: 409 });
+    }
+    return NextResponse.json({ error: 'ไม่สามารถบันทึกข้อมูลผู้ติดต่อได้ กรุณาลองใหม่อีกครั้ง' }, { status: 500 });
   }
 }

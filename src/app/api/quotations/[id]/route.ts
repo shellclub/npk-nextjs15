@@ -48,11 +48,12 @@ export async function PATCH(
       return NextResponse.json({ error: 'Quotation not found' }, { status: 404 });
     }
 
-    // Calculate totals from items (only ITEM type, not HEADER)
+    // Calculate totals from items
+    // Skip HEADER rows that have sub-items (qty=0); include standalone HEADERs with prices
     const items = body.items || [];
     const subtotal = items.reduce(
       (sum: number, item: { itemType?: string; quantity: number; materialPrice?: number; labourPrice?: number }) => {
-        if (item.itemType === 'HEADER') return sum;
+        if (item.itemType === 'HEADER' && (item.quantity || 0) === 0) return sum;
         const matTotal = (item.quantity || 0) * (item.materialPrice || 0);
         const labTotal = (item.quantity || 0) * (item.labourPrice || 0);
         return sum + matTotal + labTotal;
@@ -116,14 +117,16 @@ export async function PATCH(
                 const isHeader = item.itemType === 'HEADER';
                 const matPrice = item.materialPrice || 0;
                 const labPrice = item.labourPrice || 0;
-                const qty = isHeader ? 0 : (item.quantity || 0);
-                const amount = isHeader ? 0 : (qty * matPrice + qty * labPrice);
+                // Header with sub-items (qty=0): no prices; Header without sub-items: keep qty/unit/prices
+                const hasOwnPrices = isHeader && (item.quantity || 0) > 0;
+                const qty = (isHeader && !hasOwnPrices) ? 0 : (item.quantity || 0);
+                const amount = qty * matPrice + qty * labPrice;
                 return {
                   itemOrder: index + 1,
                   itemType: item.itemType || 'ITEM',
                   parentIndex: item.parentIndex ?? null,
                   description: item.description,
-                  unit: isHeader ? '' : (item.unit || ''),
+                  unit: (isHeader && !hasOwnPrices) ? '' : (item.unit || ''),
                   quantity: qty,
                   unitPrice: matPrice + labPrice,
                   materialPrice: matPrice,

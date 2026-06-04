@@ -28,6 +28,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(branch, { status: 201 });
   } catch (error) {
     console.error('Error creating branch:', error);
-    return NextResponse.json({ error: 'เกิดข้อผิดพลาดในการบันทึก' }, { status: 500 });
+    if (error && typeof error === 'object' && 'code' in error && (error as { code: string }).code === 'P2002') {
+      return NextResponse.json({ error: 'รหัสสาขานี้มีอยู่แล้วในระบบ' }, { status: 409 });
+    }
+    return NextResponse.json({ error: 'ไม่สามารถบันทึกข้อมูลสาขาได้ กรุณาลองใหม่อีกครั้ง' }, { status: 500 });
   }
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Typography from '@mui/material/Typography';
 import Paper from '@mui/material/Paper';
@@ -60,6 +60,23 @@ function formatCurrency(amount: number) {
   return amount.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// Sanitize error messages — filter out raw technical errors from Prisma/Turbopack
+function sanitizeErrorMessage(message: string, fallback: string): string {
+  if (!message) return fallback;
+  // If message contains technical strings, return fallback instead
+  if (message.includes('TURBOPACK') || message.includes('prisma') || message.includes('__imported_module__') || message.includes('.next/') || message.length > 200) {
+    return fallback;
+  }
+  return message;
+}
+
+// Auto-select number field content on focus for easy overwrite
+const selectOnFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+  const target = e.target;
+  // setTimeout ensures select() runs after browser positions the cursor on click
+  setTimeout(() => target.select(), 0);
+};
+
 // Section header icon component
 const SectionIcon = ({ gradient, icon }: { gradient: string; icon: string }) => (
   <Box sx={{
@@ -77,6 +94,7 @@ function NewQuotationPage() {
   const [customers, setCustomers] = useState<CustomerGroup[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   const [customerGroupId, setCustomerGroupId] = useState('');
   const [branchId, setBranchId] = useState('');
@@ -168,9 +186,20 @@ function NewQuotationPage() {
   const branches = selectedCustomer?.branches || [];
   const selectedCustomerContacts: Contact[] = selectedCustomer?.contacts || [];
 
-  // Calculate subtotal from ITEM rows only
-  const subtotal = items.reduce((sum, item) => {
-    if (item.itemType === 'HEADER') return sum;
+  // Determine which headers have sub-items
+  const headersWithSubItems = useMemo(() => {
+    const set = new Set<number>();
+    items.forEach((item) => {
+      if (item.itemType === 'ITEM' && item.parentIndex !== undefined && item.parentIndex >= 0) {
+        set.add(item.parentIndex);
+      }
+    });
+    return set;
+  }, [items]);
+
+  // Calculate subtotal from ITEM rows and HEADER rows without sub-items
+  const subtotal = items.reduce((sum, item, idx) => {
+    if (item.itemType === 'HEADER' && headersWithSubItems.has(idx)) return sum;
     return sum + item.quantity * item.materialPrice + item.quantity * item.labourPrice;
   }, 0);
   // discountAmount is entered directly as a fixed amount (Baht)
@@ -247,6 +276,8 @@ function NewQuotationPage() {
 
   const displayNumbers = getItemDisplayNumbers();
 
+
+
   // Force date change when discount is modified
   const handleDiscountChange = (val: number) => {
     setDiscountAmount(val);
@@ -257,9 +288,15 @@ function NewQuotationPage() {
 
   const handleSubmit = async (status: 'DRAFT' | 'SENT') => {
     setError('');
-    if (!customerGroupId) { setError('กรุณาเลือกลูกค้า'); return; }
+    const errors: Record<string, string> = {};
+    if (!customerGroupId) errors.customer = 'กรุณาเลือกลูกค้า';
     if (items.filter(i => i.itemType === 'ITEM').some((item) => !item.description)) {
-      setError('กรุณากรอกรายละเอียดรายการให้ครบ'); return;
+      errors.items = 'กรุณากรอกรายละเอียดรายการให้ครบ';
+    }
+    setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      if (errors.items && !errors.customer) setError(errors.items);
+      return;
     }
 
     setSaving(true);
@@ -267,13 +304,27 @@ function NewQuotationPage() {
       // Recalculate parentIndex based on current positions
       const processedItems = items.map((item, idx) => {
         if (item.itemType === 'HEADER') {
+          const hasChildren = headersWithSubItems.has(idx);
+          if (hasChildren) {
+            // Header with sub-items: no prices
+            return {
+              itemType: item.itemType,
+              description: item.description,
+              unit: '',
+              quantity: 0,
+              materialPrice: 0,
+              labourPrice: 0,
+              parentIndex: undefined,
+            };
+          }
+          // Header without sub-items: keep prices
           return {
             itemType: item.itemType,
             description: item.description,
-            unit: '',
-            quantity: 0,
-            materialPrice: 0,
-            labourPrice: 0,
+            unit: item.unit,
+            quantity: Number(item.quantity),
+            materialPrice: Number(item.materialPrice),
+            labourPrice: Number(item.labourPrice),
             parentIndex: undefined,
           };
         }
@@ -307,11 +358,15 @@ function NewQuotationPage() {
           items: processedItems,
         }),
       });
-      if (!res.ok) throw new Error('Failed to save');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `บันทึกไม่สำเร็จ (HTTP ${res.status})`);
+      }
       alert.showSuccess('สร้างเรียบร้อย', 'ใบเสนอราคาถูกสร้างแล้ว');
       setTimeout(() => router.push('/apps/quotations'), 1500);
-    } catch {
-      alert.showError('เกิดข้อผิดพลาด', 'ไม่สามารถบันทึกได้ กรุณาลองใหม่');
+    } catch (err) {
+      const message = sanitizeErrorMessage(err instanceof Error ? err.message : '', 'ไม่สามารถบันทึกได้ กรุณาลองใหม่');
+      alert.showError('เกิดข้อผิดพลาด', message);
     } finally {
       setSaving(false);
     }
@@ -326,8 +381,10 @@ function NewQuotationPage() {
 
   const handleSaveNewCustomer = async () => {
     setNewCustomerError('');
-    if (!newCustomer.groupName.trim()) { setNewCustomerError('กรุณากรอกชื่อลูกค้า'); return; }
-    if (!newCustomer.headOfficeAddress.trim()) { setNewCustomerError('กรุณากรอกที่อยู่'); return; }
+    const errs: string[] = [];
+    if (!newCustomer.groupName.trim()) errs.push('groupName');
+    if (!newCustomer.headOfficeAddress.trim()) errs.push('address');
+    if (errs.length > 0) { setNewCustomerError(errs.join(',')); return; }
 
     setNewCustomerSaving(true);
     try {
@@ -336,7 +393,10 @@ function NewQuotationPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newCustomer),
       });
-      if (!res.ok) throw new Error('Failed');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `บันทึกลูกค้าไม่สำเร็จ (HTTP ${res.status})`);
+      }
       const created = await res.json();
       // Refresh list & auto-select the new customer
       fetchCustomers();
@@ -345,8 +405,9 @@ function NewQuotationPage() {
       setContactPerson(created.contactName || '');
       setAddCustomerOpen(false);
       alert.showSuccess('เพิ่มลูกค้าสำเร็จ', `${created.groupName} ถูกเพิ่มแล้ว`);
-    } catch {
-      setNewCustomerError('เกิดข้อผิดพลาด กรุณาลองใหม่');
+    } catch (err) {
+      const message = sanitizeErrorMessage(err instanceof Error ? err.message : '', 'ไม่สามารถบันทึกลูกค้าได้');
+      setNewCustomerError(`server:${message}`);
     } finally {
       setNewCustomerSaving(false);
     }
@@ -361,7 +422,7 @@ function NewQuotationPage() {
 
   const handleSaveNewBranch = async () => {
     setNewBranchError('');
-    if (!newBranch.code.trim()) { setNewBranchError('กรุณากรอกรหัสสาขา'); return; }
+    if (!newBranch.code.trim()) { setNewBranchError('code'); return; }
 
     setNewBranchSaving(true);
     try {
@@ -370,15 +431,19 @@ function NewQuotationPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...newBranch, customerGroupId }),
       });
-      if (!res.ok) throw new Error('Failed');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `บันทึกสาขาไม่สำเร็จ (HTTP ${res.status})`);
+      }
       const created = await res.json();
       // Refresh customer list to get updated branches
       fetchCustomers();
       setBranchId(created.id);
       setAddBranchOpen(false);
       alert.showSuccess('เพิ่มสาขาสำเร็จ', `${created.code}: ${created.name} ถูกเพิ่มแล้ว`);
-    } catch {
-      setNewBranchError('เกิดข้อผิดพลาดในการบันทึก');
+    } catch (err) {
+      const message = sanitizeErrorMessage(err instanceof Error ? err.message : '', 'ไม่สามารถบันทึกสาขาได้');
+      setNewBranchError(`server:${message}`);
     }
     setNewBranchSaving(false);
   };
@@ -392,8 +457,8 @@ function NewQuotationPage() {
 
   const handleSaveNewContact = async () => {
     setNewContactError('');
-    if (!newContact.name.trim()) { setNewContactError('กรุณากรอกชื่อผู้ติดต่อ'); return; }
-    if (!customerGroupId) { setNewContactError('กรุณาเลือกลูกค้าก่อน'); return; }
+    if (!newContact.name.trim()) { setNewContactError('name'); return; }
+    if (!customerGroupId) { setNewContactError('customer'); return; }
 
     setNewContactSaving(true);
     try {
@@ -402,7 +467,10 @@ function NewQuotationPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...newContact, customerGroupId }),
       });
-      if (!res.ok) throw new Error('Failed');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `บันทึกผู้ติดต่อไม่สำเร็จ (HTTP ${res.status})`);
+      }
       const created = await res.json();
       // Refresh customer list to get updated contacts
       fetchCustomers();
@@ -410,8 +478,9 @@ function NewQuotationPage() {
       setContactPhone(created.phone || '');
       setAddContactOpen(false);
       alert.showSuccess('เพิ่มผู้ติดต่อสำเร็จ', `${created.name} ถูกเพิ่มแล้ว`);
-    } catch {
-      setNewContactError('เกิดข้อผิดพลาดในการบันทึก');
+    } catch (err) {
+      const message = sanitizeErrorMessage(err instanceof Error ? err.message : '', 'ไม่สามารถบันทึกผู้ติดต่อได้');
+      setNewContactError(`server:${message}`);
     } finally {
       setNewContactSaving(false);
     }
@@ -458,9 +527,11 @@ function NewQuotationPage() {
                     options={customers}
                     getOptionLabel={(opt) => opt.groupName}
                     value={customers.find(c => c.id === customerGroupId) || null}
-                    onChange={(_, val) => { setCustomerGroupId(val?.id || ''); setBranchId(''); }}
+                    onChange={(_, val) => { setCustomerGroupId(val?.id || ''); setBranchId(''); setFieldErrors(prev => { const n = {...prev}; delete n.customer; return n; }); }}
                     renderInput={(params) => (
-                      <TextField {...params} label="ค้นหาลูกค้า *" placeholder="พิมพ์ชื่อบริษัท..." />
+                      <TextField {...params} label="ค้นหาลูกค้า *" placeholder="พิมพ์ชื่อบริษัท..."
+                        error={!!fieldErrors.customer}
+                        helperText={fieldErrors.customer || ''} />
                     )}
                     slotProps={{ paper: { sx: { borderRadius: '10px', boxShadow: '0 8px 24px rgba(0,0,0,0.12)' } } }}
                     fullWidth
@@ -574,7 +645,8 @@ function NewQuotationPage() {
                 <DatePickerField label="วันที่" value={date}
                   onChange={(v) => setDate(v)} />
                 <TextField label="ยืนยันราคา (วัน)" type="number" value={validDays}
-                  onChange={(e) => setValidDays(Number(e.target.value))} fullWidth />
+                  onChange={(e) => setValidDays(Number(e.target.value))} fullWidth
+                  onFocus={selectOnFocus} />
               </Box>
             </Box>
 
@@ -617,8 +689,10 @@ function NewQuotationPage() {
                       const matTotal = item.quantity * item.materialPrice;
                       const labTotal = item.quantity * item.labourPrice;
                       const amountTotal = matTotal + labTotal;
+                      const hasSubItems = isHeader && headersWithSubItems.has(index);
 
-                      if (isHeader) {
+                      if (isHeader && hasSubItems) {
+                        // Header WITH sub-items: show description only, no price fields
                         return (
                           <TableRow key={item.tempId} sx={{ bgcolor: '#FFF8E1', '&:hover': { bgcolor: '#FFF3C4' } }}>
                             <TableCell align="center" sx={{ fontWeight: 700, color: '#D97706' }}>{displayNumbers[index]}</TableCell>
@@ -632,6 +706,85 @@ function NewQuotationPage() {
                               />
                             </TableCell>
                             <TableCell />
+                            <TableCell>
+                              <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                <Tooltip title="เพิ่มรายการย่อย" arrow>
+                                  <IconButton size="small" onClick={() => addSubItem(index)}
+                                    sx={{ color: '#059669', '&:hover': { bgcolor: '#D1FAE5' } }}>
+                                    <FuseSvgIcon size={16}>lucide:plus</FuseSvgIcon>
+                                  </IconButton>
+                                </Tooltip>
+                                <IconButton size="small" onClick={() => removeItem(item.tempId)}
+                                  sx={{ color: 'error.main', '&:hover': { bgcolor: 'error.lighter' } }}>
+                                  <FuseSvgIcon size={16}>lucide:trash-2</FuseSvgIcon>
+                                </IconButton>
+                              </Box>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      }
+
+                      if (isHeader && !hasSubItems) {
+                        // Header WITHOUT sub-items: show price fields so it can have its own price
+                        return (
+                          <TableRow key={item.tempId} sx={{ bgcolor: '#FFF8E1', '&:hover': { bgcolor: '#FFF3C4' } }}>
+                            <TableCell align="center" sx={{ fontWeight: 700, color: '#D97706' }}>{displayNumbers[index]}</TableCell>
+                            <TableCell>
+                              <TextField
+                                value={item.description}
+                                onChange={(e) => updateItem(item.tempId, 'description', e.target.value)}
+                                placeholder="ชื่อหัวข้อหลัก (ไม่มีรายการย่อย)"
+                                size="small" fullWidth
+                                sx={{ '& .MuiOutlinedInput-root': { fontWeight: 700 } }}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <TextField type="number" value={item.quantity}
+                                onChange={(e) => updateItem(item.tempId, 'quantity', Number(e.target.value))}
+                                size="small" fullWidth
+                                onFocus={selectOnFocus}
+                                inputProps={{ min: 1, style: { textAlign: 'right', fontSize: '12px' } }} />
+                            </TableCell>
+                            <TableCell>
+                              <Autocomplete
+                                freeSolo
+                                options={unitOptions}
+                                value={item.unit}
+                                onChange={(_, val) => { if (val) updateItem(item.tempId, 'unit', val); }}
+                                onInputChange={(_, val, reason) => {
+                                  if (reason === 'input') updateItem(item.tempId, 'unit', val);
+                                }}
+                                renderInput={(params) => (
+                                  <TextField {...params} size="small" fullWidth />
+                                )}
+                                slotProps={{ paper: { sx: { borderRadius: '10px', mt: 0.5 } } }}
+                                size="small"
+                                disableClearable
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <TextField type="number" value={item.materialPrice}
+                                onChange={(e) => updateItem(item.tempId, 'materialPrice', Number(e.target.value))}
+                                size="small" fullWidth
+                                onFocus={selectOnFocus}
+                                inputProps={{ min: 0, step: 100, style: { textAlign: 'right', fontSize: '12px' } }} />
+                            </TableCell>
+                            <TableCell>
+                              <TextField type="number" value={item.labourPrice}
+                                onChange={(e) => updateItem(item.tempId, 'labourPrice', Number(e.target.value))}
+                                size="small" fullWidth
+                                onFocus={selectOnFocus}
+                                inputProps={{ min: 0, step: 100, style: { textAlign: 'right', fontSize: '12px' } }} />
+                            </TableCell>
+                            <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', fontSize: '12px' }}>
+                              {formatCurrency(matTotal)}
+                            </TableCell>
+                            <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', fontSize: '12px' }}>
+                              {formatCurrency(labTotal)}
+                            </TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: '12px' }}>
+                              {formatCurrency(amountTotal)}
+                            </TableCell>
                             <TableCell>
                               <Box sx={{ display: 'flex', gap: 0.5 }}>
                                 <Tooltip title="เพิ่มรายการย่อย" arrow>
@@ -697,6 +850,7 @@ function NewQuotationPage() {
                             <TextField type="number" value={item.quantity}
                               onChange={(e) => updateItem(item.tempId, 'quantity', Number(e.target.value))}
                               size="small" fullWidth
+                              onFocus={selectOnFocus}
                               inputProps={{ min: 1, style: { textAlign: 'right', fontSize: '12px' } }} />
                           </TableCell>
                           <TableCell>
@@ -720,12 +874,14 @@ function NewQuotationPage() {
                             <TextField type="number" value={item.materialPrice}
                               onChange={(e) => updateItem(item.tempId, 'materialPrice', Number(e.target.value))}
                               size="small" fullWidth
+                              onFocus={selectOnFocus}
                               inputProps={{ min: 0, step: 100, style: { textAlign: 'right', fontSize: '12px' } }} />
                           </TableCell>
                           <TableCell>
                             <TextField type="number" value={item.labourPrice}
                               onChange={(e) => updateItem(item.tempId, 'labourPrice', Number(e.target.value))}
                               size="small" fullWidth
+                              onFocus={selectOnFocus}
                               inputProps={{ min: 0, step: 100, style: { textAlign: 'right', fontSize: '12px' } }} />
                           </TableCell>
                           <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', fontSize: '12px' }}>
@@ -778,6 +934,7 @@ function NewQuotationPage() {
                       <TextField type="number" value={discountAmount}
                         onChange={(e) => handleDiscountChange(Number(e.target.value))}
                         size="small"
+                        onFocus={selectOnFocus}
                         inputProps={{ min: 0, step: 100, style: { textAlign: 'right', width: '100px' } }}
                         sx={{ '& .MuiOutlinedInput-root': { minHeight: '36px' } }} />
                       <Typography color="text.secondary">บาท</Typography>
@@ -789,6 +946,7 @@ function NewQuotationPage() {
                       <TextField type="number" value={vatPercent}
                         onChange={(e) => setVatPercent(Number(e.target.value))}
                         size="small"
+                        onFocus={selectOnFocus}
                         inputProps={{ min: 0, max: 100, style: { textAlign: 'right', width: '48px' } }}
                         sx={{ '& .MuiOutlinedInput-root': { minHeight: '36px' } }} />
                       <Typography color="text.secondary">%</Typography>
@@ -868,15 +1026,27 @@ function NewQuotationPage() {
         </DialogTitle>
         <DialogContent sx={{ pt: '20px!important' }}>
           {newCustomerError && (
-            <Alert severity="error" sx={{ mb: 2 }}>{newCustomerError}</Alert>
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {newCustomerError.startsWith('server:')
+                ? newCustomerError.replace('server:', '')
+                : [
+                    newCustomerError.includes('groupName') && 'ชื่อบริษัท / ลูกค้า',
+                    newCustomerError.includes('address') && 'ที่อยู่สำนักงานใหญ่',
+                  ].filter(Boolean).join(', ') + ' ยังไม่ได้กรอก กรุณาตรวจสอบข้อมูลด้านล่าง'
+              }
+            </Alert>
           )}
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
             <TextField label="ชื่อบริษัท / ลูกค้า *" value={newCustomer.groupName}
-              onChange={(e) => setNewCustomer({ ...newCustomer, groupName: e.target.value })}
-              fullWidth sx={{ gridColumn: { sm: 'span 2' } }} autoFocus />
+              onChange={(e) => { setNewCustomer({ ...newCustomer, groupName: e.target.value }); if (newCustomerError.includes('groupName')) setNewCustomerError(prev => prev.replace('groupName,', '').replace(',groupName', '').replace('groupName', '')); }}
+              fullWidth sx={{ gridColumn: { sm: 'span 2' } }} autoFocus
+              error={newCustomerError.includes('groupName')}
+              helperText={newCustomerError.includes('groupName') ? 'กรุณากรอกชื่อลูกค้า' : ''} />
             <TextField label="ที่อยู่สำนักงานใหญ่ *" value={newCustomer.headOfficeAddress}
-              onChange={(e) => setNewCustomer({ ...newCustomer, headOfficeAddress: e.target.value })}
-              fullWidth multiline rows={2} sx={{ gridColumn: { sm: 'span 2' } }} />
+              onChange={(e) => { setNewCustomer({ ...newCustomer, headOfficeAddress: e.target.value }); if (newCustomerError.includes('address')) setNewCustomerError(prev => prev.replace('address,', '').replace(',address', '').replace('address', '')); }}
+              fullWidth multiline rows={2} sx={{ gridColumn: { sm: 'span 2' } }}
+              error={newCustomerError.includes('address')}
+              helperText={newCustomerError.includes('address') ? 'กรุณากรอกที่อยู่สำนักงานใหญ่' : ''} />
             <TextField label="เลขผู้เสียภาษี" value={newCustomer.taxId}
               onChange={(e) => setNewCustomer({ ...newCustomer, taxId: e.target.value })} fullWidth />
             <TextField label="ชื่อผู้ติดต่อ" value={newCustomer.contactName}
@@ -921,10 +1091,12 @@ function NewQuotationPage() {
           เพิ่มสาขาใหม่
         </DialogTitle>
         <DialogContent sx={{ pt: '16px !important' }}>
-          {newBranchError && <Alert severity="error" sx={{ mb: 2 }}>{newBranchError}</Alert>}
+          {newBranchError.startsWith('server:') && <Alert severity="error" sx={{ mb: 2 }}>{newBranchError.replace('server:', '')}</Alert>}
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
             <TextField label="รหัสสาขา *" value={newBranch.code}
-              onChange={(e) => setNewBranch({ ...newBranch, code: e.target.value })} fullWidth />
+              onChange={(e) => setNewBranch({ ...newBranch, code: e.target.value })} fullWidth
+              error={newBranchError === 'code'}
+              helperText={newBranchError === 'code' ? 'กรุณากรอกรหัสสาขา' : ''} />
             <TextField label="ชื่อสาขา" value={newBranch.name}
               onChange={(e) => setNewBranch({ ...newBranch, name: e.target.value })} fullWidth />
             <TextField label="ที่อยู่" value={newBranch.address}
@@ -970,13 +1142,15 @@ function NewQuotationPage() {
           <Typography variant="h6" fontWeight={700}>เพิ่มผู้ติดต่อใหม่</Typography>
         </DialogTitle>
         <DialogContent sx={{ pt: '20px!important' }}>
-          {newContactError && (
-            <Alert severity="error" sx={{ mb: 2 }}>{newContactError}</Alert>
+          {newContactError.startsWith('server:') && (
+            <Alert severity="error" sx={{ mb: 2 }}>{newContactError.replace('server:', '')}</Alert>
           )}
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
             <TextField label="ชื่อผู้ติดต่อ *" value={newContact.name}
               onChange={(e) => setNewContact({ ...newContact, name: e.target.value })}
-              fullWidth autoFocus />
+              fullWidth autoFocus
+              error={newContactError === 'name'}
+              helperText={newContactError === 'name' ? 'กรุณากรอกชื่อผู้ติดต่อ' : (newContactError === 'customer' ? 'กรุณาเลือกลูกค้าก่อน' : '')} />
             <TextField label="ตำแหน่ง" value={newContact.position}
               onChange={(e) => setNewContact({ ...newContact, position: e.target.value })} fullWidth />
             <TextField label="เบอร์โทร" value={newContact.phone}

@@ -43,7 +43,16 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
       // Check if PO already has items
       const existingCount = await prisma.purchaseOrderItem.count({ where: { purchaseOrderId: id } });
-      if (existingCount > 0) return NextResponse.json({ error: 'Items already imported' }, { status: 400 });
+      if (existingCount > 0 && !body.replace) {
+        return NextResponse.json({ error: 'Items already imported', alreadyImported: true }, { status: 400 });
+      }
+
+      // If replace=true, delete existing unlocked items first
+      if (existingCount > 0 && body.replace) {
+        await prisma.purchaseOrderItem.deleteMany({
+          where: { purchaseOrderId: id, isLocked: false, isAdjustment: false },
+        });
+      }
 
       // Copy quotation items but with empty prices
       const newItems = po.quotation.items.map((qi) => ({
@@ -70,6 +79,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       });
       return NextResponse.json({ success: true, items });
     }
+
 
     // === Mode 2: Save prices for unlocked items (lock them) ===
     if (body.action === 'save-prices') {

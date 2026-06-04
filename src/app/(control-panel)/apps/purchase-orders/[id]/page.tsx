@@ -108,18 +108,23 @@ function PurchaseOrderDetailPage() {
 	useEffect(() => { fetchPO(); }, [fetchPO]);
 
 	// Import items from quotation
-	const handleImport = async () => {
+	const handleImport = async (replace = false) => {
 		setSaving(true);
 		try {
 			const res = await fetch(`/api/purchase-orders/${poId}/items`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ action: 'import-from-quotation' }),
+				body: JSON.stringify({ action: 'import-from-quotation', replace }),
 			});
 			const data = await res.json();
 			if (data.success) {
 				alert.showSuccess('นำเข้าเรียบร้อย', 'รายการจากใบเสนอราคาถูกนำเข้าแล้ว');
 				fetchPO();
+			} else if (data.alreadyImported && !replace) {
+				// Already has items — ask user to confirm re-import
+				if (window.confirm('มีรายการอยู่แล้ว ต้องการรีเซ็ตและนำเข้าจากใบเสนอราคาใหม่หรือไม่?\n(รายการที่ยังไม่ได้ล็อคราคาจะถูกลบ)')) {
+					await handleImport(true);
+				}
 			} else {
 				alert.showError('เกิดข้อผิดพลาด', data.error || 'ไม่สามารถนำเข้ารายการได้');
 			}
@@ -127,6 +132,7 @@ function PurchaseOrderDetailPage() {
 			alert.showError('เกิดข้อผิดพลาด', 'ไม่สามารถนำเข้ารายการได้');
 		} finally { setSaving(false); }
 	};
+
 
 	// Save prices & lock
 	const handleSavePrices = async () => {
@@ -353,6 +359,17 @@ function PurchaseOrderDetailPage() {
 					<Chip label={sc.label} sx={{ fontSize: '13px', fontWeight: 600, bgcolor: sc.bgColor, color: sc.textColor, border: `1px solid ${sc.borderColor}`, borderRadius: '8px' }} />
 				</div>
 				<div className="flex items-center gap-8">
+					{po.quotationId && (
+						<Tooltip title={hasItems ? 'นำเข้ารายการใหม่จากใบเสนอราคา (รีเซ็ตรายการที่ยังไม่ล็อค)' : 'นำเข้ารายการจากใบเสนอราคา'} arrow>
+							<Button variant="outlined" size="medium"
+								onClick={() => handleImport()}
+								disabled={saving}
+								startIcon={<FuseSvgIcon size={18}>lucide:download</FuseSvgIcon>}
+								sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, borderColor: '#0EA5E9', color: '#0284C7', '&:hover': { bgcolor: '#F0F9FF' } }}>
+								{hasItems ? 'นำเข้าใหม่' : 'นำเข้ารายการ'}
+							</Button>
+						</Tooltip>
+					)}
 					<Button variant="outlined" size="medium"
 						onClick={() => router.push(`/apps/purchase-orders/${poId}/print`)}
 						startIcon={<FuseSvgIcon size={18}>lucide:printer</FuseSvgIcon>}
@@ -369,6 +386,7 @@ function PurchaseOrderDetailPage() {
 			</div>
 		</div>
 	);
+
 
 	const content = (
 		<Paper className="flex h-full w-full flex-auto flex-col overflow-auto rounded-b-none" elevation={0}>

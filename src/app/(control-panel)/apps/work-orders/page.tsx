@@ -54,6 +54,8 @@ type WorkOrder = {
   team?: { teamName: string; leaderName: string } | null;
   branch?: { name: string } | null;
   purchaseOrders?: { id: string; poNumber: string; totalAmount: number; status: string }[];
+  invoice?: { id: string; invoiceNumber: string; date: string; taxInvoice?: { id: string; taxInvoiceNumber: string; date: string } | null } | null;
+  invoices?: { id: string; invoiceNumber: string; date: string; taxInvoice?: { id: string; taxInvoiceNumber: string; date: string } | null }[];
 };
 type Quotation = { id: string; quotationNumber: string; projectName?: string | null; customerGroup: { groupName: string }; totalAmount: number; subtotal: number };
 type Team = { id: string; teamName: string; leaderName: string };
@@ -88,6 +90,7 @@ function WorkOrdersPage() {
   // Create dialog
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [createError, setCreateError] = useState('');
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [woStatuses, setWoStatuses] = useState<{ id: string; name: string; code: string; color: string; bgColor: string }[]>([]);
@@ -126,6 +129,37 @@ function WorkOrdersPage() {
     warrantyStartDate: '', warrantyEndDate: '',
     totalAmount: 0, description: '', notes: '',
   });
+
+  // PO quick-edit dialog
+  const [poDialogOpen, setPoDialogOpen] = useState(false);
+  const [poDialogWO, setPoDialogWO] = useState<WorkOrder | null>(null);
+  const [poForm, setPoForm] = useState({ poNumber: '', poDate: '' });
+  const [poSaving, setPoSaving] = useState(false);
+
+  const openPoDialog = (wo: WorkOrder, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setPoDialogWO(wo);
+    setPoForm({ poNumber: wo.poNumber || '', poDate: wo.poDate ? new Date(wo.poDate).toISOString().split('T')[0] : '' });
+    setPoDialogOpen(true);
+  };
+
+  const handlePoSave = async () => {
+    if (!poDialogWO) return;
+    setPoSaving(true);
+    try {
+      const res = await fetch(`/api/work-orders/${poDialogWO.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ poNumber: poForm.poNumber || null, poDate: poForm.poDate || null }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      setPoDialogOpen(false);
+      setSnackbar({ open: true, message: `บันทึก PO เรียบร้อย`, severity: 'success' });
+      load();
+    } catch {
+      setSnackbar({ open: true, message: 'เกิดข้อผิดพลาด', severity: 'error' });
+    } finally { setPoSaving(false); }
+  };
 
   // Snackbar
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
@@ -316,13 +350,14 @@ function WorkOrdersPage() {
   };
 
   const handleSave = async () => {
+    setCreateError('');
     // Validate required fields
     if (!form.statusCode) {
-      setSnackbar({ open: true, message: 'กรุณาเลือกสถานะ', severity: 'error' });
+      setCreateError('กรุณาเลือกสถานะก่อนบันทึก');
       return;
     }
     if (!form.teamId && !form.teamName) {
-      setSnackbar({ open: true, message: 'กรุณาเลือกหรือกรอกทีมช่าง', severity: 'error' });
+      setCreateError('กรุณาเลือกหรือกรอกชื่อทีมช่างก่อนบันทึก');
       return;
     }
     setSaving(true);
@@ -350,6 +385,7 @@ function WorkOrdersPage() {
       if (!res.ok) throw new Error('Failed');
       const newWO = await res.json();
       setDialogOpen(false);
+      setCreateError('');
       setForm({
         woNumber: '', woDate: new Date().toISOString().split('T')[0],
         poNumber: '', poDate: '',
@@ -360,8 +396,9 @@ function WorkOrdersPage() {
       });
       setSnackbar({ open: true, message: `สร้าง ${newWO.woNumber} เรียบร้อย`, severity: 'success' });
       load();
-    } catch {
-      setSnackbar({ open: true, message: 'เกิดข้อผิดพลาดในการสร้าง WO', severity: 'error' });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการสร้าง WO';
+      setCreateError(msg.length > 150 ? 'ไม่สามารถสร้าง WO ได้ กรุณาตรวจสอบข้อมูลและลองใหม่' : msg);
     } finally { setSaving(false); }
   };
 
@@ -464,24 +501,28 @@ function WorkOrdersPage() {
           <TableContainer sx={{ flex: 1 }}>
             <Table stickyHeader>
               <TableHead>
-                <TableRow sx={{ '& th': { fontSize: '13px', fontWeight: 700, color: '#475569', borderBottom: '2px solid #E2E8F0', py: 1.5, bgcolor: '#F8FAFC', whiteSpace: 'nowrap' } }}>
+                <TableRow sx={{ '& th': { fontSize: '12px', fontWeight: 700, color: '#475569', borderBottom: '2px solid #E2E8F0', py: 1.2, bgcolor: '#F8FAFC', whiteSpace: 'nowrap' } }}>
                   <TableCell padding="checkbox" sx={{ pl: 2 }}>
                     <Checkbox checked={selected.length === data.length && data.length > 0}
                       indeterminate={selected.length > 0 && selected.length < data.length}
                       onChange={toggleAll} size="small" />
                   </TableCell>
-                  <TableCell sx={{ width: 40 }}>#</TableCell>
-                  <TableCell><div>เลขที่ใบเสนอ</div><div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 500 }}>วันที่</div></TableCell>
-                  <TableCell><div>ลูกค้า</div><div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 500 }}>สาขา</div></TableCell>
-                  <TableCell>ชื่อโครงการ</TableCell>
-                  <TableCell><div>เลข WO</div><div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 500 }}>วันที่</div></TableCell>
-                  <TableCell><div>เลข PO</div><div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 500 }}>วันที่</div></TableCell>
+                  <TableCell sx={{ width: 36, textAlign: 'center' }}>#</TableCell>
+                  <TableCell><div>เลขใบเสนอราคา</div><div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 500 }}>วันที่</div></TableCell>
+                  <TableCell><div>ชื่อลูกค้า</div><div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 500 }}>สาขา</div></TableCell>
+                  <TableCell>ชื่องาน</TableCell>
+                  <TableCell>ผู้ติดต่อ</TableCell>
+                  <TableCell align="right">ยอดเงิน</TableCell>
                   <TableCell>ทีมช่าง</TableCell>
-                  <TableCell><div>วันเริ่ม</div><div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 500 }}>วันสิ้นสุด</div></TableCell>
-                  <TableCell><div>เริ่มประกัน</div><div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 500 }}>สิ้นสุดประกัน</div></TableCell>
-                  <TableCell align="right">ยอดรวม (บาท)</TableCell>
+                  <TableCell><div>เลข PO ช่าง</div></TableCell>
+                  <TableCell><div>เริ่ม – สิ้นสุดงาน</div></TableCell>
+                  <TableCell><div>ระยะเวลา</div><div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 500 }}>ประกัน</div></TableCell>
+                  <TableCell><div>WO</div><div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 500 }}>วันที่</div></TableCell>
+                  <TableCell><div>PO</div><div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 500 }}>วันที่</div></TableCell>
+                  <TableCell><div>ใบแจ้งหนี้</div><div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 500 }}>วันที่</div></TableCell>
+                  <TableCell><div>ใบกำกับภาษี</div><div style={{ fontSize: '11px', color: '#94A3B8', fontWeight: 500 }}>วันที่</div></TableCell>
                   <TableCell align="center">สถานะ</TableCell>
-                  <TableCell align="center" sx={{ width: 60 }}>จัดการ</TableCell>
+                  <TableCell align="center" sx={{ width: 56 }}>จัดการ</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -502,8 +543,9 @@ function WorkOrdersPage() {
                       <TableCell padding="checkbox" sx={{ pl: 2 }} onClick={(e) => e.stopPropagation()}>
                         <Checkbox checked={selected.includes(wo.id)} onChange={() => toggleSelect(wo.id)} size="small" />
                       </TableCell>
-                      <TableCell sx={{ color: '#94A3B8', fontWeight: 600 }}>{idx + 1}</TableCell>
-                      {/* เลขที่ใบเสนอ / วันที่ */}
+                      {/* # */}
+                      <TableCell sx={{ color: '#94A3B8', fontWeight: 600, textAlign: 'center' }}>{idx + 1}</TableCell>
+                      {/* เลขใบเสนอราคา / วันที่ */}
                       <TableCell>
                         {wo.quotation ? (
                           <>
@@ -512,46 +554,80 @@ function WorkOrdersPage() {
                           </>
                         ) : '-'}
                       </TableCell>
-                      {/* ลูกค้า / สาขา */}
+                      {/* ชื่อลูกค้า / สาขา */}
                       <TableCell>
                         <Typography sx={{ fontSize: '13px', fontWeight: 500 }}>{wo.quotation?.customerGroup?.groupName || '-'}</Typography>
                         <Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>{wo.branch?.name || '-'}</Typography>
                       </TableCell>
-                      {/* ชื่อโครงการ */}
-                      <TableCell sx={{ maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {/* ชื่องาน */}
+                      <TableCell sx={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#059669', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                           {wo.quotation?.projectName || wo.description || '-'}
                         </Typography>
                       </TableCell>
-                      {/* เลข WO / วันที่ */}
-                      <TableCell>
-                        <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#0284C7' }}>{wo.woNumber}</Typography>
-                        <Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>{fmtDate(wo.date)}</Typography>
-                      </TableCell>
-                      {/* เลข PO / วันที่ */}
-                      <TableCell>
-                        <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#7C3AED' }}>{wo.poNumber || '-'}</Typography>
-                        <Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>{wo.poDate ? fmtDate(wo.poDate) : '-'}</Typography>
-                      </TableCell>
-                      {/* ทีมช่าง */}
-                      <TableCell sx={{ fontWeight: 500, whiteSpace: 'nowrap' }}>{displayTeam}</TableCell>
-                      {/* วันเริ่ม / วันสิ้นสุด */}
-                      <TableCell>
-                        <Typography sx={{ fontSize: '12px' }}>{wo.startDate ? fmtDate(wo.startDate) : '-'}</Typography>
-                        <Typography sx={{ fontSize: '12px', color: '#94A3B8' }}>{wo.endDate ? fmtDate(wo.endDate) : '-'}</Typography>
-                      </TableCell>
-                      {/* วันเริ่มประกัน / วันสิ้นสุดประกัน */}
-                      <TableCell>
-                        <Typography sx={{ fontSize: '12px' }}>{wo.warrantyStartDate ? fmtDate(wo.warrantyStartDate) : '-'}</Typography>
-                        <Typography sx={{ fontSize: '12px', color: '#94A3B8' }}>{wo.warrantyEndDate ? fmtDate(wo.warrantyEndDate) : '-'}</Typography>
-                      </TableCell>
-                      {/* ยอดรวม (ก่อน VAT) */}
+                      {/* ผู้ติดต่อ — ยังไม่มีข้อมูลใน API */}
+                      <TableCell sx={{ fontSize: '12px', color: '#94A3B8' }}>-</TableCell>
+                      {/* ยอดเงิน */}
                       <TableCell align="right" sx={{
-                        fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: '14px !important',
+                        fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: '13px !important',
                         color: isCancelled ? '#94A3B8' : '#1E293B',
                         textDecoration: isCancelled ? 'line-through' : 'none',
                       }}>
                         {fmt(subtotal)}
+                      </TableCell>
+                      {/* ทีมช่าง */}
+                      <TableCell sx={{ fontWeight: 500, whiteSpace: 'nowrap', fontSize: '12px' }}>{displayTeam}</TableCell>
+                      {/* เลข PO ช่าง */}
+                      <TableCell>
+                        <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#7C3AED' }}>{wo.customerPO || '-'}</Typography>
+                      </TableCell>
+                      {/* เริ่ม – สิ้นสุดงาน */}
+                      <TableCell>
+                        <Typography sx={{ fontSize: '12px' }}>{wo.startDate ? fmtDate(wo.startDate) : '-'}</Typography>
+                        <Typography sx={{ fontSize: '12px', color: '#94A3B8' }}>{wo.endDate ? fmtDate(wo.endDate) : '-'}</Typography>
+                      </TableCell>
+                      {/* ระยะเวลาประกัน */}
+                      <TableCell>
+                        <Typography sx={{ fontSize: '12px' }}>{wo.warrantyStartDate ? fmtDate(wo.warrantyStartDate) : '-'}</Typography>
+                        <Typography sx={{ fontSize: '12px', color: '#94A3B8' }}>{wo.warrantyEndDate ? fmtDate(wo.warrantyEndDate) : '-'}</Typography>
+                      </TableCell>
+                      {/* WO / วันที่ — click เปิด dialog */}
+                      <TableCell onClick={(e) => { e.stopPropagation(); openEditDialog(wo); }}
+                        sx={{ cursor: 'pointer', '&:hover': { bgcolor: '#EFF6FF' }, borderRadius: '6px', transition: 'background 0.15s' }}>
+                        <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#0284C7', textDecoration: 'underline', textDecorationStyle: 'dotted' }}>{wo.woNumber}</Typography>
+                        <Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>{fmtDate(wo.date)}</Typography>
+                      </TableCell>
+                      {/* PO / วันที่ — click เปิด PO dialog */}
+                      <TableCell onClick={(e) => openPoDialog(wo, e)}
+                        sx={{ cursor: 'pointer', '&:hover': { bgcolor: '#F5F3FF' }, borderRadius: '6px', transition: 'background 0.15s' }}>
+                        <Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#7C3AED', textDecoration: 'underline', textDecorationStyle: 'dotted' }}>
+                          {wo.poNumber || <Box component="span" sx={{ color: '#CBD5E1', fontWeight: 400 }}>+ เพิ่ม PO</Box>}
+                        </Typography>
+                        <Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>{wo.poDate ? fmtDate(wo.poDate) : ''}</Typography>
+                      </TableCell>
+                      {/* ใบแจ้งหนี้ / วันที่ */}
+                      <TableCell onClick={(e) => { e.stopPropagation(); router.push('/apps/invoices'); }}
+                        sx={{ cursor: 'pointer', '&:hover': { bgcolor: '#F0FDF4' }, borderRadius: '6px', transition: 'background 0.15s' }}>
+                        {wo.invoices?.[0] ? (
+                          <>
+                            <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#059669' }}>{wo.invoices[0].invoiceNumber}</Typography>
+                            <Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>{fmtDate(wo.invoices[0].date)}</Typography>
+                          </>
+                        ) : (
+                          <Typography sx={{ fontSize: '12px', color: '#CBD5E1', fontWeight: 400 }}>+ สร้างใบแจ้งหนี้</Typography>
+                        )}
+                      </TableCell>
+                      {/* ใบกำกับภาษี / วันที่ */}
+                      <TableCell onClick={(e) => { e.stopPropagation(); router.push('/apps/tax-invoices'); }}
+                        sx={{ cursor: 'pointer', '&:hover': { bgcolor: '#FFFBEB' }, borderRadius: '6px', transition: 'background 0.15s' }}>
+                        {wo.invoices?.[0]?.taxInvoice ? (
+                          <>
+                            <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#D97706' }}>{wo.invoices[0].taxInvoice.taxInvoiceNumber}</Typography>
+                            <Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>{fmtDate(wo.invoices[0].taxInvoice.date)}</Typography>
+                          </>
+                        ) : (
+                          <Typography sx={{ fontSize: '12px', color: '#CBD5E1', fontWeight: 400 }}>+ สร้างใบกำกับ</Typography>
+                        )}
                       </TableCell>
                       {/* สถานะ */}
                       <TableCell align="center" onClick={(e) => e.stopPropagation()}>
@@ -677,6 +753,39 @@ function WorkOrdersPage() {
           <Button onClick={handleCancelConfirm} variant="contained" disabled={actionLoading}
             sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700, bgcolor: '#EF4444', '&:hover': { bgcolor: '#DC2626' } }}>
             {actionLoading ? 'กำลังดำเนินการ...' : 'ยืนยันยกเลิก'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ========== PO Quick-Edit Dialog ========== */}
+      <Dialog open={poDialogOpen} onClose={() => setPoDialogOpen(false)} maxWidth="xs" fullWidth
+        PaperProps={{ sx: { borderRadius: '16px' } }}>
+        <DialogTitle sx={{ fontSize: '18px', fontWeight: 700, color: '#1E293B', display: 'flex', alignItems: 'center', gap: 1, pb: 1 }}>
+          <Box sx={{ width: 32, height: 32, borderRadius: '8px', background: 'linear-gradient(135deg, #7C3AED, #6D28D9)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <FuseSvgIcon size={18} sx={{ color: '#fff' }}>lucide:file-text</FuseSvgIcon>
+          </Box>
+          {poDialogWO?.poNumber ? 'แก้ไข PO' : 'เพิ่ม PO'} — {poDialogWO?.woNumber}
+        </DialogTitle>
+        <Divider />
+        <DialogContent sx={{ pt: '20px!important' }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <TextField label="เลข PO" value={poForm.poNumber}
+              onChange={(e) => setPoForm({ ...poForm, poNumber: e.target.value })}
+              fullWidth size="medium" autoFocus
+              sx={{ '& .MuiOutlinedInput-root': { borderRadius: '10px' } }} />
+            <DatePickerField label="วันที่ PO" value={poForm.poDate}
+              onChange={(v) => setPoForm({ ...poForm, poDate: v })} />
+          </Box>
+        </DialogContent>
+        <Divider />
+        <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
+          <Button onClick={() => setPoDialogOpen(false)} variant="outlined"
+            sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, color: '#64748B', borderColor: '#E2E8F0' }}>
+            ยกเลิก
+          </Button>
+          <Button onClick={handlePoSave} variant="contained" disabled={poSaving}
+            sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700, background: 'linear-gradient(135deg, #7C3AED, #6D28D9)', '&:hover': { background: 'linear-gradient(135deg, #6D28D9, #5B21B6)' } }}>
+            {poSaving ? 'กำลังบันทึก...' : 'บันทึก PO'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -901,6 +1010,11 @@ function WorkOrdersPage() {
         </DialogTitle>
         <Divider />
         <DialogContent>
+          {createError && (
+            <Alert severity="error" sx={{ mb: 2, mt: 1, borderRadius: '10px' }} onClose={() => setCreateError('')}>
+              {createError}
+            </Alert>
+          )}
           <div className="space-y-8 mt-8">
             {/* Row 1: WO Number + Date | PO Number + Date */}
             <div className="grid grid-cols-2 gap-8">
@@ -1028,21 +1142,23 @@ function WorkOrdersPage() {
           </Button>
         </DialogActions>
       </Dialog>
+    </Paper>
+  );
 
-      {/* Snackbar */}
+  return (
+    <>
+      <Root header={header} content={content} />
       <Snackbar open={snackbar.open} autoHideDuration={4000}
         onClose={() => setSnackbar(p => ({ ...p, open: false }))}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
         <Alert severity={snackbar.severity} variant="filled"
           onClose={() => setSnackbar(p => ({ ...p, open: false }))}
           sx={{ borderRadius: '10px', fontSize: '14px', fontWeight: 500 }}>
           {snackbar.message}
         </Alert>
       </Snackbar>
-    </Paper>
+    </>
   );
-
-  return <Root header={header} content={content} />;
 }
 
 export default WorkOrdersPage;
