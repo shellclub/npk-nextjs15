@@ -6,6 +6,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const yearBE = parseInt(searchParams.get('year') || '0', 10);
+    const monthParam = searchParams.get('month');
     const teamId = searchParams.get('teamId');
     const teamName = searchParams.get('teamName');
     const statusFilter = searchParams.get('status'); // comma-separated status codes
@@ -32,14 +33,56 @@ export async function GET(request: NextRequest) {
       where,
       include: {
         quotation: {
-          select: { subtotal: true, totalAmount: true },
+          select: { subtotal: true, totalAmount: true, projectName: true, quotationNumber: true },
         },
         purchaseOrders: {
           select: { totalAmount: true },
         },
         team: { select: { teamName: true } },
       },
+      orderBy: { date: 'asc' },
     });
+
+    // Monthly drill-down: return WO list for a specific month
+    if (monthParam) {
+      const monthNum = parseInt(monthParam, 10);
+      const monthWOs = workOrders
+        .filter(wo => new Date(wo.date).getMonth() + 1 === monthNum)
+        .map(wo => {
+          const qSubtotal = wo.quotation ? Number(wo.quotation.subtotal || wo.quotation.totalAmount || 0) : Number(wo.totalAmount);
+          const poCost = wo.purchaseOrders.reduce((sum, po) => sum + Number(po.totalAmount), 0);
+          return {
+            id: wo.id,
+            woNumber: wo.woNumber,
+            date: wo.date,
+            status: wo.status,
+            projectName: wo.quotation?.projectName || wo.description || '-',
+            quotationNumber: wo.quotation?.quotationNumber || '-',
+            teamName: wo.team?.teamName || '-',
+            quotationTotal: qSubtotal,
+            actualCost: poCost,
+            actualRevenue: qSubtotal - poCost,
+          };
+        });
+
+      const monthSummary = monthWOs.reduce(
+        (acc, wo) => ({
+          quotationTotal: acc.quotationTotal + wo.quotationTotal,
+          actualCost: acc.actualCost + wo.actualCost,
+          actualRevenue: acc.actualRevenue + wo.actualRevenue,
+          woCount: acc.woCount + 1,
+        }),
+        { quotationTotal: 0, actualCost: 0, actualRevenue: 0, woCount: 0 }
+      );
+
+      return NextResponse.json({
+        year: yearBE > 2500 ? yearBE : yearCE + 543,
+        yearCE,
+        month: monthNum,
+        workOrders: monthWOs,
+        summary: monthSummary,
+      });
+    }
 
     // Aggregate by month (1-12)
     const monthlyData = Array.from({ length: 12 }, (_, i) => ({

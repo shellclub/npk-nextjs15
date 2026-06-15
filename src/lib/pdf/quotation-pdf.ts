@@ -172,10 +172,14 @@ export function generateQuotationPDF(data: QuotationPDFData): jsPDF {
   doc.setFontSize(12);
 
   const leftCol = marginL;
-  const rightLabelX = pageW - marginR - 60;
-  const rightValueX = pageW - marginR - 30;
+  const rightEdgeX = pageW - marginR;
+  const rightLabelX = rightEdgeX - 55;
   const leftLabelW = 24;
   const leftValueX = leftCol + leftLabelW + 2;
+
+  const drawRightValue = (text: string, yPos: number) => {
+    doc.text(text, rightEdgeX, yPos, { align: 'right' });
+  };
 
   // Row 1: ชื่อลูกค้า / เลขที่
   doc.setFont('THSarabunNew', 'bold');
@@ -185,7 +189,7 @@ export function generateQuotationPDF(data: QuotationPDFData): jsPDF {
   doc.setFont('THSarabunNew', 'bold');
   doc.text('เลขที่', rightLabelX, y);
   doc.setFont('THSarabunNew', 'normal');
-  doc.text(displayQN, rightValueX, y);
+  drawRightValue(displayQN, y);
   y += 5.5;
 
   // Row 2: สาขา / วันที่
@@ -199,7 +203,7 @@ export function generateQuotationPDF(data: QuotationPDFData): jsPDF {
   doc.setFont('THSarabunNew', 'bold');
   doc.text('วันที่', rightLabelX, y);
   doc.setFont('THSarabunNew', 'normal');
-  doc.text(thaiDate(data.date), rightValueX, y);
+  drawRightValue(thaiDate(data.date), y);
   y += 5.5;
 
   // Row 3: ที่อยู่ / ชื่อผู้ติดต่อ
@@ -212,7 +216,7 @@ export function generateQuotationPDF(data: QuotationPDFData): jsPDF {
   doc.setFont('THSarabunNew', 'bold');
   doc.text('ชื่อผู้ติดต่อ', rightLabelX, y);
   doc.setFont('THSarabunNew', 'normal');
-  doc.text(data.contactName || '-', rightValueX, y);
+  drawRightValue(data.contactName || '-', y);
   y += 5.5;
 
   // Row 4: ยืนยันราคา / เบอร์โทร
@@ -223,32 +227,15 @@ export function generateQuotationPDF(data: QuotationPDFData): jsPDF {
   doc.setFont('THSarabunNew', 'bold');
   doc.text('เบอร์โทร :', rightLabelX, y);
   doc.setFont('THSarabunNew', 'normal');
-  doc.text(data.contactPhone || '-', rightValueX, y);
+  drawRightValue(data.contactPhone || '-', y);
   y += 5.5;
 
-  // Row 5: ชื่อโครงการ / WO (if exists)
-  const woNumbers = (data.workOrders || []).map(w => w.woNumber).filter(Boolean);
-  const poNumbers = (data.workOrders || []).map(w => w.poNumber).filter(Boolean) as string[];
+  // Row 5: ชื่อโครงการ (ใบเสนอราคา — ยังไม่มี W/O, P/O)
   doc.setFont('THSarabunNew', 'bold');
   doc.text('ชื่อโครงการ :', leftCol, y);
   doc.setFont('THSarabunNew', 'normal');
   doc.text(data.projectName || '-', leftValueX + 5, y);
-  if (woNumbers.length > 0) {
-    doc.setFont('THSarabunNew', 'bold');
-    doc.text('W/O :', rightLabelX, y);
-    doc.setFont('THSarabunNew', 'normal');
-    doc.text(woNumbers.join(', '), rightValueX, y);
-  }
   y += 5.5;
-
-  // Row 6: P/O (if exists)
-  if (poNumbers.length > 0) {
-    doc.setFont('THSarabunNew', 'bold');
-    doc.text('P/O :', rightLabelX, y);
-    doc.setFont('THSarabunNew', 'normal');
-    doc.text(poNumbers.join(', '), rightValueX, y);
-    y += 5.5;
-  }
 
   // Row 5: บริษัทฯ มีความยินดีใคร่ขอเสนอราคา...
   doc.setFont('THSarabunNew', 'normal');

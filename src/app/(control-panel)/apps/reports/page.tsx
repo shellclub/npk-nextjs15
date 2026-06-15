@@ -1,5 +1,6 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { styled } from '@mui/material/styles';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
@@ -39,6 +40,18 @@ type ReportData = {
   vat7: { quotationTotal: number; actualCost: number; actualRevenue: number };
 };
 
+type MonthWO = {
+  id: string; woNumber: string; date: string; status: string;
+  projectName: string; quotationNumber: string; teamName: string;
+  quotationTotal: number; actualCost: number; actualRevenue: number;
+};
+
+type MonthDetailData = {
+  year: number; month: number;
+  workOrders: MonthWO[];
+  summary: { quotationTotal: number; actualCost: number; actualRevenue: number; woCount: number };
+};
+
 type Team = { id: string; teamName: string; leaderName: string };
 
 const monthNames = [
@@ -52,12 +65,15 @@ function fmt(n: number) {
 }
 
 function ReportsPage() {
+  const router = useRouter();
   const currentYear = new Date().getFullYear() + 543;
   const [yearFilter, setYearFilter] = useState(currentYear);
   const [teamFilter, setTeamFilter] = useState('');
   const [teams, setTeams] = useState<Team[]>([]);
   const [reportData, setReportData] = useState<ReportData | null>(null);
+  const [monthDetail, setMonthDetail] = useState<MonthDetailData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [monthLoading, setMonthLoading] = useState(false);
   const [viewMode, setViewMode] = useState<'yearly' | 'monthly'>('yearly');
   const [selectedMonth, setSelectedMonth] = useState(0);
 
@@ -82,14 +98,27 @@ function ReportsPage() {
 
   useEffect(() => { loadReport(); }, [loadReport]);
 
+  const loadMonthDetail = useCallback(async (month: number) => {
+    setMonthLoading(true);
+    try {
+      const p = new URLSearchParams({ year: String(yearFilter), month: String(month) });
+      if (teamFilter) p.set('teamId', teamFilter);
+      const res = await fetch(`/api/reports/monthly-summary?${p}`);
+      const d = await res.json();
+      setMonthDetail(d.workOrders ? d : null);
+    } catch { setMonthDetail(null); } finally { setMonthLoading(false); }
+  }, [yearFilter, teamFilter]);
+
   const handleMonthClick = (month: number) => {
     setSelectedMonth(month);
     setViewMode('monthly');
+    loadMonthDetail(month);
   };
 
   const handleBackToYear = () => {
     setViewMode('yearly');
     setSelectedMonth(0);
+    setMonthDetail(null);
   };
 
   // ===== HEADER =====
@@ -146,6 +175,10 @@ function ReportsPage() {
           </Select>
         </FormControl>
 
+        {viewMode === 'monthly' && selectedMonth > 0 && (
+          <Chip label={`${monthNames[selectedMonth - 1]} พ.ศ. ${yearFilter}`} size="small"
+            sx={{ bgcolor: '#DBEAFE', color: '#2563EB', fontWeight: 700 }} />
+        )}
         {viewMode === 'monthly' && (
           <Button variant="text" startIcon={<FuseSvgIcon size={16}>lucide:arrow-left</FuseSvgIcon>}
             onClick={handleBackToYear}
@@ -167,6 +200,66 @@ function ReportsPage() {
           <FuseSvgIcon sx={{ color: '#CBD5E1', mb: 2 }} size={64}>lucide:bar-chart-3</FuseSvgIcon>
           <Typography sx={{ fontSize: '18px', fontWeight: 600, color: '#64748B' }}>ไม่สามารถโหลดข้อมูลได้</Typography>
         </Box>
+      ) : viewMode === 'monthly' && selectedMonth > 0 ? (
+        monthLoading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress sx={{ color: '#38BDF8' }} /></Box>
+        ) : !monthDetail ? (
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 10 }}>
+            <Typography sx={{ fontSize: '18px', fontWeight: 600, color: '#64748B' }}>ไม่พบข้อมูลเดือนนี้</Typography>
+          </Box>
+        ) : (
+          <>
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 2, px: 3, py: 2 }}>
+              <Box sx={{ bgcolor: '#EFF6FF', borderRadius: '12px', p: 2, border: '1px solid #BFDBFE' }}>
+                <Typography sx={{ fontSize: '12px', color: '#3B82F6', fontWeight: 600, mb: 0.5 }}>จำนวน WO</Typography>
+                <Typography sx={{ fontSize: '28px', fontWeight: 800, color: '#1E40AF' }}>{monthDetail.summary.woCount}</Typography>
+              </Box>
+              <Box sx={{ bgcolor: '#FFF7ED', borderRadius: '12px', p: 2, border: '1px solid #FED7AA' }}>
+                <Typography sx={{ fontSize: '12px', color: '#EA580C', fontWeight: 600, mb: 0.5 }}>ยอดเสนอราคา</Typography>
+                <Typography sx={{ fontSize: '22px', fontWeight: 800, color: '#C2410C' }}>{fmt(monthDetail.summary.quotationTotal)}</Typography>
+              </Box>
+              <Box sx={{ bgcolor: '#FEF2F2', borderRadius: '12px', p: 2, border: '1px solid #FECACA' }}>
+                <Typography sx={{ fontSize: '12px', color: '#DC2626', fontWeight: 600, mb: 0.5 }}>ต้นทุนรวม</Typography>
+                <Typography sx={{ fontSize: '22px', fontWeight: 800, color: '#B91C1C' }}>{fmt(monthDetail.summary.actualCost)}</Typography>
+              </Box>
+              <Box sx={{ bgcolor: '#F0FDF4', borderRadius: '12px', p: 2, border: '1px solid #BBF7D0' }}>
+                <Typography sx={{ fontSize: '12px', color: '#16A34A', fontWeight: 600, mb: 0.5 }}>กำไรสุทธิ</Typography>
+                <Typography sx={{ fontSize: '22px', fontWeight: 800, color: monthDetail.summary.actualRevenue >= 0 ? '#15803D' : '#DC2626' }}>
+                  {fmt(monthDetail.summary.actualRevenue)}
+                </Typography>
+              </Box>
+            </Box>
+            <TableContainer sx={{ flex: 1 }}>
+              <Table stickyHeader>
+                <TableHead>
+                  <TableRow sx={{ '& th': { fontSize: '14px', fontWeight: 700, color: '#475569', borderBottom: '2px solid #E2E8F0', py: 1.5, bgcolor: '#F8FAFC' } }}>
+                    <TableCell>เลข WO</TableCell>
+                    <TableCell>วันที่</TableCell>
+                    <TableCell>โครงการ</TableCell>
+                    <TableCell>ทีมช่าง</TableCell>
+                    <TableCell align="right">เสนอราคา</TableCell>
+                    <TableCell align="right">ต้นทุน</TableCell>
+                    <TableCell align="right">กำไร</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {monthDetail.workOrders.map(wo => (
+                    <TableRow key={wo.id} hover onClick={() => router.push(`/apps/work-orders/${wo.id}`)}
+                      sx={{ cursor: 'pointer', '&:hover': { bgcolor: '#F0F9FF' }, '& td': { fontSize: '14px', py: 1.5, borderBottom: '1px solid #F1F5F9' } }}>
+                      <TableCell sx={{ fontWeight: 700, color: '#0284C7' }}>{wo.woNumber}</TableCell>
+                      <TableCell>{new Date(wo.date).toLocaleDateString('th-TH')}</TableCell>
+                      <TableCell>{wo.projectName}</TableCell>
+                      <TableCell>{wo.teamName}</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 600, color: '#C2410C', fontVariantNumeric: 'tabular-nums' }}>{fmt(wo.quotationTotal)}</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 600, color: '#DC2626', fontVariantNumeric: 'tabular-nums' }}>{fmt(wo.actualCost)}</TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700, color: wo.actualRevenue >= 0 ? '#15803D' : '#DC2626', fontVariantNumeric: 'tabular-nums' }}>{fmt(wo.actualRevenue)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </>
+        )
       ) : (
         <>
           {/* Summary Cards */}

@@ -73,6 +73,9 @@ export default function PurchaseOrderPrintPage() {
     }).catch(() => {});
   }, [id]);
 
+  // Note: Printing is triggered from the parent page toolbar button
+  // which calls iframe.contentWindow.print()
+
   if (!po) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', fontFamily: 'Sarabun, sans-serif' }}>
@@ -145,26 +148,16 @@ export default function PurchaseOrderPrintPage() {
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap');
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 0; background: #E8EDF2; }
         @media print {
-          body { margin: 0; padding: 0; }
-          .no-print { display: none !important; }
-          .page { box-shadow: none !important; margin: 0 !important; padding: 10mm 12mm !important; }
+          body { margin: 0; padding: 0; background: #fff; }
+          .page { box-shadow: none !important; margin: 0 !important; padding: 10mm 12mm !important; border-radius: 0 !important; }
         }
       `}</style>
 
-      <div className="no-print" style={{ position: 'fixed', top: 16, right: 16, zIndex: 999, display: 'flex', gap: 8 }}>
-        <button onClick={() => window.print()}
-          style={{ padding: '10px 24px', background: 'linear-gradient(135deg, #22C55E, #16A34A)', color: '#fff', border: 'none', borderRadius: 10, fontSize: 15, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 14px rgba(34,197,94,0.3)' }}>
-          🖨️ พิมพ์
-        </button>
-        <button onClick={() => window.history.back()}
-          style={{ padding: '10px 20px', background: '#F1F5F9', color: '#475569', border: '1px solid #E2E8F0', borderRadius: 10, fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>
-          ← กลับ
-        </button>
-      </div>
-
-      <div style={{ fontFamily: "'Sarabun', sans-serif", background: '#E8EDF2', minHeight: '100vh', padding: 20 }}>
-        <div className="page" style={{ width: '210mm', minHeight: '297mm', margin: '0 auto', background: '#fff', padding: '12mm 15mm', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ fontFamily: "'Sarabun', sans-serif", background: '#E8EDF2', minHeight: '100vh', padding: '20px' }}>
+        <div className="page" style={{ width: '210mm', minHeight: '297mm', margin: '0 auto', background: '#fff', padding: '12mm 15mm', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', display: 'flex', flexDirection: 'column', borderRadius: 4 }}>
 
           {/* Company Header */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, borderBottom: '2px solid #1565C0', paddingBottom: 8, marginBottom: 8 }}>

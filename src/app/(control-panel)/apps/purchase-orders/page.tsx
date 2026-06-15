@@ -79,6 +79,11 @@ function PurchaseOrdersPage() {
 	const [cancelTarget, setCancelTarget] = useState<PO | null>(null);
 	const [actionLoading, setActionLoading] = useState(false);
 
+	// Print preview dialog
+	const [printOpen, setPrintOpen] = useState(false);
+	const [printPOId, setPrintPOId] = useState('');
+	const [printPONumber, setPrintPONumber] = useState('');
+
 	// Snackbar
 	const alert = useAlert();
 
@@ -374,7 +379,7 @@ function PurchaseOrdersPage() {
 					<ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#0284C7' }}>lucide:eye</FuseSvgIcon></ListItemIcon>
 					<ListItemText>ดูรายละเอียด</ListItemText>
 				</MenuItem>
-				<MenuItem onClick={() => { handleMenuClose(); if (menuPO) router.push(`/apps/purchase-orders/${menuPO.id}/print`); }} sx={{ py: 1.2, gap: 1.5 }}>
+				<MenuItem onClick={() => { if (menuPO) { setPrintPOId(menuPO.id); setPrintPONumber(menuPO.poNumber); setPrintOpen(true); } handleMenuClose(); }} sx={{ py: 1.2, gap: 1.5 }}>
 					<ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#8B5CF6' }}>lucide:printer</FuseSvgIcon></ListItemIcon>
 					<ListItemText>พิมพ์</ListItemText>
 				</MenuItem>
@@ -429,7 +434,76 @@ function PurchaseOrdersPage() {
 		</Paper>
 	);
 
-	return <Root header={header} content={content} scroll="content" />;
+	return (
+		<>
+			<Root header={header} content={content} scroll="content" />
+
+			{/* ══ Print Preview Dialog — เหมือนใบเสนอราคา ══ */}
+			<Dialog
+				open={printOpen}
+				onClose={() => setPrintOpen(false)}
+				maxWidth={false}
+				fullWidth
+				PaperProps={{
+					sx: {
+						borderRadius: '16px',
+						width: '90vw',
+						maxWidth: '1100px',
+						height: '90vh',
+						display: 'flex',
+						flexDirection: 'column',
+						overflow: 'hidden',
+					},
+				}}
+			>
+				{/* Top Bar */}
+				<Box sx={{
+					display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+					px: 3, py: 1.5,
+					borderBottom: '1px solid', borderColor: 'divider',
+					bgcolor: '#F8FAFC', flexShrink: 0,
+				}}>
+					<Typography sx={{ fontSize: '16px', fontWeight: 700, color: '#1565C0' }}>
+						{printPONumber}
+					</Typography>
+					<Box sx={{ display: 'flex', gap: 1 }}>
+						<Button
+							variant="outlined"
+							onClick={() => setPrintOpen(false)}
+							sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, borderColor: '#E2E8F0', color: '#64748B', '&:hover': { borderColor: '#CBD5E1', bgcolor: '#F1F5F9' } }}
+						>
+							ปิดหน้าต่าง
+						</Button>
+						<Button
+							variant="contained"
+							startIcon={<FuseSvgIcon size={18}>lucide:printer</FuseSvgIcon>}
+							onClick={() => {
+								const iframe = document.getElementById('po-list-print-iframe') as HTMLIFrameElement;
+								iframe?.contentWindow?.print();
+							}}
+							sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, background: 'linear-gradient(135deg,#0284C7,#0369A1)', '&:hover': { background: 'linear-gradient(135deg,#0369A1,#075985)' } }}
+						>
+							พิมพ์
+						</Button>
+					</Box>
+				</Box>
+
+				{/* iframe Preview */}
+				<Box sx={{ flex: 1, bgcolor: '#E2E8F0', overflow: 'hidden', display: 'flex' }}>
+					<iframe
+						id="po-list-print-iframe"
+						src={printOpen && printPOId ? `/api/purchase-orders/${printPOId}/pdf` : 'about:blank'}
+						style={{
+							flex: 1, border: 'none', background: '#fff',
+							margin: '16px auto', maxWidth: '800px',
+							boxShadow: '0 4px 20px rgba(0,0,0,0.15)', borderRadius: '4px',
+						}}
+						title="Print Preview"
+					/>
+				</Box>
+			</Dialog>
+		</>
+	);
 }
 
 export default PurchaseOrdersPage;

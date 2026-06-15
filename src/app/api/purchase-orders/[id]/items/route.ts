@@ -1,6 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
+/** คัดลอกรายการจากใบเสนอราคา → PO (รวมราคา แก้ไขได้จนกว่าจะล็อค) */
+function mapQuotationItemsToPO(
+  purchaseOrderId: string,
+  quotationItems: Array<{
+    itemOrder: number;
+    itemType: string;
+    parentIndex: number | null;
+    description: string;
+    unit: string;
+    quantity: unknown;
+    materialPrice: unknown;
+    labourPrice: unknown;
+  }>
+) {
+  return quotationItems.map((qi) => {
+    const qty = Number(qi.quantity) || 0;
+    const matP = Number(qi.materialPrice) || 0;
+    const labP = Number(qi.labourPrice) || 0;
+    const totalMat = qty * matP;
+    const totalLab = qty * labP;
+    return {
+      purchaseOrderId,
+      itemOrder: qi.itemOrder,
+      itemType: qi.itemType,
+      parentIndex: qi.parentIndex,
+      description: qi.description,
+      unit: qi.unit,
+      quantity: qty,
+      materialPrice: matP,
+      labourPrice: labP,
+      totalMaterial: totalMat,
+      totalLabour: totalLab,
+      amount: totalMat + totalLab,
+      isLocked: false,
+      isAdjustment: false,
+    };
+  });
+}
+
 // GET — ดึงรายการ items ของ PO + ข้อมูลใบเสนอราคาอ้างอิง
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -37,7 +76,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (body.action === 'import-from-quotation') {
       const po = await prisma.purchaseOrder.findUnique({
         where: { id },
-        include: { quotation: { include: { items: { orderBy: { itemOrder: 'asc' } } } } },
+        include: {
+          quotation: {
+            include: { items: { orderBy: { itemOrder: 'asc' } } },
+          },
+        },
       });
       if (!po?.quotation) return NextResponse.json({ error: 'No quotation reference' }, { status: 400 });
 
@@ -54,25 +97,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         });
       }
 
-      // Copy quotation items but with empty prices
-      const newItems = po.quotation.items.map((qi) => ({
-        purchaseOrderId: id,
-        itemOrder: qi.itemOrder,
-        itemType: qi.itemType,
-        parentIndex: qi.parentIndex,
-        description: qi.description,
-        unit: qi.unit,
-        quantity: qi.quantity,
-        materialPrice: 0,
-        labourPrice: 0,
-        totalMaterial: 0,
-        totalLabour: 0,
-        amount: 0,
-        isLocked: false,
-        isAdjustment: false,
-      }));
+      const newItems = mapQuotationItemsToPO(id, po.quotation.items);
 
       await prisma.purchaseOrderItem.createMany({ data: newItems });
+
+      // คัดลอกส่วนลด/VAT จากใบเสนอราคา แล้วคำนวณยอดรวม
+      await prisma.purchaseOrder.update({
+        where: { id },
+        data: {
+          discountPercent: Number(po.quotation.discountPercent) || 0,
+          vatPercent: Number(po.quotation.vatPercent) ?? 0,
+        },
+      });
+      await recalcPOTotals(id);
+
       const items = await prisma.purchaseOrderItem.findMany({
         where: { purchaseOrderId: id },
         orderBy: { itemOrder: 'asc' },

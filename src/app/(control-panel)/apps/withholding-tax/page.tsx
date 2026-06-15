@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import Typography from '@mui/material/Typography';
 import Paper from '@mui/material/Paper';
 import Button from '@mui/material/Button';
@@ -22,8 +23,7 @@ import MenuItem from '@mui/material/MenuItem';
 import Menu from '@mui/material/Menu';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
-import Snackbar from '@mui/material/Snackbar';
-import Alert from '@mui/material/Alert';
+import Dialog from '@mui/material/Dialog';
 import FuseSvgIcon from '@fuse/core/FuseSvgIcon';
 import FusePageCarded from '@fuse/core/FusePageCarded';
 import { styled } from '@mui/material/styles';
@@ -41,19 +41,23 @@ function fmt(n: number | string) { return Number(n).toLocaleString('th-TH', { mi
 function fmtDate(d: string) { return new Date(d).toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
 
 function WithholdingTaxPage() {
+  const router = useRouter();
   const [data, setData] = useState<WithholdingTax[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
 
-  // Menu
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [menuItem, setMenuItem] = useState<WithholdingTax | null>(null);
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
+  const [printOpen, setPrintOpen] = useState(false);
+  const [printId, setPrintId] = useState('');
 
   const handleMenuOpen = (e: React.MouseEvent<HTMLElement>, item: WithholdingTax) => { e.stopPropagation(); setMenuAnchor(e.currentTarget); setMenuItem(item); };
   const handleMenuClose = () => { setMenuAnchor(null); setMenuItem(null); };
-  const handlePrint = () => { if (menuItem) setSnackbar({ open: true, message: `กำลังพิมพ์ 50 ทวิ ${menuItem.whtNumber}...`, severity: 'success' }); handleMenuClose(); };
+  const handlePrint = () => {
+    if (menuItem) { setPrintId(menuItem.id); setPrintOpen(true); }
+    handleMenuClose();
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -127,6 +131,7 @@ function WithholdingTaxPage() {
               <TableBody>
                 {data.map(wht => (
                   <TableRow key={wht.id} hover selected={selected.includes(wht.id)}
+                    onClick={() => router.push(`/apps/withholding-tax/${wht.id}`)}
                     sx={{ cursor: 'pointer', '&:hover': { bgcolor: '#FAF5FF' }, '& td': { fontSize: '15px', color: '#334155', py: 1.5, borderBottom: '1px solid #F1F5F9' } }}>
                     <TableCell padding="checkbox" sx={{ pl: 2 }}><Checkbox checked={selected.includes(wht.id)} onChange={() => toggleSelect(wht.id)} size="small" /></TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap', fontWeight: 500 }}>{fmtDate(wht.date)}</TableCell>
@@ -167,13 +172,25 @@ function WithholdingTaxPage() {
           <ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#7C3AED' }}>lucide:printer</FuseSvgIcon></ListItemIcon>
           <ListItemText>พิมพ์ 50 ทวิ</ListItemText>
         </MenuItem>
+        <MenuItem onClick={() => { if (menuItem) router.push(`/apps/withholding-tax/${menuItem.id}`); handleMenuClose(); }} sx={{ py: 1.2, gap: 1.5 }}>
+          <ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#64748B' }}>lucide:eye</FuseSvgIcon></ListItemIcon>
+          <ListItemText>ดูรายละเอียด</ListItemText>
+        </MenuItem>
       </Menu>
 
-      <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(p => ({ ...p, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
-        <Alert severity={snackbar.severity} variant="filled" onClose={() => setSnackbar(p => ({ ...p, open: false }))} sx={{ borderRadius: '10px', fontSize: '14px', fontWeight: 500 }}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      <Dialog open={printOpen} onClose={() => setPrintOpen(false)} maxWidth={false} fullWidth PaperProps={{ sx: { width: '90vw', maxWidth: 1100, height: '90vh', borderRadius: '16px', display: 'flex', flexDirection: 'column' } }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', px: 3, py: 1.5, borderBottom: '1px solid #E2E8F0' }}>
+          <Typography sx={{ fontWeight: 700, color: '#7C3AED' }}>พิมพ์ 50 ทวิ</Typography>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button onClick={() => setPrintOpen(false)} sx={{ textTransform: 'none' }}>ปิด</Button>
+            <Button variant="contained" onClick={() => { (document.getElementById('wht-list-print') as HTMLIFrameElement)?.contentWindow?.print(); }}
+              startIcon={<FuseSvgIcon size={18}>lucide:printer</FuseSvgIcon>} sx={{ textTransform: 'none', bgcolor: '#7C3AED' }}>พิมพ์</Button>
+          </Box>
+        </Box>
+        <Box sx={{ flex: 1, bgcolor: '#E2E8F0', display: 'flex' }}>
+          <iframe id="wht-list-print" src={printOpen && printId ? `/api/withholding-tax/${printId}/pdf` : 'about:blank'} style={{ flex: 1, border: 'none', margin: 16, maxWidth: 800, background: '#fff', borderRadius: 4 }} title="Print" />
+        </Box>
+      </Dialog>
     </Paper>
   );
 

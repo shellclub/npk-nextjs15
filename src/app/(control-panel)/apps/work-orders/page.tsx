@@ -136,6 +136,11 @@ function WorkOrdersPage() {
   const [poForm, setPoForm] = useState({ poNumber: '', poDate: '' });
   const [poSaving, setPoSaving] = useState(false);
 
+  // Print preview dialog (ใบตอบรับงาน)
+  const [printOpen, setPrintOpen] = useState(false);
+  const [printId, setPrintId] = useState('');
+  const [printNumber, setPrintNumber] = useState('');
+
   const openPoDialog = (wo: WorkOrder, e: React.MouseEvent) => {
     e.stopPropagation();
     setPoDialogWO(wo);
@@ -717,7 +722,7 @@ function WorkOrdersPage() {
         {menuWO && menuWO.status !== 'CANCELLED' && menuWO.status !== 'PAID' && (
           <>
             <Divider sx={{ my: 0.5 }} />
-            <MenuItem onClick={() => { window.open(`/api/work-orders/${menuWO.id}/pdf`, '_blank'); handleMenuClose(); }}
+            <MenuItem onClick={() => { if (menuWO) { setPrintId(menuWO.id); setPrintNumber(menuWO.woNumber || ''); setPrintOpen(true); } handleMenuClose(); }}
               sx={{ py: 1.2, gap: 1.5 }}>
               <ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#059669' }}>lucide:printer</FuseSvgIcon></ListItemIcon>
               <ListItemText>พิมพ์ใบตอบรับงาน</ListItemText>
@@ -1157,6 +1162,64 @@ function WorkOrdersPage() {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* ========== Print Preview Dialog (ใบตอบรับงาน) ========== */}
+      <Dialog
+        open={printOpen}
+        onClose={() => setPrintOpen(false)}
+        maxWidth={false}
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: '16px',
+            width: '90vw',
+            maxWidth: '1100px',
+            height: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          },
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 3, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', bgcolor: '#F8FAFC', flexShrink: 0 }}>
+          <Typography sx={{ fontSize: '16px', fontWeight: 700, color: '#059669' }}>
+            ใบตอบรับงาน — {printNumber}
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              variant="outlined"
+              onClick={() => setPrintOpen(false)}
+              sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, borderColor: '#E2E8F0', color: '#64748B', '&:hover': { borderColor: '#CBD5E1', bgcolor: '#F1F5F9' } }}
+            >
+              ปิดหน้าต่าง
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<FuseSvgIcon size={18}>lucide:printer</FuseSvgIcon>}
+              onClick={() => { const f = document.getElementById('wo-print-iframe') as HTMLIFrameElement; f?.contentWindow?.print(); }}
+              sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, background: 'linear-gradient(135deg, #059669, #047857)', '&:hover': { background: 'linear-gradient(135deg, #047857, #065f46)' } }}
+            >
+              พิมพ์
+            </Button>
+          </Box>
+        </Box>
+        <Box sx={{ flex: 1, bgcolor: '#E2E8F0', overflow: 'hidden', display: 'flex' }}>
+          <iframe
+            id="wo-print-iframe"
+            src={printOpen && printId ? `/api/work-orders/${printId}/pdf` : 'about:blank'}
+            style={{
+              flex: 1,
+              border: 'none',
+              background: '#fff',
+              margin: '16px auto',
+              maxWidth: '800px',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+              borderRadius: '4px',
+            }}
+            title="Print Preview"
+          />
+        </Box>
+      </Dialog>
     </>
   );
 }

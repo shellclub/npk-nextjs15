@@ -83,6 +83,9 @@ function PurchaseOrderDetailPage() {
 	const [adjLab, setAdjLab] = useState('');
 	const [adjIsNegative, setAdjIsNegative] = useState(false);
 
+	// Print preview dialog
+	const [printOpen, setPrintOpen] = useState(false);
+
 	const fetchPO = useCallback(async () => {
 		setLoading(true);
 		try {
@@ -118,7 +121,7 @@ function PurchaseOrderDetailPage() {
 			});
 			const data = await res.json();
 			if (data.success) {
-				alert.showSuccess('นำเข้าเรียบร้อย', 'รายการจากใบเสนอราคาถูกนำเข้าแล้ว');
+				alert.showSuccess('นำเข้าเรียบร้อย', 'คัดลอกรายการและราคาจากใบเสนอราคาแล้ว — แก้ไขราคาได้ก่อนกดบันทึก');
 				fetchPO();
 			} else if (data.alreadyImported && !replace) {
 				// Already has items — ask user to confirm re-import
@@ -371,7 +374,7 @@ function PurchaseOrderDetailPage() {
 						</Tooltip>
 					)}
 					<Button variant="outlined" size="medium"
-						onClick={() => router.push(`/apps/purchase-orders/${poId}/print`)}
+						onClick={() => setPrintOpen(true)}
 						startIcon={<FuseSvgIcon size={18}>lucide:printer</FuseSvgIcon>}
 						sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, borderColor: '#E2E8F0', color: '#475569' }}>
 						พิมพ์
@@ -419,11 +422,11 @@ function PurchaseOrderDetailPage() {
 				{!hasItems && po.quotationId && (
 					<Box sx={{ textAlign: 'center', py: 5, mb: 3, borderRadius: '12px', border: '2px dashed #CBD5E1', bgcolor: '#FAFBFD' }}>
 						<FuseSvgIcon size={48} sx={{ color: '#CBD5E1', mb: 1 }}>lucide:file-down</FuseSvgIcon>
-						<Typography sx={{ fontSize: '16px', color: '#64748B', mb: 2 }}>ยังไม่มีรายการ — นำเข้าจากใบเสนอราคาที่อ้างอิง</Typography>
+						<Typography sx={{ fontSize: '16px', color: '#64748B', mb: 2 }}>ยังไม่มีรายการ — คัดลอกรายการและราคาจากใบเสนอราคาที่อ้างอิง</Typography>
 						<Button variant="contained" size="large" onClick={handleImport} disabled={saving}
 							startIcon={<FuseSvgIcon size={20}>lucide:import</FuseSvgIcon>}
 							sx={{ borderRadius: '12px', textTransform: 'none', fontWeight: 700, px: 4, background: 'linear-gradient(135deg, #0EA5E9 0%, #0284C7 100%)' }}>
-							{saving ? 'กำลังนำเข้า...' : 'นำเข้ารายการจากใบเสนอราคา'}
+							{saving ? 'กำลังนำเข้า...' : 'คัดลอกจากใบเสนอราคา'}
 						</Button>
 					</Box>
 				)}
@@ -529,7 +532,99 @@ function PurchaseOrderDetailPage() {
 		</Paper>
 	);
 
-	return <Root header={header} content={content} scroll="content" />;
+	return (
+		<>
+			<Root header={header} content={content} scroll="content" />
+
+			{/* ══ Print Preview Dialog — เหมือนใบเสนอราคา ══ */}
+			<Dialog
+				open={printOpen}
+				onClose={() => setPrintOpen(false)}
+				maxWidth={false}
+				fullWidth
+				PaperProps={{
+					sx: {
+						borderRadius: '16px',
+						width: '90vw',
+						maxWidth: '1100px',
+						height: '90vh',
+						display: 'flex',
+						flexDirection: 'column',
+						overflow: 'hidden',
+					},
+				}}
+			>
+				{/* Top Bar */}
+				<Box sx={{
+					display: 'flex',
+					alignItems: 'center',
+					justifyContent: 'space-between',
+					px: 3,
+					py: 1.5,
+					borderBottom: '1px solid',
+					borderColor: 'divider',
+					bgcolor: '#F8FAFC',
+					flexShrink: 0,
+				}}>
+					<Typography sx={{ fontSize: '16px', fontWeight: 700, color: '#1565C0' }}>
+						{po?.poNumber}
+					</Typography>
+					<Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+						<Button
+							variant="outlined"
+							onClick={() => setPrintOpen(false)}
+							sx={{
+								borderRadius: '10px',
+								textTransform: 'none',
+								fontWeight: 600,
+								borderColor: '#E2E8F0',
+								color: '#64748B',
+								'&:hover': { borderColor: '#CBD5E1', bgcolor: '#F1F5F9' },
+							}}
+						>
+							ปิดหน้าต่าง
+						</Button>
+						<Button
+							variant="contained"
+							startIcon={<FuseSvgIcon size={18}>lucide:printer</FuseSvgIcon>}
+							onClick={() => {
+								const iframe = document.getElementById('po-print-iframe') as HTMLIFrameElement;
+								iframe?.contentWindow?.print();
+							}}
+							sx={{
+								borderRadius: '10px',
+								textTransform: 'none',
+								fontWeight: 600,
+								background: 'linear-gradient(135deg,#0284C7,#0369A1)',
+								'&:hover': { background: 'linear-gradient(135deg,#0369A1,#075985)' },
+							}}
+						>
+							พิมพ์
+						</Button>
+					</Box>
+				</Box>
+
+				{/* iframe Preview */}
+				<Box sx={{ flex: 1, bgcolor: '#E2E8F0', overflow: 'hidden', display: 'flex' }}>
+					<iframe
+						id="po-print-iframe"
+						src={printOpen ? `/api/purchase-orders/${poId}/pdf` : 'about:blank'}
+						style={{
+							flex: 1,
+							border: 'none',
+							background: '#fff',
+							margin: '16px auto',
+							maxWidth: '800px',
+							boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+							borderRadius: '4px',
+						}}
+						title="Print Preview"
+					/>
+				</Box>
+			</Dialog>
+		</>
+	);
 }
 
 export default PurchaseOrderDetailPage;
+

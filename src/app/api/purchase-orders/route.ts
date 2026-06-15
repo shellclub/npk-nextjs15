@@ -134,6 +134,35 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // ถ้ามีใบเสนอราคาแต่ไม่ส่งรายการมา → คัดลอกรายการ+ราคาจากใบเสนอราคาอัตโนมัติ
+    if ((!body.items || body.items.length === 0) && body.quotationId) {
+      const quotation = await prisma.quotation.findUnique({
+        where: { id: body.quotationId },
+        include: { items: { orderBy: { itemOrder: 'asc' } } },
+      });
+      if (quotation?.items.length) {
+        body.items = quotation.items.map((qi, idx) => ({
+          itemOrder: qi.itemOrder ?? idx,
+          itemType: qi.itemType,
+          parentIndex: qi.parentIndex,
+          description: qi.description,
+          unit: qi.unit,
+          quantity: Number(qi.quantity) || 0,
+          materialPrice: Number(qi.materialPrice) || 0,
+          labourPrice: Number(qi.labourPrice) || 0,
+        }));
+        if (body.discountPercent == null) body.discountPercent = Number(quotation.discountPercent) || 0;
+        if (body.vatPercent == null) body.vatPercent = Number(quotation.vatPercent) ?? 0;
+        await prisma.purchaseOrder.update({
+          where: { id: purchaseOrder.id },
+          data: {
+            discountPercent: body.discountPercent,
+            vatPercent: body.vatPercent,
+          },
+        });
+      }
+    }
+
     // Create PurchaseOrderItem rows if items provided
     if (body.items?.length > 0) {
       const itemRows = body.items.map((it: {

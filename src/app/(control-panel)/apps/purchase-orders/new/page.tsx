@@ -20,7 +20,8 @@ import Chip from '@mui/material/Chip';
 import Checkbox from '@mui/material/Checkbox';
 import Alert from '@mui/material/Alert';
 import Tooltip from '@mui/material/Tooltip';
-import Snackbar from '@mui/material/Snackbar';
+import Dialog from '@mui/material/Dialog';
+import Fade from '@mui/material/Fade';
 import FuseSvgIcon from '@fuse/core/FuseSvgIcon';
 import FusePageCarded from '@fuse/core/FusePageCarded';
 import { styled } from '@mui/material/styles';
@@ -77,8 +78,12 @@ function NewPurchaseOrderPage() {
 	const router = useRouter();
 	const [saving, setSaving] = useState(false);
 	const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'warning' }>({ open: false, message: '', severity: 'success' });
-	const showMsg = (message: string, severity: 'success' | 'error' | 'warning' = 'success') =>
+	const showMsg = (message: string, severity: 'success' | 'error' | 'warning' = 'success') => {
 		setSnackbar({ open: true, message, severity });
+		if (severity !== 'error') {
+			setTimeout(() => setSnackbar(p => ({ ...p, open: false })), 3000);
+		}
+	};
 
 	// Reference search
 	const [refSearch, setRefSearch] = useState('');
@@ -814,15 +819,76 @@ function NewPurchaseOrderPage() {
 	return (
 		<>
 			<Root header={header} content={content} scroll="content" />
-			<Snackbar open={snackbar.open} autoHideDuration={4000}
+
+			{/* SweetAlert-style modal — renders above all layout layers */}
+			<Dialog
+				open={snackbar.open}
 				onClose={() => setSnackbar(p => ({ ...p, open: false }))}
-				anchorOrigin={{ vertical: 'top', horizontal: 'center' }}>
-				<Alert severity={snackbar.severity} variant="filled"
-					onClose={() => setSnackbar(p => ({ ...p, open: false }))}
-					sx={{ borderRadius: '10px', fontSize: '14px', fontWeight: 500 }}>
+				TransitionComponent={Fade}
+				PaperProps={{
+					sx: {
+						borderRadius: '20px',
+						px: 4, py: 4,
+						minWidth: 320,
+						maxWidth: 420,
+						textAlign: 'center',
+						boxShadow: '0 25px 60px rgba(0,0,0,0.18)',
+					},
+				}}
+				slotProps={{ backdrop: { sx: { backdropFilter: 'blur(4px)', bgcolor: 'rgba(0,0,0,0.35)' } } }}
+			>
+				{/* Icon */}
+				<Box sx={{
+					width: 72, height: 72, borderRadius: '50%', mx: 'auto', mb: 2,
+					display: 'flex', alignItems: 'center', justifyContent: 'center',
+					bgcolor:
+						snackbar.severity === 'success' ? '#D1FAE5' :
+						snackbar.severity === 'error' ? '#FEE2E2' : '#FEF3C7',
+				}}>
+					<FuseSvgIcon size={36} sx={{
+						color:
+							snackbar.severity === 'success' ? '#059669' :
+							snackbar.severity === 'error' ? '#DC2626' : '#D97706',
+					}}>
+						{snackbar.severity === 'success' ? 'lucide:check-circle' :
+							snackbar.severity === 'error' ? 'lucide:x-circle' : 'lucide:alert-triangle'}
+					</FuseSvgIcon>
+				</Box>
+
+				{/* Title */}
+				<Typography sx={{
+					fontSize: '18px', fontWeight: 800, mb: 1,
+					color:
+						snackbar.severity === 'success' ? '#059669' :
+						snackbar.severity === 'error' ? '#DC2626' : '#D97706',
+				}}>
+					{snackbar.severity === 'success' ? 'สำเร็จ' :
+						snackbar.severity === 'error' ? 'เกิดข้อผิดพลาด' : 'แจ้งเตือน'}
+				</Typography>
+
+				{/* Message */}
+				<Typography sx={{ fontSize: '15px', color: '#475569', mb: 3, lineHeight: 1.6 }}>
 					{snackbar.message}
-				</Alert>
-			</Snackbar>
+				</Typography>
+
+				{/* OK Button */}
+				<Button
+					variant="contained"
+					fullWidth
+					onClick={() => setSnackbar(p => ({ ...p, open: false }))}
+					sx={{
+						borderRadius: '12px', textTransform: 'none', fontWeight: 700,
+						fontSize: '15px', py: 1.2,
+						background:
+							snackbar.severity === 'success' ? 'linear-gradient(135deg,#22C55E,#16A34A)' :
+							snackbar.severity === 'error' ? 'linear-gradient(135deg,#EF4444,#DC2626)' :
+							'linear-gradient(135deg,#F59E0B,#D97706)',
+						'&:hover': { opacity: 0.9 },
+					}}
+				>
+					ตกลง
+				</Button>
+			</Dialog>
 		</>
 	);
 }

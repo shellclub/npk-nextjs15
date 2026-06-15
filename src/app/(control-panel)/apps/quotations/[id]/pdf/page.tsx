@@ -39,7 +39,6 @@ export default function QuotationPDFPage() {
         customerGroup: data.customerGroup,
         branch: data.branch,
         createdBy: data.createdBy,
-        workOrders: data.workOrders || [],
         items: (data.items || []).map((item: any) => ({
           itemType: item.itemType,
           description: item.description,
