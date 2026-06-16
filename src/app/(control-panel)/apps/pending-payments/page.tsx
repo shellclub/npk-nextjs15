@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import Typography from '@mui/material/Typography';
 import Paper from '@mui/material/Paper';
 import Table from '@mui/material/Table';
@@ -20,8 +21,12 @@ import MenuItem from '@mui/material/MenuItem';
 import Menu from '@mui/material/Menu';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
-import Snackbar from '@mui/material/Snackbar';
-import Alert from '@mui/material/Alert';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Button from '@mui/material/Button';
+import Divider from '@mui/material/Divider';
 import FuseSvgIcon from '@fuse/core/FuseSvgIcon';
 import FusePageCarded from '@fuse/core/FusePageCarded';
 import { styled } from '@mui/material/styles';
@@ -34,23 +39,30 @@ type WorkOrder = {
   totalAmount: number; status: string;
   quotation?: { quotationNumber: string; projectName?: string | null; customerGroup: { groupName: string } } | null;
   team?: { teamName: string; leaderName: string } | null;
+  purchaseOrders?: { id: string; poNumber: string; totalAmount: number; status: string }[];
 };
 
 function fmt(n: number | string) { return Number(n).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 function fmtDate(d: string) { return new Date(d).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' }); }
 
+function getPayAmount(wo: WorkOrder) {
+  const poTotal = wo.purchaseOrders
+    ?.filter(p => p.status !== 'CANCELLED')
+    .reduce((s, p) => s + Number(p.totalAmount), 0) ?? 0;
+  return poTotal > 0 ? poTotal : Number(wo.totalAmount);
+}
+
 function PendingPaymentsPage() {
+  const router = useRouter();
   const [data, setData] = useState<WorkOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
 
-  // Menu
   const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
   const [menuWO, setMenuWO] = useState<WorkOrder | null>(null);
-
-  // Snackbar
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
+  const [payDialogOpen, setPayDialogOpen] = useState(false);
+  const [payTarget, setPayTarget] = useState<WorkOrder | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -73,20 +85,24 @@ function PendingPaymentsPage() {
   };
   const handleMenuClose = () => { setMenuAnchor(null); setMenuWO(null); };
 
-  const handleMarkPaid = async () => {
-    if (!menuWO) return;
-    setActionLoading(true);
+  const openPayDialog = (wo: WorkOrder) => {
+    setPayTarget(wo);
+    setPayDialogOpen(true);
     handleMenuClose();
+  };
+
+  const handleCreatePaymentVoucher = async () => {
+    if (!payTarget) return;
+    setActionLoading(true);
     try {
-      const res = await fetch(`/api/work-orders/${menuWO.id}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'PAID' }),
-      });
-      if (!res.ok) throw new Error('Failed');
-      setSnackbar({ open: true, message: `${menuWO.woNumber} → จ่ายแล้ว ✓`, severity: 'success' });
-      load();
-    } catch {
-      setSnackbar({ open: true, message: 'เกิดข้อผิดพลาด', severity: 'error' });
+      const res = await fetch(`/api/work-orders/${payTarget.id}/pay-contractor`, { method: 'POST' });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Failed');
+      setPayDialogOpen(false);
+      setPayTarget(null);
+      router.push(`/apps/payment-vouchers/${result.paymentVoucher.id}`);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'เกิดข้อผิดพลาด');
     } finally { setActionLoading(false); }
   };
 
@@ -140,94 +156,123 @@ function PendingPaymentsPage() {
                   <TableCell sx={{ width: 50 }}>#</TableCell>
                   <TableCell>เลขที่ WO</TableCell>
                   <TableCell>วันที่</TableCell>
-                  <TableCell>อ้างอิง QT</TableCell>
                   <TableCell>ลูกค้า</TableCell>
                   <TableCell>ชื่อโครงการ/งาน</TableCell>
                   <TableCell>ทีมช่าง</TableCell>
-                  <TableCell align="right">ยอดรวม (บาท)</TableCell>
-                  <TableCell align="center">สถานะ</TableCell>
+                  <TableCell>PO</TableCell>
+                  <TableCell align="right">ยอดจ่ายช่าง (บาท)</TableCell>
                   <TableCell align="center" sx={{ width: 70 }}>จัดการ</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {data.map((wo, idx) => (
-                  <TableRow key={wo.id} hover
-                    sx={{
-                      cursor: 'pointer', '&:hover': { bgcolor: '#FFFBEB' },
-                      '& td': { fontSize: '14px', color: '#334155', py: 1.5, borderBottom: '1px solid #F1F5F9' },
-                    }}>
-                    <TableCell sx={{ color: '#94A3B8', fontWeight: 600 }}>{idx + 1}</TableCell>
-                    <TableCell>
-                      <Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#D97706' }}>{wo.woNumber}</Typography>
-                    </TableCell>
-                    <TableCell sx={{ whiteSpace: 'nowrap' }}>{fmtDate(wo.date)}</TableCell>
-                    <TableCell>
-                      {wo.quotation?.quotationNumber ? (
-                        <Chip label={wo.quotation.quotationNumber} size="small"
-                          sx={{ fontSize: '12px', height: 24, bgcolor: '#F0F9FF', color: '#0369A1', border: '1px solid #BAE6FD' }} />
-                      ) : '-'}
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 500 }}>{wo.quotation?.customerGroup?.groupName || '-'}</TableCell>
-                    <TableCell sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#D97706' }}>
-                        {wo.quotation?.projectName || wo.description || '-'}
-                      </Typography>
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 500 }}>{wo.team?.teamName || '-'}</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: '15px !important', color: '#D97706' }}>
-                      {fmt(wo.totalAmount)}
-                    </TableCell>
-                    <TableCell align="center">
-                      <Chip label="รอจ่าย" size="small" sx={{
-                        fontSize: '12px', fontWeight: 600,
-                        bgcolor: '#FEF3C7', color: '#D97706',
-                        border: '1px solid #FDE68A', borderRadius: '8px',
-                      }} />
-                    </TableCell>
-                    <TableCell align="center" onClick={(e) => e.stopPropagation()}>
-                      <Tooltip title="จัดการ" arrow>
-                        <IconButton size="small" onClick={(e) => handleMenuOpen(e, wo)} disabled={actionLoading}
-                          sx={{ color: '#64748B', borderRadius: '8px', '&:hover': { bgcolor: '#F1F5F9', color: '#D97706' } }}>
-                          <FuseSvgIcon size={20}>lucide:ellipsis-vertical</FuseSvgIcon>
-                        </IconButton>
-                      </Tooltip>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {data.map((wo, idx) => {
+                  const payAmt = getPayAmount(wo);
+                  const poCount = wo.purchaseOrders?.filter(p => p.status !== 'CANCELLED').length ?? 0;
+                  return (
+                    <TableRow key={wo.id} hover onClick={() => router.push(`/apps/work-orders/${wo.id}`)}
+                      sx={{
+                        cursor: 'pointer', '&:hover': { bgcolor: '#FFFBEB' },
+                        '& td': { fontSize: '14px', color: '#334155', py: 1.5, borderBottom: '1px solid #F1F5F9' },
+                      }}>
+                      <TableCell sx={{ color: '#94A3B8', fontWeight: 600 }}>{idx + 1}</TableCell>
+                      <TableCell>
+                        <Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#D97706' }}>{wo.woNumber}</Typography>
+                      </TableCell>
+                      <TableCell sx={{ whiteSpace: 'nowrap' }}>{fmtDate(wo.date)}</TableCell>
+                      <TableCell sx={{ fontWeight: 500 }}>{wo.quotation?.customerGroup?.groupName || '-'}</TableCell>
+                      <TableCell sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#D97706' }}>
+                          {wo.quotation?.projectName || wo.description || '-'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 500 }}>{wo.team?.teamName || '-'}</TableCell>
+                      <TableCell>
+                        {poCount > 0 ? (
+                          <Chip label={`${poCount} PO`} size="small" sx={{ height: 22, fontSize: '11px', bgcolor: '#F3E8FF', color: '#7C3AED' }} />
+                        ) : <Typography sx={{ fontSize: '12px', color: '#94A3B8' }}>ไม่มี PO</Typography>}
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: '15px !important', color: '#D97706' }}>
+                        {fmt(payAmt)}
+                      </TableCell>
+                      <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                        <Tooltip title="จัดการ" arrow>
+                          <IconButton size="small" onClick={(e) => handleMenuOpen(e, wo)} disabled={actionLoading}
+                            sx={{ color: '#64748B', borderRadius: '8px', '&:hover': { bgcolor: '#F1F5F9', color: '#D97706' } }}>
+                            <FuseSvgIcon size={20}>lucide:ellipsis-vertical</FuseSvgIcon>
+                          </IconButton>
+                        </Tooltip>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </TableContainer>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 3, py: 1.5, borderTop: '1px solid #E2E8F0', bgcolor: '#FFFBEB' }}>
             <Typography sx={{ fontSize: '14px', color: '#92400E' }}>
-              <FuseSvgIcon size={16} sx={{ mr: 0.5, verticalAlign: 'middle', color: '#D97706' }}>lucide:alert-circle</FuseSvgIcon>
-              {data.length} รายการรอจ่ายเงิน
+              <FuseSvgIcon size={16} sx={{ mr: 0.5, verticalAlign: 'middle', color: '#D97706' }}>lucide:info</FuseSvgIcon>
+              คลิกแถวเพื่อดูรายละเอียด • ออกใบสำคัญจ่ายจากยอด PO (หรือยอด WO ถ้าไม่มี PO)
             </Typography>
             <Typography sx={{ fontSize: '15px', fontWeight: 600, color: '#D97706' }}>
               ยอดรอจ่าย{' '}
               <Box component="span" sx={{ fontSize: '17px', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                {fmt(data.reduce((s, w) => s + Number(w.totalAmount), 0))}
+                {fmt(data.reduce((s, w) => s + getPayAmount(w), 0))}
               </Box>{' '}บาท
             </Typography>
           </Box>
         </>
       )}
 
-      {/* Action Menu */}
       <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={handleMenuClose}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        slotProps={{ paper: { sx: { borderRadius: '12px', minWidth: 200, boxShadow: '0 8px 30px rgba(0,0,0,0.12)', py: 0.5 } } }}>
-        <MenuItem onClick={handleMarkPaid} sx={{ py: 1.2, gap: 1.5 }}>
-          <ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#059669' }}>lucide:check-circle</FuseSvgIcon></ListItemIcon>
-          <ListItemText>จ่ายแล้ว</ListItemText>
+        slotProps={{ paper: { sx: { borderRadius: '12px', minWidth: 240, boxShadow: '0 8px 30px rgba(0,0,0,0.12)', py: 0.5 } } }}>
+        <MenuItem onClick={() => { if (menuWO) router.push(`/apps/work-orders/${menuWO.id}`); handleMenuClose(); }} sx={{ py: 1.2, gap: 1.5 }}>
+          <ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#0284C7' }}>lucide:eye</FuseSvgIcon></ListItemIcon>
+          <ListItemText>ดูรายละเอียด WO</ListItemText>
+        </MenuItem>
+        <Divider sx={{ my: 0.5 }} />
+        <MenuItem onClick={() => menuWO && openPayDialog(menuWO)} sx={{ py: 1.2, gap: 1.5 }}>
+          <ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#D97706' }}>lucide:banknote</FuseSvgIcon></ListItemIcon>
+          <ListItemText primary="ออกใบสำคัญจ่ายช่าง" secondary={menuWO ? `${fmt(getPayAmount(menuWO))} บาท` : ''} />
         </MenuItem>
       </Menu>
 
-      <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar(p => ({ ...p, open: false }))} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
-        <Alert severity={snackbar.severity} variant="filled" onClose={() => setSnackbar(p => ({ ...p, open: false }))} sx={{ borderRadius: '10px', fontSize: '14px', fontWeight: 500 }}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
+      <Dialog open={payDialogOpen} onClose={() => !actionLoading && setPayDialogOpen(false)} maxWidth="xs" fullWidth
+        PaperProps={{ sx: { borderRadius: '16px' } }}>
+        <DialogTitle sx={{ fontWeight: 700 }}>ออกใบสำคัญจ่ายช่าง</DialogTitle>
+        <DialogContent>
+          {payTarget && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, fontSize: '14px' }}>
+              <div>WO: <strong>{payTarget.woNumber}</strong></div>
+              <div>ผู้รับเงิน: <strong>{payTarget.team?.leaderName || payTarget.team?.teamName || '-'}</strong></div>
+              {payTarget.purchaseOrders && payTarget.purchaseOrders.filter(p => p.status !== 'CANCELLED').length > 0 && (
+                <Box sx={{ bgcolor: '#FAF5FF', p: 1.5, borderRadius: '8px', mt: 1 }}>
+                  <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#7C3AED', mb: 0.5 }}>อ้างอิง PO</Typography>
+                  {payTarget.purchaseOrders.filter(p => p.status !== 'CANCELLED').map(p => (
+                    <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>{p.poNumber}</span><span>{fmt(p.totalAmount)} บาท</span>
+                    </div>
+                  ))}
+                </Box>
+              )}
+              <Typography sx={{ fontSize: '20px', fontWeight: 800, color: '#D97706', textAlign: 'center', mt: 2 }}>
+                {fmt(getPayAmount(payTarget))} บาท
+              </Typography>
+              <Typography sx={{ fontSize: '12px', color: '#64748B', textAlign: 'center' }}>
+                ระบบจะสร้างใบสำคัญจ่ายและอัปเดตสถานะ WO เป็นจ่ายแล้ว
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setPayDialogOpen(false)} disabled={actionLoading} sx={{ textTransform: 'none' }}>ยกเลิก</Button>
+          <Button variant="contained" onClick={handleCreatePaymentVoucher} disabled={actionLoading}
+            sx={{ textTransform: 'none', bgcolor: '#D97706', '&:hover': { bgcolor: '#B45309' } }}>
+            {actionLoading ? 'กำลังสร้าง...' : 'ยืนยันออกใบสำคัญจ่าย'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Paper>
   );
 

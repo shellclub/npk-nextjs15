@@ -713,9 +713,9 @@ function WorkOrdersPage() {
           </MenuItem>
         )}
         {menuWO && menuWO.status === 'COMPLETED' && (
-          <MenuItem onClick={() => handleStatusUpdate('PAID', 'จ่ายแล้ว')} sx={{ py: 1.2, gap: 1.5 }}>
-            <ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#4F46E5' }}>lucide:banknote</FuseSvgIcon></ListItemIcon>
-            <ListItemText>จ่ายแล้ว</ListItemText>
+          <MenuItem onClick={() => { if (menuWO) router.push(`/apps/work-orders/${menuWO.id}`); handleMenuClose(); }} sx={{ py: 1.2, gap: 1.5 }}>
+            <ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#D97706' }}>lucide:banknote</FuseSvgIcon></ListItemIcon>
+            <ListItemText>ออกใบสำคัญจ่ายช่าง</ListItemText>
           </MenuItem>
         )}
 
@@ -726,6 +726,11 @@ function WorkOrdersPage() {
               sx={{ py: 1.2, gap: 1.5 }}>
               <ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#059669' }}>lucide:printer</FuseSvgIcon></ListItemIcon>
               <ListItemText>พิมพ์ใบตอบรับงาน</ListItemText>
+            </MenuItem>
+            <MenuItem onClick={() => { if (menuWO) window.open(`/api/work-orders/${menuWO.id}/delivery-note`, '_blank'); handleMenuClose(); }}
+              sx={{ py: 1.2, gap: 1.5 }}>
+              <ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#047857' }}>lucide:truck</FuseSvgIcon></ListItemIcon>
+              <ListItemText>ใบส่งมอบงาน</ListItemText>
             </MenuItem>
             <Divider sx={{ my: 0.5 }} />
             <MenuItem onClick={handleCancelClick} sx={{ py: 1.2, gap: 1.5, color: '#DC2626' }}>

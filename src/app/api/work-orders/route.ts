@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
         branch: true,
         team: { select: { teamName: true, leaderName: true } },
         createdBy: { select: { name: true } },
-        purchaseOrders: { select: { id: true, poNumber: true, totalAmount: true } },
+        purchaseOrders: { select: { id: true, poNumber: true, totalAmount: true, status: true } },
         invoices: {
           select: {
             id: true,

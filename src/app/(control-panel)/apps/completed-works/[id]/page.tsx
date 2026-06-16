@@ -197,6 +197,12 @@ function CompletedWorkDetailPage({ params }: { params: Promise<{ id: string }> }
           พิมพ์รูปภาพ
         </Button>
         <Button variant="outlined" size="small"
+          startIcon={<FuseSvgIcon size={16}>lucide:truck</FuseSvgIcon>}
+          onClick={() => window.open(`/api/work-orders/${wo.id}/delivery-note`, '_blank')}
+          sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600, ml: 1, borderColor: '#059669', color: '#059669' }}>
+          ใบส่งมอบงาน
+        </Button>
+        <Button variant="outlined" size="small"
           startIcon={<FuseSvgIcon size={16}>lucide:file-text</FuseSvgIcon>}
           onClick={() => window.open(`/completed-works/${id}/service-report`, '_blank')}
           sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600, ml: 1 }}>
