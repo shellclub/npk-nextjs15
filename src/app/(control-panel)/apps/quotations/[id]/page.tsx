@@ -32,6 +32,7 @@ import { styled } from '@mui/material/styles';
 import { motion } from 'motion/react';
 import DatePickerField from '@/components/shared/DatePickerField';
 import { useAlert } from '@/components/shared/AlertProvider';
+import { generateQuotationPDF, QuotationPDFData } from '@/lib/pdf/quotation-pdf';
 
 const Root = styled(FusePageCarded)(() => ({
   '& .container': { maxWidth: '100%!important' },
@@ -108,6 +109,7 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
   const [quotationNumber, setQuotationNumber] = useState('');
   const [revisionNumber, setRevisionNumber] = useState(0);
   const [currentStatus, setCurrentStatus] = useState('DRAFT');
+  const [pdfOpen, setPdfOpen] = useState(false);
 
   const [customerGroupId, setCustomerGroupId] = useState('');
   const [branchId, setBranchId] = useState('');
@@ -317,9 +319,91 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
   const displayNumbers = getItemDisplayNumbers();
 
 
-  // Handle print PDF
-  const handlePrintPDF = () => {
-    window.open(`/apps/quotations/${id}/pdf`, '_blank');
+  const handlePrintPDF = () => setPdfOpen(true);
+
+  const handlePdfPrint = () => {
+    const iframe = document.getElementById('quotation-detail-pdf-iframe') as HTMLIFrameElement;
+    iframe?.contentWindow?.print();
+  };
+
+  const handlePdfDownload = async () => {
+    try {
+      const [res, photosRes] = await Promise.all([
+        fetch(`/api/quotations/${id}`),
+        fetch(`/api/quotations/${id}/photos`),
+      ]);
+      if (!res.ok) throw new Error('Failed to fetch');
+      const data = await res.json();
+      const photos = photosRes.ok ? await photosRes.json() : [];
+
+      const loadImageAsBase64 = (url: string): Promise<string> => new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          canvas.getContext('2d')?.drawImage(img, 0, 0);
+          resolve(canvas.toDataURL('image/jpeg', 0.8));
+        };
+        img.onerror = () => resolve('');
+        img.src = url;
+      });
+
+      const photosWithImages = Array.isArray(photos) ? await Promise.all(
+        photos.map(async (p: { fileUrl: string; caption?: string; photoType?: string; uploadedBy?: string }) => ({
+          fileUrl: p.fileUrl,
+          caption: p.caption,
+          photoType: p.photoType,
+          uploadedBy: p.uploadedBy,
+          imageData: await loadImageAsBase64(p.fileUrl),
+        }))
+      ) : [];
+
+      const pdfData: QuotationPDFData = {
+        quotationNumber: data.quotationNumber,
+        revisionNumber: data.revisionNumber,
+        date: data.date,
+        projectName: data.projectName,
+        customerPO: data.customerPO,
+        address: data.address,
+        contactName: data.contactName,
+        contactPhone: data.contactPhone,
+        subtotal: Number(data.subtotal),
+        discountPercent: Number(data.discountPercent || 0),
+        discountAmount: Number(data.discountAmount || 0),
+        vatPercent: Number(data.vatPercent || 7),
+        vatAmount: Number(data.vatAmount),
+        totalAmount: Number(data.totalAmount),
+        conditions: data.conditions,
+        notes: data.notes,
+        warranty: data.warranty,
+        customerGroup: data.customerGroup,
+        branch: data.branch,
+        createdBy: data.createdBy,
+        items: (data.items || []).map((item: {
+          itemType: string; description: string; quantity: unknown; unit: string;
+          materialPrice?: unknown; labourPrice?: unknown; parentIndex?: number;
+        }) => ({
+          itemType: item.itemType,
+          description: item.description,
+          quantity: Number(item.quantity),
+          unit: item.unit,
+          materialPrice: Number(item.materialPrice || 0),
+          labourPrice: Number(item.labourPrice || 0),
+          parentIndex: item.parentIndex,
+        })),
+        photos: photosWithImages,
+      };
+      const doc = generateQuotationPDF(pdfData);
+      const displayQN = (pdfData.revisionNumber || 0) > 0
+        ? `${pdfData.quotationNumber}_Rev${pdfData.revisionNumber}`
+        : pdfData.quotationNumber;
+      doc.save(`ใบเสนอราคา_${displayQN}.pdf`);
+    } catch (err) {
+      console.error('PDF download error:', err);
+      alert.showError('ดาวน์โหลดไม่สำเร็จ', 'ไม่สามารถสร้างไฟล์ PDF ได้');
+    }
   };
 
   // Force date change when discount is modified
@@ -1281,6 +1365,66 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
             {newContactSaving ? 'กำลังบันทึก...' : 'เพิ่มผู้ติดต่อ'}
           </Button>
         </DialogActions>
+      </Dialog>
+
+      {/* PDF Preview — เหมือนหน้ารายการใบเสนอราคา */}
+      <Dialog
+        open={pdfOpen}
+        onClose={() => setPdfOpen(false)}
+        maxWidth={false}
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: '16px',
+            width: '90vw',
+            maxWidth: '1100px',
+            height: '90vh',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          },
+        }}
+      >
+        <Box sx={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          px: 3, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', bgcolor: '#f8fafc', flexShrink: 0,
+        }}>
+          <Typography sx={{ fontSize: '16px', fontWeight: 700, color: '#0284C7' }}>
+            {displayQuotationNumber}
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+            <Button variant="outlined" onClick={() => setPdfOpen(false)}
+              sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, borderColor: '#e2e8f0', color: '#64748b' }}>
+              ปิดหน้าต่าง
+            </Button>
+            <Button variant="contained" onClick={handlePdfPrint}
+              startIcon={<FuseSvgIcon size={18}>lucide:printer</FuseSvgIcon>}
+              sx={{
+                borderRadius: '10px', textTransform: 'none', fontWeight: 600,
+                background: 'linear-gradient(135deg, #0284C7, #0369A1)',
+                '&:hover': { background: 'linear-gradient(135deg, #0369A1, #075985)' },
+              }}>
+              พิมพ์
+            </Button>
+            <Tooltip title="ดาวน์โหลด PDF" arrow>
+              <IconButton onClick={handlePdfDownload}
+                sx={{ bgcolor: '#f1f5f9', borderRadius: '10px', '&:hover': { bgcolor: '#e2e8f0' } }}>
+                <FuseSvgIcon size={20} sx={{ color: '#475569' }}>lucide:download</FuseSvgIcon>
+              </IconButton>
+            </Tooltip>
+          </Box>
+        </Box>
+        <Box sx={{ flex: 1, bgcolor: '#e2e8f0', overflow: 'hidden', display: 'flex' }}>
+          <iframe
+            id="quotation-detail-pdf-iframe"
+            src={pdfOpen ? `/api/quotations/${id}/pdf` : 'about:blank'}
+            style={{
+              flex: 1, border: 'none', background: '#fff', margin: '16px auto',
+              maxWidth: '800px', boxShadow: '0 4px 20px rgba(0,0,0,0.15)', borderRadius: '4px',
+            }}
+            title="PDF Preview"
+          />
+        </Box>
       </Dialog>
     </Paper>
   );
