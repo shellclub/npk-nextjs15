@@ -2,6 +2,11 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { THSarabunNew_normal, THSarabunNew_bold } from '@/lib/fonts/thsarabun-base64';
+import { NPK_LOGO_PNG_BASE64 } from '@/lib/pdf/npk-logo-base64';
+import { headerHasOwnLineValues, isOverheadItem } from '@/lib/quotation-line-items';
+
+// Natural pixel size of npk-logo.png (614 x 704) — keep aspect ratio when drawing
+const LOGO_ASPECT = 704 / 614;
 
 // ── Helpers ──
 function fmt(n: any) {
@@ -118,58 +123,47 @@ export function generateQuotationPDF(data: QuotationPDFData): jsPDF {
   const customerName = data.customerGroup?.groupName || '-';
 
   // ══════════════════════════════════════
-  // HEADER — Company info (left-aligned like reference)
+  // HEADER — Logo (left) + company info centered in remaining width
   // ══════════════════════════════════════
-  // Logo - green N PK block (left side, larger)
-  const logoW = 28;
-  const logoH = 34;
+  const logoW = 24;
+  const logoH = logoW * LOGO_ASPECT;
   const logoX = marginL;
 
-  // Draw NPK logo
-  doc.setFillColor(34, 139, 34);
-  doc.rect(logoX, y, logoW, logoH, 'F');
-  doc.setFont('THSarabunNew', 'bold');
-  doc.setFontSize(34);
-  doc.setTextColor(255, 255, 255);
-  doc.text('N', logoX + 4, y + 16);
-  doc.setFontSize(16);
-  doc.setTextColor(0, 0, 0);
-  doc.text('PK', logoX + 17, y + 18);
-  // Small text under logo
-  doc.setFontSize(5);
-  doc.text('NPK SERVICE & SUPPLY CO.,LTD.', logoX + logoW / 2, y + logoH - 2, { align: 'center' });
+  doc.addImage(NPK_LOGO_PNG_BASE64, 'PNG', logoX, y, logoW, logoH);
 
-  // Company text - LEFT-ALIGNED next to logo
-  const textStartX = logoX + logoW + 5;
+  // Company text — centered within the space to the right of the logo
+  const textStartX = logoX + logoW + 4;
+  const headerCenterX = textStartX + (pageW - marginR - textStartX) / 2;
 
   doc.setTextColor(0, 0, 0);
   doc.setFont('THSarabunNew', 'bold');
   doc.setFontSize(16);
-  doc.text('บริษัท เอ็นพีเค เซอร์วิส แอนด์ ซัพพลาย จำกัด', textStartX, y + 6);
+  doc.text('บริษัท เอ็นพีเค เซอร์วิส แอนด์ ซัพพลาย จำกัด', headerCenterX, y + 6, { align: 'center' });
 
   doc.setFontSize(12);
-  doc.text('NPK SERVICE & SUPPLY CO.,LTD', textStartX, y + 11);
+  doc.text('NPK SERVICE & SUPPLY CO.,LTD.', headerCenterX, y + 11, { align: 'center' });
 
   doc.setFont('THSarabunNew', 'normal');
   doc.setFontSize(9);
-  doc.text('สำนักงานใหญ่ : 210/19  หมู่ 4  ตำบลสนามชัย  อำเภอเมืองสุพรรณบุรี  จังหวัดสุพรรณบุรี  72000', textStartX, y + 16);
-  doc.text('Head Office : 210/19 Moo.4 , Tombon Sanamchai ,  Amphur Mueang   Suphanburi,   Suphanburi 72000', textStartX, y + 20);
-  doc.text('เลขผู้เสียภาษี 0105555161084    Tel: 09-8942-9891, 06-5961-9799 , 09-3694-4591    E-mail : npkservicesupply@gmail.com', textStartX, y + 24);
+  doc.text('สำนักงานใหญ่  : 210/19  หมู่ 4  ตำบลสนามชัย  อำเภอเมืองสุพรรณบุรี  จังหวัดสุพรรณบุรี  72000', headerCenterX, y + 17, { align: 'center' });
+  doc.text('Head Office : 210/19 Moo.4 ,Tombon Sanamchai ,  Amphur Mueang   Suphanburi,   Suphanburi 72000', headerCenterX, y + 21, { align: 'center' });
+  doc.text('Call : 09-8942-9891, 06-5961-9799 , 09-3694-4591  E-mail : npkservicesupply@gmail.com', headerCenterX, y + 25, { align: 'center' });
 
-  y += logoH + 4;
+  y += Math.max(logoH, 25) + 4;
 
   // ══════════════════════════════════════
   // TITLE — ใบเสนอราคา(Quotation)
   // ══════════════════════════════════════
   doc.setFont('THSarabunNew', 'bold');
   doc.setFontSize(18);
-  doc.text('ใบเสนอราคา (Quotation)', centerX, y, { align: 'center' });
+  doc.text('ใบเสนอราคา(Quotation)', centerX, y, { align: 'center' });
   y += 8;
 
   // ══════════════════════════════════════
-  // INFO SECTION — 2 columns (matching mpdf layout)
+  // INFO SECTION — 4 rows, 2 columns (matching mpdf layout exactly)
   // ══════════════════════════════════════
   doc.setFontSize(12);
+  doc.setTextColor(0, 0, 0);
 
   const leftCol = marginL;
   const rightEdgeX = pageW - marginR;
@@ -180,6 +174,12 @@ export function generateQuotationPDF(data: QuotationPDFData): jsPDF {
   const drawRightValue = (text: string, yPos: number) => {
     doc.text(text, rightEdgeX, yPos, { align: 'right' });
   };
+
+  const branchDisplay = data.branch
+    ? `${data.branch.code || ''} ${data.branch.name}`.trim()
+    : '-';
+  const woNumber = data.workOrders?.[0]?.woNumber || '';
+  const poNumber = data.workOrders?.[0]?.poNumber || '';
 
   // Row 1: ชื่อลูกค้า / เลขที่
   doc.setFont('THSarabunNew', 'bold');
@@ -192,55 +192,33 @@ export function generateQuotationPDF(data: QuotationPDFData): jsPDF {
   drawRightValue(displayQN, y);
   y += 5.5;
 
-  // Row 2: สาขา / วันที่
-  const branchDisplay = data.branch
-    ? `${data.branch.code || ''} ${data.branch.name}`.trim()
-    : '-';
+  // Row 2: อ้างถึง / วันที่
   doc.setFont('THSarabunNew', 'bold');
-  doc.text('สาขา :', leftCol, y);
-  doc.setFont('THSarabunNew', 'normal');
-  doc.text(branchDisplay, leftValueX, y);
+  doc.text('อ้างถึง :', leftCol, y);
   doc.setFont('THSarabunNew', 'bold');
   doc.text('วันที่', rightLabelX, y);
   doc.setFont('THSarabunNew', 'normal');
   drawRightValue(thaiDate(data.date), y);
   y += 5.5;
 
-  // Row 3: ที่อยู่ / ชื่อผู้ติดต่อ
+  // Row 3: สาขา / W/O
   doc.setFont('THSarabunNew', 'bold');
-  doc.text('ที่อยู่ :', leftCol, y);
+  doc.text('สาขา :', leftCol, y);
   doc.setFont('THSarabunNew', 'normal');
-  const addressText = data.address || data.customerGroup?.headOfficeAddress || '-';
-  const addrLines = doc.splitTextToSize(addressText, rightLabelX - leftValueX - 5);
-  doc.text(addrLines[0] || '-', leftValueX, y);
+  doc.text(branchDisplay, leftValueX, y);
   doc.setFont('THSarabunNew', 'bold');
-  doc.text('ชื่อผู้ติดต่อ', rightLabelX, y);
+  doc.text('W/O', rightLabelX, y);
   doc.setFont('THSarabunNew', 'normal');
-  drawRightValue(data.contactName || '-', y);
+  drawRightValue(woNumber, y);
   y += 5.5;
 
-  // Row 4: ยืนยันราคา / เบอร์โทร
+  // Row 4: บริษัทฯ มีความยินดีขอเสนอราคา / P/O
+  doc.setFont('THSarabunNew', 'normal');
+  doc.text('บริษัทฯ มีความยินดีขอเสนอราคา', leftCol, y);
   doc.setFont('THSarabunNew', 'bold');
-  doc.text('ยืนยันราคา :', leftCol, y);
+  doc.text('P/O', rightLabelX, y);
   doc.setFont('THSarabunNew', 'normal');
-  doc.text('30 วันนับจากวันที่เสนอราคา', leftValueX + 5, y);
-  doc.setFont('THSarabunNew', 'bold');
-  doc.text('เบอร์โทร :', rightLabelX, y);
-  doc.setFont('THSarabunNew', 'normal');
-  drawRightValue(data.contactPhone || '-', y);
-  y += 5.5;
-
-  // Row 5: ชื่อโครงการ (ใบเสนอราคา — ยังไม่มี W/O, P/O)
-  doc.setFont('THSarabunNew', 'bold');
-  doc.text('ชื่อโครงการ :', leftCol, y);
-  doc.setFont('THSarabunNew', 'normal');
-  doc.text(data.projectName || '-', leftValueX + 5, y);
-  y += 5.5;
-
-  // Row 5: บริษัทฯ มีความยินดีใคร่ขอเสนอราคา...
-  doc.setFont('THSarabunNew', 'normal');
-  doc.setFontSize(12);
-  doc.text('บริษัทฯ มีความยินดีใคร่ขอเสนอราคางานบริการ โดยมีทีมงานคุณภาพให้กับท่าน มีรายละเอียด ดังนี้', leftCol, y);
+  drawRightValue(poNumber, y);
   y += 4;
 
   // ══════════════════════════════════════
@@ -253,20 +231,43 @@ export function generateQuotationPDF(data: QuotationPDFData): jsPDF {
   // First pass: identify which headers have sub-items
   const headersWithChildren = new Set<number>();
   data.items.forEach((item) => {
-    if ((item.itemType || 'ITEM') !== 'HEADER' && item.parentIndex !== undefined && item.parentIndex !== null && item.parentIndex >= 0) {
+    if (item.itemType === 'ITEM' && item.parentIndex !== undefined && item.parentIndex !== null && item.parentIndex >= 0) {
       headersWithChildren.add(item.parentIndex);
     }
   });
 
   data.items.forEach((item, i) => {
+    if (isOverheadItem(item)) {
+      headerCount++;
+      const matPrice = Number(item.materialPrice || 0);
+      const labPrice = Number(item.labourPrice || 0);
+      const qty = Number(item.quantity);
+      const matTotal = qty * matPrice;
+      const labTotal = qty * labPrice;
+      const amount = matTotal + labTotal;
+
+      tableBody.push([
+        { content: `${headerCount}`, styles: { halign: 'center', fontStyle: 'bold' } },
+        { content: item.description, styles: { fontStyle: 'bold' } },
+        { content: String(qty), styles: { halign: 'center' } },
+        { content: item.unit || '', styles: { halign: 'center' } },
+        matPrice > 0 ? fmt(matPrice) : '',
+        labPrice > 0 ? fmt(labPrice) : '',
+        matTotal > 0 ? fmt(matTotal) : '',
+        labTotal > 0 ? fmt(labTotal) : '',
+        fmt(amount),
+      ]);
+      return;
+    }
+
     const isHeader = (item.itemType || 'ITEM') === 'HEADER';
 
     if (isHeader) {
       headerCount++;
       subCountMap[i] = 0;
 
-      if (headersWithChildren.has(i)) {
-        // Header WITH sub-items: description-only row
+      if (headersWithChildren.has(i) && !headerHasOwnLineValues(item)) {
+        // Header WITH sub-items, no own prices: description-only row
         tableBody.push([
           { content: '', styles: { halign: 'center' } },
           { content: item.description, colSpan: 8, styles: { fontStyle: 'bold' } },
@@ -328,6 +329,12 @@ export function generateQuotationPDF(data: QuotationPDFData): jsPDF {
     ]);
   });
 
+  // Empty filler rows so the table extends down the page, matching the reference layout
+  const FILLER_ROW_COUNT = 8;
+  for (let f = 0; f < FILLER_ROW_COUNT; f++) {
+    tableBody.push(['', '', '', '', '', '', '', '', '']);
+  }
+
   autoTable(doc, {
     startY: y,
     margin: { left: marginL, right: marginR },
@@ -367,15 +374,15 @@ export function generateQuotationPDF(data: QuotationPDFData): jsPDF {
       lineWidth: 0.3,
     },
     columnStyles: {
-      0: { cellWidth: 12, halign: 'center' },   // Item
+      0: { cellWidth: 11, halign: 'center' },     // Item
       1: { cellWidth: 'auto' },                   // Description (auto-fill)
-      2: { cellWidth: 12, halign: 'center' },     // Qty
-      3: { cellWidth: 14, halign: 'center' },     // Unit
-      4: { cellWidth: 20, halign: 'right' },      // Material unit price
-      5: { cellWidth: 20, halign: 'right' },      // Labour unit price
-      6: { cellWidth: 22, halign: 'right' },      // Material total
-      7: { cellWidth: 22, halign: 'right' },      // Labour total
-      8: { cellWidth: 24, halign: 'right' },      // Amount
+      2: { cellWidth: 9, halign: 'center' },      // Qty
+      3: { cellWidth: 11, halign: 'center' },     // Unit
+      4: { cellWidth: 19, halign: 'right' },      // Material unit price
+      5: { cellWidth: 19, halign: 'right' },      // Labour unit price
+      6: { cellWidth: 20, halign: 'right' },      // Material total
+      7: { cellWidth: 20, halign: 'right' },      // Labour total
+      8: { cellWidth: 23, halign: 'right' },      // Amount
     },
   });
 
@@ -385,7 +392,7 @@ export function generateQuotationPDF(data: QuotationPDFData): jsPDF {
   const amountText = `( ${bahtText(totalNum)} )`;
 
   // ══════════════════════════════════════
-  // CONDITIONS BOX (left) + TOTALS TABLE (right) — side by side
+  // AMOUNT IN WORDS (bottom-left) + TOTALS TABLE (bottom-right) — attached to table bottom
   // ══════════════════════════════════════
   const tableRightEdge = pageW - marginR; // = 195, same as items table
   const totLabelW = 40;
@@ -394,57 +401,8 @@ export function generateQuotationPDF(data: QuotationPDFData): jsPDF {
   const totTotalW = totLabelW + totAmountW;
   const totalsX = tableRightEdge - totTotalW;
 
-  // Calculate total rows for totals
   const hasDiscount = Number(data.discountAmount) > 0;
-  const totalRows = hasDiscount ? 5 : 3; // Sub, (Discount, After Discount), Vat, Grand
-  const totalsHeight = totalRows * rowH;
 
-  // ── LEFT: Conditions box (same height as totals) ──
-  const condBoxX = marginL;
-  const condBoxW = totalsX - marginL - 2;
-  const condBoxY = y;
-  const condBoxH = totalsHeight;
-
-  // Draw conditions box border
-  doc.rect(condBoxX, condBoxY, condBoxW, condBoxH);
-
-  doc.setFontSize(10);
-  let condY = condBoxY + 4.5;
-
-  // เงื่อนไขการชำระเงิน
-  doc.setFont('THSarabunNew', 'bold');
-  doc.text('เงื่อนไขการชำระเงิน :', condBoxX + 2, condY);
-  doc.setFont('THSarabunNew', 'normal');
-  if (data.conditions) {
-    const payLines = doc.splitTextToSize(data.conditions, condBoxW - 40);
-    doc.text(payLines.slice(0, 2).join(' '), condBoxX + 38, condY);
-  }
-  condY += 5;
-
-  // Inner line
-  doc.line(condBoxX, condBoxY + (condBoxH / 3), condBoxX + condBoxW, condBoxY + (condBoxH / 3));
-
-  // เงื่อนไขการรับประกัน
-  doc.setFont('THSarabunNew', 'bold');
-  doc.text('เงื่อนไขการรับประกัน', condBoxX + 2, condY + 4);
-  doc.setFont('THSarabunNew', 'normal');
-  if (data.warranty) {
-    doc.text(data.warranty.substring(0, 60), condBoxX + 38, condY + 4);
-  }
-
-  // Inner line
-  doc.line(condBoxX, condBoxY + (condBoxH * 2 / 3), condBoxX + condBoxW, condBoxY + (condBoxH * 2 / 3));
-
-  // หมายเหตุ
-  condY = condBoxY + (condBoxH * 2 / 3) + 4.5;
-  doc.setFont('THSarabunNew', 'bold');
-  doc.text('หมายเหตุ :', condBoxX + 2, condY);
-  doc.setFont('THSarabunNew', 'normal');
-  if (data.notes) {
-    doc.text(data.notes.substring(0, 60), condBoxX + 20, condY);
-  }
-
-  // ── RIGHT: Totals table ──
   const drawTotalRow = (label: string, amount: string, yPos: number, isBold = false, color?: string) => {
     doc.setFont('THSarabunNew', isBold ? 'bold' : 'normal');
     doc.setFontSize(11);
@@ -462,6 +420,12 @@ export function generateQuotationPDF(data: QuotationPDFData): jsPDF {
 
   let totY = y;
   drawTotalRow('Sub Total', fmt(data.subtotal), totY);
+
+  // Amount in words — bottom-left, aligned with the Sub Total row
+  doc.setFont('THSarabunNew', 'bold');
+  doc.setFontSize(12);
+  doc.text(amountText, marginL, totY + 4.5);
+
   totY += rowH;
 
   if (hasDiscount) {
@@ -479,82 +443,35 @@ export function generateQuotationPDF(data: QuotationPDFData): jsPDF {
   drawTotalRow('Grand Total', fmt(data.totalAmount), totY, true);
   totY += rowH;
 
-  y = Math.max(y + 8, totY + 2);
+  y = totY + 6;
 
-  // ══════════════════════════════════════
-  // AMOUNT IN THAI TEXT (right-aligned, bold)
-  // ══════════════════════════════════════
-  if (y > 240) {
+  if (y > 260) {
     doc.addPage();
     y = 15;
   }
 
-  y += 3;
-  doc.setFont('THSarabunNew', 'bold');
-  doc.setFontSize(12);
-  doc.text(amountText, pageW - marginR, y, { align: 'right' });
-  y += 6;
-
   // ══════════════════════════════════════
-  // CLOSING MESSAGE
+  // CLOSING MESSAGE + SALESPERSON NAME
   // ══════════════════════════════════════
   doc.setFont('THSarabunNew', 'normal');
   doc.setFontSize(11);
-  doc.text('จึงเรียนมาเพื่อพิจารณา บริษัทฯ หวังเป็นอย่างยิ่งว่าจะมีโอกาสให้บริการแก่ท่าน และขอบขอบพระคุณมา ณ โอกาสนี้', marginL, y);
+  doc.text('จึงเรียนมาเพื่อพิจารณาและขอบพระคุณที่ท่านเลือกใช้บริการของ NPK', marginL, y);
   y += 6;
 
-  // ══════════════════════════════════════
-  // TWO-COLUMN INSTRUCTION + COMPANY
-  // ══════════════════════════════════════
-  doc.setFont('THSarabunNew', 'normal');
-  doc.setFontSize(11);
-  doc.text('กรุณาลงชื่อเพื่ออนุมัติและส่งกลับ กรณีต้องการใช้บริการ', marginL, y);
-  doc.text('ในนาม บริษัท เอ็นพีเค เซอร์วิส แอนด์ ซัพพลาย จำกัด', pageW - marginR, y, { align: 'right' });
-  y += 5;
-
-  // Customer name line
-  doc.text(`ในนาม  ${customerName}`, marginL, y);
+  doc.text(data.createdBy?.name || 'มนต์เทียน เรืองเดชอังกูร', marginL, y);
   y += 8;
 
   // ══════════════════════════════════════
-  // SIGNATURES (two columns)
+  // SIGNATURE — single line
   // ══════════════════════════════════════
-  if (y > 250) {
+  if (y > 270) {
     doc.addPage();
     y = 15;
   }
 
-  const leftSigX = marginL + 30;
-  const rightSigX = pageW - marginR - 35;
-  const sigStartY = y;
-
-  // ── LEFT: ผู้อนุมัติสั่งซื้อ/สั่งจ้าง ──
-  doc.setFont('THSarabunNew', 'bold');
-  doc.setFontSize(11);
-  doc.text('ผู้อนุมัติสั่งซื้อ/สั่งจ้าง', leftSigX, sigStartY, { align: 'center' });
-
-  // Signature line
-  doc.line(leftSigX - 30, sigStartY + 12, leftSigX + 30, sigStartY + 12);
-
-  // Date line
   doc.setFont('THSarabunNew', 'normal');
-  doc.setFontSize(10);
-  doc.text('วันที่......./......./........', leftSigX, sigStartY + 18, { align: 'center' });
-
-  // ── RIGHT: ผู้อนุมัติ (company side) ──
-  doc.setFont('THSarabunNew', 'bold');
   doc.setFontSize(11);
-  doc.text('ผู้อนุมัติ', rightSigX, sigStartY, { align: 'center' });
-
-  // Name
-  doc.setFont('THSarabunNew', 'normal');
-  doc.text(data.createdBy?.name || 'มนต์เทียน เรืองเดชอังกูร', rightSigX, sigStartY + 6, { align: 'center' });
-
-  // Title
-  doc.text('กรรมการผู้จัดการ', rightSigX, sigStartY + 11, { align: 'center' });
-
-  // Date
-  doc.text(thaiDate(data.date), rightSigX, sigStartY + 16, { align: 'center' });
+  doc.text('ผู้เสนอราคา............................................................', marginL, y);
 
   // ══════════════════════════════════════
   // PAGE 2: PHOTO REPORT (if photos exist)
@@ -586,21 +503,10 @@ function addPhotoReportPage(doc: jsPDF, data: QuotationPDFData) {
 
     // ── HEADER (same as quotation) ──
     const logoW = 22;
-    const logoH = 28;
+    const logoH = logoW * LOGO_ASPECT;
     const logoX = marginL;
 
-    // Draw NPK logo
-    doc.setFillColor(34, 139, 34);
-    doc.rect(logoX, y, logoW, logoH, 'F');
-    doc.setFont('THSarabunNew', 'bold');
-    doc.setFontSize(28);
-    doc.setTextColor(255, 255, 255);
-    doc.text('N', logoX + 4, y + 14);
-    doc.setFontSize(14);
-    doc.setTextColor(0, 0, 0);
-    doc.text('PK', logoX + 14, y + 16);
-    doc.setFontSize(5);
-    doc.text('NPK SERVICE & SUPPLY CO.,LTD.', logoX + logoW / 2, y + logoH - 2, { align: 'center' });
+    doc.addImage(NPK_LOGO_PNG_BASE64, 'PNG', logoX, y, logoW, logoH);
 
     const textStartX = logoX + logoW + 5;
     const textCenterX = textStartX + (pageW - marginR - textStartX) / 2;
@@ -608,7 +514,7 @@ function addPhotoReportPage(doc: jsPDF, data: QuotationPDFData) {
     doc.setTextColor(0, 0, 0);
     doc.setFont('THSarabunNew', 'bold');
     doc.setFontSize(16);
-    doc.text('บริษัท ทรีดับเบิลยู เซอร์วิส แอนด์ ซัพพลาย จำกัด', textCenterX, y + 5, { align: 'center' });
+    doc.text('บริษัท เอ็นพีเค เซอร์วิส แอนด์ ซัพพลาย จำกัด', textCenterX, y + 5, { align: 'center' });
     doc.setFontSize(13);
     doc.text('NPK SERVICE & SUPPLY CO.,LTD.', textCenterX, y + 10, { align: 'center' });
     doc.setFont('THSarabunNew', 'normal');

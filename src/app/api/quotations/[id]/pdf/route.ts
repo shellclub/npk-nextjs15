@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { buildNpkDocumentHtml, buildQuotationInfoTableHtml, thaiDate } from '@/lib/pdf/npk-document-html';
+import { thaiDate } from '@/lib/pdf/npk-document-html';
+import { buildQuotationDocumentHtml } from '@/lib/pdf/quotation-document-html';
 
 export async function GET(
   request: NextRequest,
@@ -16,6 +17,7 @@ export async function GET(
         createdBy: { select: { name: true } },
         items: { orderBy: { itemOrder: 'asc' } },
         photos: { orderBy: { createdAt: 'asc' } },
+        workOrders: { select: { woNumber: true, poNumber: true }, where: { status: { not: 'CANCELLED' } } },
       },
     });
 
@@ -25,22 +27,11 @@ export async function GET(
 
     const origin = request.nextUrl.origin;
     const logoUrl = `${origin}/assets/images/logo/npk-logo.png`;
+    const signatureUrl = `${origin}/assets/images/signature/npk-signature.png`;
 
     const displayQN = (q.revisionNumber || 0) > 0
       ? `${q.quotationNumber} Rev.${q.revisionNumber}`
       : q.quotationNumber;
-
-    const infoTableHtml = buildQuotationInfoTableHtml({
-      customerName: q.customerGroup?.groupName || '-',
-      displayQN,
-      branchDisplay: q.branch ? `${q.branch.code || ''} ${q.branch.name}` : '-',
-      dateText: thaiDate(new Date(q.date)),
-      address: q.address || q.customerGroup?.headOfficeAddress || '-',
-      contactPerson: q.contactPerson || '-',
-      validDaysText: `${q.validDays} วันนับจากวันที่เสนอราคา`,
-      contactPhone: q.contactPhone || '-',
-      projectName: q.projectName || '-',
-    });
 
     const extraPagesHtml = q.photos && q.photos.length > 0 ? `
   <div class="page" style="page-break-before: always;">
@@ -78,28 +69,24 @@ export async function GET(
     </div>
   </div>` : '';
 
-    const html = buildNpkDocumentHtml({
+    const html = buildQuotationDocumentHtml({
       pageTitle: `ใบเสนอราคา ${displayQN}`,
-      documentTitle: 'ใบเสนอราคา (Quotation)',
       logoUrl,
-      infoTableHtml,
-      greetingHtml: 'บริษัทฯ มีความยินดีใคร่ขอเสนอราคางานบริการ โดยมีทีมงานคุณภาพให้กับท่าน มีรายละเอียด ดังนี้',
+      customerName: q.customerGroup?.groupName || '-',
+      displayQN,
+      referenceText: '',
+      dateText: thaiDate(new Date(q.date)),
+      branchDisplay: q.branch ? `${q.branch.code || ''} ${q.branch.name}` : '-',
+      woNumber: q.workOrders?.[0]?.woNumber || '',
+      poNumber: q.workOrders?.[0]?.poNumber || '',
       items: q.items,
-      conditions: q.conditions || '',
-      warranty: q.warranty || '',
-      notes: q.notes || '',
       subtotal: Number(q.subtotal),
       discountAmount: Number(q.discountAmount),
       vatPercent: Number(q.vatPercent),
       vatAmount: Number(q.vatAmount),
       totalAmount: Number(q.totalAmount),
-      closingParagraphHtml: 'จึงเรียนมาเพื่อพิจารณา บริษัทฯ หวังเป็นอย่างยิ่งว่าจะมีโอกาสให้บริการแก่ท่าน และขอบขอบพระคุณมา ณ โอกาสนี้',
-      footerLeftHtml: 'กรุณาลงชื่อเพื่ออนุมัติและส่งกลับ กรณีต้องการใช้บริการ',
-      footerRightHtml: 'ในนาม บริษัท เอ็นพีเค เซอร์วิส แอนด์ ซัพพลาย จำกัด',
-      footerInNameHtml: `ในนาม  ${q.customerGroup?.groupName || ''}`,
-      signatureLeftTitle: 'ผู้อนุมัติสั่งซื้อ/สั่งจ้าง',
-      signatureRightName: q.createdBy?.name || 'มนต์เทียน เรืองเดชอังกูร',
-      signatureRightDate: thaiDate(new Date(q.date)),
+      salespersonName: q.createdBy?.name || 'มนต์เทียน เรืองเดชอังกูร',
+      signatureUrl,
       extraPagesHtml,
     });
 

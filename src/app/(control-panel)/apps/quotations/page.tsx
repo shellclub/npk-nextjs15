@@ -57,7 +57,7 @@ type Quotation = {
   projectName?: string | null;
   contactPerson?: string | null;
   contactPhone?: string | null;
-  subtotal: number; totalAmount: number; status: string;
+  subtotal: number; discountAmount?: number; totalAmount: number; status: string;
   createdBy: { name: string };
   items: QuotationItem[];
 };
@@ -85,6 +85,9 @@ function fmt(n: number | string) {
 }
 function fmtDate(d: string) {
   return new Date(d).toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+function amountBeforeVat(q: { subtotal: number; discountAmount?: number }) {
+  return Number(q.subtotal) - Number(q.discountAmount || 0);
 }
 
 function QuotationsPage() {
@@ -330,6 +333,7 @@ function QuotationsPage() {
         customerGroup: data.customerGroup,
         branch: data.branch,
         createdBy: data.createdBy,
+        workOrders: data.workOrders,
         items: (data.items || []).map((item: any) => ({
           itemType: item.itemType,
           description: item.description,
@@ -444,7 +448,7 @@ function QuotationsPage() {
       ) : (
         <>
           <TableContainer sx={{ flex: 1 }}>
-            <Table stickyHeader>
+            <Table stickyHeader sx={{ width: '100%', tableLayout: { xs: 'fixed', md: 'auto' } }}>
               <TableHead>
                 <TableRow sx={{
                   '& th': {
@@ -453,19 +457,19 @@ function QuotationsPage() {
                     whiteSpace: 'nowrap',
                   },
                 }}>
-                  <TableCell padding="checkbox" sx={{ pl: 2 }}>
+                  <TableCell sx={{ width: 48, pl: 2 }} padding="checkbox">
                     <Checkbox checked={selected.length === quotations.length && quotations.length > 0}
                       indeterminate={selected.length > 0 && selected.length < quotations.length}
                       onChange={toggleSelectAll} size="small" />
                   </TableCell>
-                  <TableCell sx={{ minWidth: 130 }}>เลขที่ / วันที่</TableCell>
-                  <TableCell>ลูกค้า / สาขา</TableCell>
-                  <TableCell>ชื่อโครงการ</TableCell>
-                  <TableCell>ผู้ติดต่อ</TableCell>
+                  <TableCell sx={{ width: '11%' }}>เลขที่ / วันที่</TableCell>
+                  <TableCell sx={{ width: '16%' }}>ลูกค้า / สาขา</TableCell>
+                  <TableCell sx={{ width: { xs: '28%', md: 'auto' }, minWidth: { md: 180 } }}>ชื่อโครงการ</TableCell>
+                  <TableCell sx={{ width: '12%' }}>ผู้ติดต่อ</TableCell>
 
-                  <TableCell align="right">ยอดรวม</TableCell>
-                  <TableCell align="center">สถานะ</TableCell>
-                  <TableCell align="center" sx={{ width: 70 }}>จัดการ</TableCell>
+                  <TableCell align="right" sx={{ width: '11%' }}>ยอดรวม (ก่อน VAT)</TableCell>
+                  <TableCell align="center" sx={{ width: 88 }}>สถานะ</TableCell>
+                  <TableCell align="center" sx={{ width: 56 }}>จัดการ</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -510,13 +514,29 @@ function QuotationsPage() {
                         </Typography>
                       </TableCell>
                       {/* ชื่อโครงการ */}
-                      <TableCell>
-                        <Typography sx={{
-                          fontSize: '13px', color: isCancelled ? '#9CA3AF' : '#475569',
-                          maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        }}>
-                          {q.projectName || '-'}
-                        </Typography>
+                      <TableCell sx={{
+                        verticalAlign: 'top',
+                        maxWidth: { xs: 0, md: 'none' },
+                        overflow: 'hidden',
+                      }}>
+                        <Tooltip title={q.projectName || ''} enterTouchDelay={0} disableHoverListener={!q.projectName}>
+                          <Typography sx={{
+                            fontSize: '13px', color: isCancelled ? '#9CA3AF' : '#475569',
+                            lineHeight: 1.45,
+                            textDecoration: isCancelled ? 'line-through' : 'none',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            md: {
+                              whiteSpace: 'normal',
+                              wordBreak: 'break-word',
+                              overflow: 'visible',
+                              textOverflow: 'clip',
+                            },
+                          }}>
+                            {q.projectName || '-'}
+                          </Typography>
+                        </Tooltip>
                       </TableCell>
                       {/* ผู้ติดต่อ / เบอร์โทร */}
                       <TableCell>
@@ -536,7 +556,7 @@ function QuotationsPage() {
                         fontSize: '15px !important',
                         color: isCancelled ? '#D1D5DB !important' : '#1E293B !important',
                       }}>
-                        {fmt(q.totalAmount)}
+                        {fmt(amountBeforeVat(q))}
                       </TableCell>
                       {/* สถานะ */}
                       <TableCell align="center" sx={{ textDecoration: 'none !important' }}>
@@ -568,9 +588,9 @@ function QuotationsPage() {
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 2, py: 1.5, borderTop: '1px solid #F1F5F9', bgcolor: '#FAFBFC' }}>
             <Typography sx={{ fontSize: '14px', color: '#64748B' }}>แสดง {quotations.length} รายการ</Typography>
             <Typography sx={{ fontSize: '15px', fontWeight: 600, color: '#0284C7' }}>
-              ยอดรวมทั้งหมด{' '}
+              ยอดรวมก่อน VAT{' '}
               <Box component="span" sx={{ fontSize: '17px', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                {fmt(quotations.reduce((sum, q) => sum + Number(q.totalAmount), 0))}
+                {fmt(quotations.reduce((sum, q) => sum + amountBeforeVat(q), 0))}
               </Box>{' '}บาท
             </Typography>
           </Box>

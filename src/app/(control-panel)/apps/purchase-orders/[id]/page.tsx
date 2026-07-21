@@ -423,7 +423,7 @@ function PurchaseOrderDetailPage() {
 					<Box sx={{ textAlign: 'center', py: 5, mb: 3, borderRadius: '12px', border: '2px dashed #CBD5E1', bgcolor: '#FAFBFD' }}>
 						<FuseSvgIcon size={48} sx={{ color: '#CBD5E1', mb: 1 }}>lucide:file-down</FuseSvgIcon>
 						<Typography sx={{ fontSize: '16px', color: '#64748B', mb: 2 }}>ยังไม่มีรายการ — คัดลอกรายการและราคาจากใบเสนอราคาที่อ้างอิง</Typography>
-						<Button variant="contained" size="large" onClick={handleImport} disabled={saving}
+						<Button variant="contained" size="large" onClick={() => handleImport()} disabled={saving}
 							startIcon={<FuseSvgIcon size={20}>lucide:import</FuseSvgIcon>}
 							sx={{ borderRadius: '12px', textTransform: 'none', fontWeight: 700, px: 4, background: 'linear-gradient(135deg, #0EA5E9 0%, #0284C7 100%)' }}>
 							{saving ? 'กำลังนำเข้า...' : 'คัดลอกจากใบเสนอราคา'}

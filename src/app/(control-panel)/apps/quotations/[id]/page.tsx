@@ -17,6 +17,9 @@ import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
 import Alert from '@mui/material/Alert';
 import Chip from '@mui/material/Chip';
+import MenuItem from '@mui/material/MenuItem';
+import Select from '@mui/material/Select';
+import FormControl from '@mui/material/FormControl';
 import CircularProgress from '@mui/material/CircularProgress';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
@@ -33,6 +36,15 @@ import { motion } from 'motion/react';
 import DatePickerField from '@/components/shared/DatePickerField';
 import { useAlert } from '@/components/shared/AlertProvider';
 import { generateQuotationPDF, QuotationPDFData } from '@/lib/pdf/quotation-pdf';
+import {
+  appendOverheadItem,
+  computeQuotationTotals,
+  findParentHeaderIndex,
+  hasOverheadInItems,
+  isOverheadItem,
+  OVERHEAD_DESCRIPTION,
+  OVERHEAD_ITEM_TYPE,
+} from '@/lib/quotation-line-items';
 
 const Root = styled(FusePageCarded)(() => ({
   '& .container': { maxWidth: '100%!important' },
@@ -49,7 +61,7 @@ type Contact = { id: string; name: string; phone?: string | null; email?: string
 type CustomerGroup = { id: string; groupName: string; headOfficeAddress?: string | null; contactName?: string | null; contactPhone?: string | null; taxId?: string | null; branches: Branch[]; contacts?: Contact[] };
 type QuotationItem = {
   tempId: number;
-  itemType: 'HEADER' | 'ITEM';
+  itemType: 'HEADER' | 'ITEM' | typeof OVERHEAD_ITEM_TYPE;
   parentIndex?: number;
   description: string;
   unit: string;
@@ -121,6 +133,7 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
   const [validDays, setValidDays] = useState(30);
   const [vatPercent, setVatPercent] = useState(7);
   const [discountAmount, setDiscountAmount] = useState(0);
+  const [includeOverheadProfit, setIncludeOverheadProfit] = useState(false);
   const [conditions, setConditions] = useState('');
 
   const [items, setItems] = useState<QuotationItem[]>([]);
@@ -215,7 +228,8 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
         }));
 
         if (loadedItems.length > 0) {
-          setItems(loadedItems);
+          setIncludeOverheadProfit(hasOverheadInItems(loadedItems));
+          setItems(loadedItems.filter((item: QuotationItem) => !isOverheadItem(item)));
         } else {
           setItems([
             { tempId: 1, itemType: 'HEADER', description: '', unit: '', quantity: 0, materialPrice: 0, labourPrice: 0 },
@@ -232,26 +246,16 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
   const branches = selectedCustomer?.branches || [];
   const selectedCustomerContacts: Contact[] = selectedCustomer?.contacts || [];
 
-  // Determine which headers have sub-items
-  const headersWithSubItems = useMemo(() => {
-    const set = new Set<number>();
-    items.forEach((item) => {
-      if (item.itemType === 'ITEM' && item.parentIndex !== undefined && item.parentIndex >= 0) {
-        set.add(item.parentIndex);
-      }
-    });
-    return set;
-  }, [items]);
+  const effectiveItems = useMemo(
+    () => appendOverheadItem(items, includeOverheadProfit),
+    [items, includeOverheadProfit],
+  );
 
-  // Calculate subtotal from ITEM rows and HEADER rows without sub-items
-  const subtotal = items.reduce((sum, item, idx) => {
-    if (item.itemType === 'HEADER' && headersWithSubItems.has(idx)) return sum;
-    return sum + item.quantity * item.materialPrice + item.quantity * item.labourPrice;
-  }, 0);
-  // discountAmount is entered directly as a fixed amount (Baht)
-  const afterDiscount = subtotal - discountAmount;
-  const vatAmount = (afterDiscount * vatPercent) / 100;
-  const totalAmount = afterDiscount + vatAmount;
+  const totals = useMemo(
+    () => computeQuotationTotals(effectiveItems, discountAmount, vatPercent),
+    [effectiveItems, discountAmount, vatPercent],
+  );
+  const { subtotal, afterDiscount, vatAmount, totalAmount } = totals;
 
   const addHeader = () => {
     const newId = nextTempId;
@@ -289,34 +293,47 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
   };
 
   const updateItem = (tempId: number, field: keyof QuotationItem, value: string | number) => {
-    setItems(items.map((item) => (item.tempId === tempId ? { ...item, [field]: value } : item)));
+    setItems(items.map((item) => {
+      if (item.tempId !== tempId) return item;
+      const updated = { ...item, [field]: value };
+      if (
+        item.itemType === 'HEADER'
+        && (field === 'materialPrice' || field === 'labourPrice')
+        && Number(value) > 0
+        && (Number(updated.quantity) || 0) === 0
+      ) {
+        updated.quantity = 1;
+      }
+      return updated;
+    }));
   };
 
-  // Get display number for items
-  const getItemDisplayNumbers = () => {
+  const getItemDisplayNumbers = (rows: QuotationItem[]) => {
     let headerCount = 0;
     const subCounts: Record<number, number> = {};
-    return items.map((item, idx) => {
+    return rows.map((item, idx) => {
+      if (isOverheadItem(item)) {
+        return `${headerCount + 1}`;
+      }
       if (item.itemType === 'HEADER') {
         headerCount++;
         subCounts[idx] = 0;
         return `${headerCount}`;
-      } else {
-        const parentIdx = item.parentIndex ?? -1;
-        if (parentIdx >= 0 && subCounts[parentIdx] !== undefined) {
-          subCounts[parentIdx]++;
-          let hNum = 0;
-          for (let i = 0; i <= parentIdx; i++) {
-            if (items[i].itemType === 'HEADER') hNum++;
-          }
-          return `${hNum}.${subCounts[parentIdx]}`;
-        }
-        return `${headerCount}.${++subCounts[Object.keys(subCounts).pop() as unknown as number] || 1}`;
       }
+      const parentIdx = findParentHeaderIndex(rows, idx);
+      if (parentIdx >= 0 && subCounts[parentIdx] !== undefined) {
+        subCounts[parentIdx]++;
+        let hNum = 0;
+        for (let i = 0; i <= parentIdx; i++) {
+          if (rows[i].itemType === 'HEADER') hNum++;
+        }
+        return `${hNum}.${subCounts[parentIdx]}`;
+      }
+      return `${headerCount}.${++subCounts[Object.keys(subCounts).pop() as unknown as number] || 1}`;
     });
   };
 
-  const displayNumbers = getItemDisplayNumbers();
+  const displayNumbers = getItemDisplayNumbers(effectiveItems);
 
 
   const handlePrintPDF = () => setPdfOpen(true);
@@ -381,6 +398,7 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
         customerGroup: data.customerGroup,
         branch: data.branch,
         createdBy: data.createdBy,
+        workOrders: data.workOrders,
         items: (data.items || []).map((item: {
           itemType: string; description: string; quantity: unknown; unit: string;
           materialPrice?: unknown; labourPrice?: unknown; parentIndex?: number;
@@ -434,24 +452,10 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
 
     setSaving(true);
     try {
-      const processedItems = items.map((item, idx) => {
-        if (item.itemType === 'HEADER') {
-          const hasChildren = headersWithSubItems.has(idx);
-          if (hasChildren) {
-            // Header with sub-items: no prices
-            return {
-              itemType: item.itemType,
-              description: item.description,
-              unit: '',
-              quantity: 0,
-              materialPrice: 0,
-              labourPrice: 0,
-              parentIndex: undefined,
-            };
-          }
-          // Header without sub-items: keep prices
+      const processedItems = effectiveItems.map((item, idx) => {
+        if (isOverheadItem(item)) {
           return {
-            itemType: item.itemType,
+            itemType: OVERHEAD_ITEM_TYPE,
             description: item.description,
             unit: item.unit,
             quantity: Number(item.quantity),
@@ -460,16 +464,21 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
             parentIndex: undefined,
           };
         }
-        let parentIdx: number | undefined;
-        for (let i = idx - 1; i >= 0; i--) {
-          if (items[i].itemType === 'HEADER') {
-            parentIdx = i;
-            break;
-          }
+        if (item.itemType === 'HEADER') {
+          return {
+            itemType: item.itemType,
+            description: item.description,
+            unit: item.unit || '',
+            quantity: Number(item.quantity) || 0,
+            materialPrice: Number(item.materialPrice) || 0,
+            labourPrice: Number(item.labourPrice) || 0,
+            parentIndex: undefined,
+          };
         }
+        const parentIdx = findParentHeaderIndex(effectiveItems, idx);
         return {
           itemType: item.itemType,
-          parentIndex: parentIdx,
+          parentIndex: parentIdx >= 0 ? parentIdx : undefined,
           description: item.description,
           unit: item.unit,
           quantity: Number(item.quantity),
@@ -830,19 +839,44 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {items.map((item, index) => {
-                      const isHeader = item.itemType === 'HEADER';
+                    {effectiveItems.map((item, index) => {
                       const matTotal = item.quantity * item.materialPrice;
                       const labTotal = item.quantity * item.labourPrice;
                       const amountTotal = matTotal + labTotal;
-                      const hasSubItems = isHeader && headersWithSubItems.has(index);
 
-                      if (isHeader && hasSubItems) {
-                        // Header WITH sub-items: show description only, no price fields
+                      if (isOverheadItem(item)) {
+                        return (
+                          <TableRow key="overhead-profit" sx={{ bgcolor: '#EFF6FF', '&:hover': { bgcolor: '#DBEAFE' } }}>
+                            <TableCell align="center" sx={{ fontWeight: 700, color: '#1D4ED8' }}>{displayNumbers[index]}</TableCell>
+                            <TableCell>
+                              <Typography fontWeight={700}>{OVERHEAD_DESCRIPTION}</Typography>
+                              <Typography variant="caption" color="text.secondary">+10% จากยอดรวมก่อน VAT</Typography>
+                            </TableCell>
+                            <TableCell align="right" sx={{ fontSize: '12px' }}>{item.quantity}</TableCell>
+                            <TableCell align="center" sx={{ fontSize: '12px' }}>{item.unit}</TableCell>
+                            <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', fontSize: '12px' }}>
+                              {formatCurrency(item.materialPrice)}
+                            </TableCell>
+                            <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', fontSize: '12px' }}>0.00</TableCell>
+                            <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', fontSize: '12px' }}>
+                              {formatCurrency(matTotal)}
+                            </TableCell>
+                            <TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', fontSize: '12px' }}>0.00</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: '12px' }}>
+                              {formatCurrency(amountTotal)}
+                            </TableCell>
+                            {!isReadOnly && <TableCell />}
+                          </TableRow>
+                        );
+                      }
+
+                      const isHeader = item.itemType === 'HEADER';
+
+                      if (isHeader) {
                         return (
                           <TableRow key={item.tempId} sx={{ bgcolor: '#FFF8E1', '&:hover': { bgcolor: '#FFF3C4' } }}>
                             <TableCell align="center" sx={{ fontWeight: 700, color: '#D97706' }}>{displayNumbers[index]}</TableCell>
-                            <TableCell colSpan={7}>
+                            <TableCell>
                               {isReadOnly ? (
                                 <Typography fontWeight={700}>{item.description}</Typography>
                               ) : (
@@ -855,51 +889,12 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
                                 />
                               )}
                             </TableCell>
-                            <TableCell />
-                            {!isReadOnly && (
-                              <TableCell>
-                                <Box sx={{ display: 'flex', gap: 0.5 }}>
-                                  <Tooltip title="เพิ่มรายการย่อย" arrow>
-                                    <IconButton size="small" onClick={() => addSubItem(index)}
-                                      sx={{ color: '#059669', '&:hover': { bgcolor: '#D1FAE5' } }}>
-                                      <FuseSvgIcon size={16}>lucide:plus</FuseSvgIcon>
-                                    </IconButton>
-                                  </Tooltip>
-                                  <IconButton size="small" onClick={() => removeItem(item.tempId)}
-                                    sx={{ color: 'error.main', '&:hover': { bgcolor: 'error.lighter' } }}>
-                                    <FuseSvgIcon size={16}>lucide:trash-2</FuseSvgIcon>
-                                  </IconButton>
-                                </Box>
-                              </TableCell>
-                            )}
-                          </TableRow>
-                        );
-                      }
-
-                      if (isHeader && !hasSubItems) {
-                        // Header WITHOUT sub-items: show price fields so it can have its own price
-                        return (
-                          <TableRow key={item.tempId} sx={{ bgcolor: '#FFF8E1', '&:hover': { bgcolor: '#FFF3C4' } }}>
-                            <TableCell align="center" sx={{ fontWeight: 700, color: '#D97706' }}>{displayNumbers[index]}</TableCell>
-                            <TableCell>
-                              {isReadOnly ? (
-                                <Typography fontWeight={700}>{item.description}</Typography>
-                              ) : (
-                                <TextField
-                                  value={item.description}
-                                  onChange={(e) => updateItem(item.tempId, 'description', e.target.value)}
-                                  placeholder="ชื่อหัวข้อหลัก (ไม่มีรายการย่อย)"
-                                  size="small" fullWidth
-                                  sx={{ '& .MuiOutlinedInput-root': { fontWeight: 700 } }}
-                                />
-                              )}
-                            </TableCell>
                             <TableCell>
                               <TextField type="number" value={item.quantity}
                                 onChange={(e) => updateItem(item.tempId, 'quantity', Number(e.target.value))}
                                 size="small" fullWidth disabled={isReadOnly}
                                 onFocus={selectOnFocus}
-                                inputProps={{ min: 1, style: { textAlign: 'right', fontSize: '12px' } }} />
+                                inputProps={{ min: 0, style: { textAlign: 'right', fontSize: '12px' } }} />
                             </TableCell>
                             <TableCell>
                               {isReadOnly ? (
@@ -1079,14 +1074,29 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
               </TableContainer>
 
               {!isReadOnly && (
-                <Box sx={{ mt: 1.5, display: 'flex', gap: 1 }}>
+                <Box sx={{ mt: 1.5, display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
                   <Button variant="outlined" color="warning"
                     startIcon={<FuseSvgIcon size={16}>lucide:folder-plus</FuseSvgIcon>}
                     onClick={addHeader}
                     sx={{ textTransform: 'none', fontWeight: 600, borderStyle: 'dashed', borderWidth: 2 }}>
                     เพิ่มหัวข้อหลัก
                   </Button>
+                  <FormControl size="small" sx={{ minWidth: 280 }}>
+                    <Select
+                      value={includeOverheadProfit ? 'yes' : 'no'}
+                      onChange={(e) => setIncludeOverheadProfit(e.target.value === 'yes')}
+                      sx={{ borderRadius: '10px', fontSize: '13px' }}
+                    >
+                      <MenuItem value="no">Overhead and Profit: ไม่มี</MenuItem>
+                      <MenuItem value="yes">Overhead and Profit: มี (+10% จากยอดรวมก่อน VAT)</MenuItem>
+                    </Select>
+                  </FormControl>
                 </Box>
+              )}
+              {isReadOnly && includeOverheadProfit && (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5 }}>
+                  Overhead and Profit: มี (+10% จากยอดรวมก่อน VAT)
+                </Typography>
               )}
 
               {/* Totals */}
@@ -1113,6 +1123,10 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
                         sx={{ '& .MuiOutlinedInput-root': { minHeight: '36px' } }} />
                       <Typography color="text.secondary">บาท</Typography>
                     </Box>
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+                    <Typography color="text.secondary">ยอดหลักหักส่วนลด</Typography>
+                    <Typography fontWeight={600} sx={{ fontVariantNumeric: 'tabular-nums' }}>{formatCurrency(afterDiscount)}</Typography>
                   </Box>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

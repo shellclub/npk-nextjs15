@@ -1,5 +1,7 @@
 /** Shared HTML print template — ใช้ร่วมกันระหว่างใบเสนอราคา และ ใบสั่งซื้อให้ช่าง */
 
+import { headerHasOwnLineValues, isOverheadItem } from '@/lib/quotation-line-items';
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function fmt(n: any) {
   return Number(n).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -166,16 +168,70 @@ export function buildItemsTableHtml(items: DocumentLineItem[]): string {
   let headerCount = 0;
   const subCountMap: Record<number, number> = {};
 
+  const headersWithChildren = new Set<number>();
+  items.forEach((item, i) => {
+    if (item.itemType === 'ITEM' && item.parentIndex != null && item.parentIndex >= 0) {
+      headersWithChildren.add(item.parentIndex);
+    }
+  });
+
   return items.map((item, i) => {
+    if (isOverheadItem(item)) {
+      headerCount++;
+      const qty = Number(item.quantity);
+      const matPrice = Number(item.materialPrice || 0);
+      const labPrice = Number(item.labourPrice || 0);
+      const matTotal = Number(item.totalMaterial) || qty * matPrice;
+      const labTotal = Number(item.totalLabour) || qty * labPrice;
+      const amount = Number(item.amount) || matTotal + labTotal;
+
+      return `
+          <tr class="header-row">
+            <td class="center" style="font-weight:700; color:#333;">${headerCount}</td>
+            <td class="desc" style="font-weight:700;">${(item.description || '').replace(/\n/g, '<br/>')}</td>
+            <td class="center">${qty}</td>
+            <td class="center">${item.unit || ''}</td>
+            <td class="right">${matPrice > 0 ? fmt(matPrice) : ''}</td>
+            <td class="right">${labPrice > 0 ? fmt(labPrice) : ''}</td>
+            <td class="right">${matTotal > 0 ? fmt(matTotal) : ''}</td>
+            <td class="right">${labTotal > 0 ? fmt(labTotal) : ''}</td>
+            <td class="right" style="font-weight:700;">${amount ? fmt(amount) : ''}</td>
+          </tr>`;
+    }
+
     const isHeader = (item.itemType || 'ITEM') === 'HEADER';
 
     if (isHeader) {
       headerCount++;
       subCountMap[i] = 0;
-      return `
+
+      if (headersWithChildren.has(i) && !headerHasOwnLineValues(item)) {
+        // Header WITH sub-items, no own prices: description-only row
+        return `
           <tr class="header-row">
             <td class="center" style="font-weight:700; color:#333;">${headerCount}</td>
             <td colspan="8" style="font-weight:700; color:#333;">${(item.description || '').replace(/\n/g, '<br/>')}</td>
+          </tr>`;
+      }
+
+      const qty = Number(item.quantity);
+      const matPrice = Number(item.materialPrice || 0);
+      const labPrice = Number(item.labourPrice || 0);
+      const matTotal = Number(item.totalMaterial) || qty * matPrice;
+      const labTotal = Number(item.totalLabour) || qty * labPrice;
+      const amount = Number(item.amount) || matTotal + labTotal;
+
+      return `
+          <tr class="header-row">
+            <td class="center" style="font-weight:700; color:#333;">${headerCount}</td>
+            <td class="desc" style="font-weight:700;">${(item.description || '').replace(/\n/g, '<br/>')}</td>
+            <td class="center">${qty}</td>
+            <td class="center">${item.unit || ''}</td>
+            <td class="right">${matPrice > 0 ? fmt(matPrice) : ''}</td>
+            <td class="right">${labPrice > 0 ? fmt(labPrice) : ''}</td>
+            <td class="right">${matTotal > 0 ? fmt(matTotal) : ''}</td>
+            <td class="right">${labTotal > 0 ? fmt(labTotal) : ''}</td>
+            <td class="right" style="font-weight:700;">${amount ? fmt(amount) : ''}</td>
           </tr>`;
     }
 

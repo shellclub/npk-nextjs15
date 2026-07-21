@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { computeQuotationTotals, normalizeQuotationItemsForSave } from '@/lib/quotation-line-items';
 
 // GET /api/quotations — List all quotations
 export async function GET(request: NextRequest) {
@@ -62,23 +63,11 @@ export async function POST(request: NextRequest) {
     }
     const quotationNumber = `${prefix}-${String(seq).padStart(4, '0')}`;
 
-    // Calculate totals from items
-    // Skip HEADER rows that have sub-items (qty=0); include standalone HEADERs with prices
-    const items = body.items || [];
-    const subtotal = items.reduce(
-      (sum: number, item: { itemType?: string; quantity: number; materialPrice?: number; labourPrice?: number; unitPrice?: number }) => {
-        if (item.itemType === 'HEADER' && (item.quantity || 0) === 0) return sum;
-        const matTotal = (item.quantity || 0) * (item.materialPrice || 0);
-        const labTotal = (item.quantity || 0) * (item.labourPrice || 0);
-        return sum + matTotal + labTotal;
-      },
-      0
-    );
+    const rawItems = body.items || [];
+    const items = normalizeQuotationItemsForSave(rawItems);
     const discountAmount = body.discountAmount || 0;
-    const afterDiscount = subtotal - discountAmount;
     const vatPercent = body.vatPercent ?? 7;
-    const vatAmount = (afterDiscount * vatPercent) / 100;
-    const totalAmount = afterDiscount + vatAmount;
+    const { subtotal, vatAmount, totalAmount } = computeQuotationTotals(items, discountAmount, vatPercent);
 
     // Resolve creator ID — use provided or fallback to first admin
     let createdById = body.createdById;
@@ -128,19 +117,16 @@ export async function POST(request: NextRequest) {
                 },
                 index: number
               ) => {
-                const isHeader = item.itemType === 'HEADER';
-                const matPrice = item.materialPrice || 0;
-                const labPrice = item.labourPrice || 0;
-                // Header with sub-items (qty=0): no prices; Header without sub-items: keep qty/unit/prices
-                const hasOwnPrices = isHeader && (item.quantity || 0) > 0;
-                const qty = (isHeader && !hasOwnPrices) ? 0 : (item.quantity || 0);
+                const matPrice = Number(item.materialPrice) || 0;
+                const labPrice = Number(item.labourPrice) || 0;
+                const qty = Number(item.quantity) || 0;
                 const amount = qty * matPrice + qty * labPrice;
                 return {
                   itemOrder: index + 1,
                   itemType: item.itemType || 'ITEM',
                   parentIndex: item.parentIndex ?? null,
                   description: item.description,
-                  unit: (isHeader && !hasOwnPrices) ? '' : (item.unit || ''),
+                  unit: item.unit || '',
                   quantity: qty,
                   unitPrice: matPrice + labPrice,
                   materialPrice: matPrice,

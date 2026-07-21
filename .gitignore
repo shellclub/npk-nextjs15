@@ -67,3 +67,6 @@ amplifytools.xcconfig
 
 /generated/prisma
 .vercel
+
+# user-uploaded runtime files
+/public/uploads/
