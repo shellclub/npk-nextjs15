@@ -37,6 +37,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const data: Record<string, unknown> = {};
     if (body.status) data.status = body.status;
+    if (body.workflowType !== undefined) data.workflowType = body.workflowType;
+    if (body.quotationId !== undefined) data.quotationId = body.quotationId || null;
     if (body.description !== undefined) data.description = body.description;
     if (body.totalAmount !== undefined) data.totalAmount = body.totalAmount;
     if (body.teamId !== undefined) data.teamId = body.teamId || null;

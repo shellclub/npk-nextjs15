@@ -12,6 +12,8 @@ export interface QuotationDocumentConfig {
   branchDisplay: string;
   woNumber: string;
   poNumber: string;
+  warrantyStartText?: string;
+  warrantyEndText?: string;
   items: DocumentLineItem[];
   subtotal: number;
   discountAmount: number;
@@ -270,6 +272,10 @@ export function buildQuotationDocumentHtml(config: QuotationDocumentConfig): str
         <td class="col-left-label" colspan="2">บริษัทฯ มีความยินดีขอเสนอราคา</td>
         <td class="label col-right-label">P/O</td>
         <td class="col-right-value">${config.poNumber || ''}</td>
+      </tr>
+      <tr>
+        <td class="label col-left-label">ระยะเวลาประกัน :</td>
+        <td class="col-left-value" colspan="3">เริ่ม ${config.warrantyStartText || '-'}&nbsp;&nbsp;&nbsp;&nbsp;สิ้นสุด ${config.warrantyEndText || '-'}</td>
       </tr>
     </table>
 

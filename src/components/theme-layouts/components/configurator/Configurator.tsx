@@ -184,7 +184,8 @@ function Configurator() {
 				const body: Record<string, unknown> = {
 					woNumber: popupForm.number,
 					woDate: popupForm.date,
-					statusCode: popupForm.statusCode,
+					status: popupForm.statusCode,
+					workflowType: 'QUOTE_FIRST',
 					notes: popupForm.notes || null,
 				};
 				if (quotationId) body.quotationId = quotationId;

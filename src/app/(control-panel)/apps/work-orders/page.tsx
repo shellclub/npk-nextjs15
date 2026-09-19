@@ -49,8 +49,8 @@ type WorkOrder = {
   warrantyStartDate?: string | null; warrantyEndDate?: string | null;
   teamName?: string | null;
   description?: string | null; customerPO?: string | null;
-  totalAmount: number; status: string;
-  quotation?: { quotationNumber: string; date?: string | null; projectName?: string | null; subtotal?: number | null; totalAmount?: number | null; customerGroup: { groupName: string } } | null;
+  totalAmount: number; status: string; workflowType?: string | null;
+  quotation?: { quotationNumber: string; date?: string | null; projectName?: string | null; subtotal?: number | null; discountAmount?: number | null; totalAmount?: number | null; customerGroup: { groupName: string }; branch?: { name: string } | null } | null;
   team?: { teamName: string; leaderName: string } | null;
   branch?: { name: string } | null;
   purchaseOrders?: { id: string; poNumber: string; totalAmount: number; status: string }[];
@@ -60,9 +60,21 @@ type WorkOrder = {
 type Quotation = { id: string; quotationNumber: string; projectName?: string | null; customerGroup: { groupName: string }; totalAmount: number; subtotal: number };
 type Team = { id: string; teamName: string; leaderName: string };
 type WOStatusConfig = { id: string; name: string; code: string; color: string; bgColor: string; isActive: boolean };
+type CustomerGroup = { id: string; groupName: string };
 
 // Fallback for statuses not found in config
 const fallbackStatus = { label: 'ไม่ระบุ', bgColor: '#F1F5F9', textColor: '#64748B', borderColor: '#E2E8F0' };
+
+// 3 กรณีการตอบรับงาน (ลำดับการออกใบเสนอราคา/WO)
+const WORKFLOW_TYPES = [
+  { value: 'QUOTE_FIRST', label: 'เสนอราคาก่อนเข้าทำงาน' },
+  { value: 'WO_FIRST', label: 'ได้รับเลข WO ก่อนทำราคา (ต้องจองเลขที่ใบเสนอราคา)' },
+  { value: 'WORK_FIRST', label: 'ทำงานก่อนทำใบเสนอราคา' },
+] as const;
+const workflowChipInfo: Record<string, { label: string; bgColor: string; color: string }> = {
+  WO_FIRST: { label: 'รับ WO ก่อนราคา', bgColor: '#FEF3C7', color: '#B45309' },
+  WORK_FIRST: { label: 'ทำงานก่อนใบเสนอราคา', bgColor: '#EDE9FE', color: '#6D28D9' },
+};
 
 function fmt(n: number | string) {
   return Number(n).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -94,14 +106,62 @@ function WorkOrdersPage() {
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [woStatuses, setWoStatuses] = useState<{ id: string; name: string; code: string; color: string; bgColor: string }[]>([]);
+  const [customerGroups, setCustomerGroups] = useState<CustomerGroup[]>([]);
   const [form, setForm] = useState({
     woNumber: '', woDate: new Date().toISOString().split('T')[0],
     poNumber: '', poDate: '',
     quotationId: '', teamId: '', teamName: '', statusCode: '',
+    workflowType: 'QUOTE_FIRST' as string,
     startDate: '', endDate: '',
     warrantyStartDate: '', warrantyEndDate: '',
     totalAmount: 0,
   });
+
+  // "จองเลขที่ใบเสนอราคา" mini-dialog (สำหรับกรณี WO_FIRST)
+  const [reserveDialogOpen, setReserveDialogOpen] = useState(false);
+  const [reserveForm, setReserveForm] = useState({ customerGroupId: '', date: new Date().toISOString().split('T')[0] });
+  const [reserveSaving, setReserveSaving] = useState(false);
+  const [reserveError, setReserveError] = useState('');
+
+  const handleReserveQuotation = async () => {
+    if (!reserveForm.customerGroupId) {
+      setReserveError('กรุณาเลือกลูกค้าก่อนจองเลขที่');
+      return;
+    }
+    setReserveSaving(true);
+    setReserveError('');
+    try {
+      const res = await fetch('/api/quotations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customerGroupId: reserveForm.customerGroupId,
+          date: reserveForm.date,
+          status: 'DRAFT',
+          items: [],
+          createdById: 'system',
+        }),
+      });
+      if (!res.ok) throw new Error('Failed');
+      const newQuotation = await res.json();
+      const cg = customerGroups.find(c => c.id === reserveForm.customerGroupId);
+      setQuotations(prev => [...prev, {
+        id: newQuotation.id,
+        quotationNumber: newQuotation.quotationNumber,
+        projectName: null,
+        customerGroup: { groupName: cg?.groupName || '' },
+        totalAmount: 0,
+        subtotal: 0,
+      }]);
+      setForm(prev => ({ ...prev, quotationId: newQuotation.id }));
+      setReserveDialogOpen(false);
+      setSnackbar({ open: true, message: `จองเลขที่ใบเสนอราคา ${newQuotation.quotationNumber} เรียบร้อย`, severity: 'success' });
+    } catch {
+      setReserveError('ไม่สามารถจองเลขที่ใบเสนอราคาได้ กรุณาลองใหม่');
+    } finally {
+      setReserveSaving(false);
+    }
+  };
 
   // Year/Month filter
   const currentYear = new Date().getFullYear() + 543; // Buddhist year
@@ -338,13 +398,15 @@ function WorkOrdersPage() {
   // Create dialog
   const openDialog = async () => {
     setDialogOpen(true);
-    const [qRes, tRes, sRes] = await Promise.all([
+    const [qRes, tRes, sRes, cRes] = await Promise.all([
       fetch('/api/quotations').then(r => r.json()).catch(() => []),
       fetch('/api/technicians').then(r => r.json()).catch(() => []),
       fetch('/api/work-order-statuses').then(r => r.json()).catch(() => []),
+      fetch('/api/customers').then(r => r.json()).catch(() => []),
     ]);
     setQuotations(Array.isArray(qRes) ? qRes : []);
     setTeams(Array.isArray(tRes) ? tRes : []);
+    setCustomerGroups(Array.isArray(cRes) ? cRes : []);
     const statuses = Array.isArray(sRes) ? sRes.filter((s: any) => s.isActive) : [];
     setWoStatuses(statuses);
     // Set default status
@@ -379,6 +441,7 @@ function WorkOrdersPage() {
           teamId: form.teamId || undefined,
           teamName: form.teamName || undefined,
           status: form.statusCode,
+          workflowType: form.workflowType,
           startDate: form.startDate || undefined,
           endDate: form.endDate || undefined,
           warrantyStartDate: form.warrantyStartDate || undefined,
@@ -395,6 +458,7 @@ function WorkOrdersPage() {
         woNumber: '', woDate: new Date().toISOString().split('T')[0],
         poNumber: '', poDate: '',
         quotationId: '', teamId: '', teamName: '', statusCode: '',
+        workflowType: 'QUOTE_FIRST',
         startDate: '', endDate: '',
         warrantyStartDate: '', warrantyEndDate: '',
         totalAmount: 0,
@@ -535,7 +599,9 @@ function WorkOrdersPage() {
                   const sc = statusConfig[wo.status] || fallbackStatus;
                   const isCancelled = wo.status === 'CANCELLED';
                   const displayTeam = wo.teamName || wo.team?.teamName || '-';
-                  const subtotal = wo.quotation?.subtotal ? Number(wo.quotation.subtotal) : Number(wo.totalAmount);
+                  const afterDiscount = wo.quotation?.subtotal
+                    ? Number(wo.quotation.subtotal) - Number(wo.quotation.discountAmount || 0)
+                    : Number(wo.totalAmount);
                   return (
                     <TableRow key={wo.id} hover selected={selected.includes(wo.id)}
                       onClick={() => openViewDialog(wo)}
@@ -562,7 +628,7 @@ function WorkOrdersPage() {
                       {/* ชื่อลูกค้า / สาขา */}
                       <TableCell>
                         <Typography sx={{ fontSize: '13px', fontWeight: 500 }}>{wo.quotation?.customerGroup?.groupName || '-'}</Typography>
-                        <Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>{wo.branch?.name || '-'}</Typography>
+                        <Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>{wo.branch?.name || wo.quotation?.branch?.name || '-'}</Typography>
                       </TableCell>
                       {/* ชื่องาน */}
                       <TableCell sx={{ maxWidth: 150, overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -578,7 +644,7 @@ function WorkOrdersPage() {
                         color: isCancelled ? '#94A3B8' : '#1E293B',
                         textDecoration: isCancelled ? 'line-through' : 'none',
                       }}>
-                        {fmt(subtotal)}
+                        {fmt(afterDiscount)}
                       </TableCell>
                       {/* ทีมช่าง */}
                       <TableCell sx={{ fontWeight: 500, whiteSpace: 'nowrap', fontSize: '12px' }}>{displayTeam}</TableCell>
@@ -601,6 +667,10 @@ function WorkOrdersPage() {
                         sx={{ cursor: 'pointer', '&:hover': { bgcolor: '#EFF6FF' }, borderRadius: '6px', transition: 'background 0.15s' }}>
                         <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#0284C7', textDecoration: 'underline', textDecorationStyle: 'dotted' }}>{wo.woNumber}</Typography>
                         <Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>{fmtDate(wo.date)}</Typography>
+                        {wo.workflowType && workflowChipInfo[wo.workflowType] && (
+                          <Chip label={workflowChipInfo[wo.workflowType].label} size="small"
+                            sx={{ mt: 0.3, height: 18, fontSize: '10px', fontWeight: 600, bgcolor: workflowChipInfo[wo.workflowType].bgColor, color: workflowChipInfo[wo.workflowType].color }} />
+                        )}
                       </TableCell>
                       {/* PO / วันที่ — click เปิด PO dialog */}
                       <TableCell onClick={(e) => openPoDialog(wo, e)}
@@ -796,6 +866,51 @@ function WorkOrdersPage() {
           <Button onClick={handlePoSave} variant="contained" disabled={poSaving}
             sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700, background: 'linear-gradient(135deg, #7C3AED, #6D28D9)', '&:hover': { background: 'linear-gradient(135deg, #6D28D9, #5B21B6)' } }}>
             {poSaving ? 'กำลังบันทึก...' : 'บันทึก PO'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* จองเลขที่ใบเสนอราคา (สำหรับกรณี WO_FIRST) */}
+      <Dialog open={reserveDialogOpen} onClose={() => setReserveDialogOpen(false)} maxWidth="xs" fullWidth
+        PaperProps={{ sx: { borderRadius: '16px' } }}>
+        <DialogTitle sx={{ fontSize: '18px', fontWeight: 700, color: '#1E293B', display: 'flex', alignItems: 'center', gap: 1, pb: 1 }}>
+          <Box sx={{ width: 32, height: 32, borderRadius: '8px', background: 'linear-gradient(135deg, #F59E0B, #D97706)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <FuseSvgIcon size={18} sx={{ color: '#fff' }}>lucide:bookmark-plus</FuseSvgIcon>
+          </Box>
+          จองเลขที่ใบเสนอราคา
+        </DialogTitle>
+        <Divider />
+        <DialogContent sx={{ pt: '20px!important' }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Typography sx={{ fontSize: '13px', color: '#94A3B8' }}>
+              สร้างใบเสนอราคาแบบร่าง (ยังไม่ต้องใส่ราคา) เพื่อจองเลขที่ไว้ก่อน แล้วค่อยกลับมาใส่รายละเอียดทีหลัง
+            </Typography>
+            <FormControl fullWidth size="medium" required error={!!reserveError && !reserveForm.customerGroupId}>
+              <InputLabel>ลูกค้า *</InputLabel>
+              <Select value={reserveForm.customerGroupId}
+                onChange={(e) => setReserveForm({ ...reserveForm, customerGroupId: e.target.value })}
+                label="ลูกค้า *" sx={{ borderRadius: '10px' }}>
+                {customerGroups.map(c => (
+                  <MenuItem key={c.id} value={c.id}>{c.groupName}</MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <DatePickerField label="วันที่" value={reserveForm.date}
+              onChange={(v) => setReserveForm({ ...reserveForm, date: v })} />
+            {reserveError && (
+              <Typography sx={{ fontSize: '12px', color: '#DC2626' }}>{reserveError}</Typography>
+            )}
+          </Box>
+        </DialogContent>
+        <Divider />
+        <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
+          <Button onClick={() => setReserveDialogOpen(false)} variant="outlined"
+            sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, color: '#64748B', borderColor: '#E2E8F0' }}>
+            ยกเลิก
+          </Button>
+          <Button onClick={handleReserveQuotation} variant="contained" disabled={reserveSaving}
+            sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700, background: 'linear-gradient(135deg, #F59E0B, #D97706)', '&:hover': { background: 'linear-gradient(135deg, #D97706, #B45309)' } }}>
+            {reserveSaving ? 'กำลังจอง...' : 'จองเลขที่'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1046,28 +1161,48 @@ function WorkOrdersPage() {
               </div>
             </div>
 
-            {/* Row 2: Reference Quotation */}
+            {/* Row 1.5: รูปแบบการตอบรับงาน (3 กรณี) */}
             <FormControl fullWidth size="medium">
-              <InputLabel>อ้างอิงใบเสนอราคา</InputLabel>
-              <Select value={form.quotationId}
-                onChange={(e) => {
-                  const qId = e.target.value;
-                  const q = quotations.find(x => x.id === qId);
-                  setForm({
-                    ...form,
-                    quotationId: qId,
-                    totalAmount: q ? Number(q.subtotal || q.totalAmount) : 0,
-                  });
-                }}
-                label="อ้างอิงใบเสนอราคา" sx={{ borderRadius: '10px' }}>
-                <MenuItem value="">- ค้นหาเพื่ออ้างอิง -</MenuItem>
-                {quotations.map(q => (
-                  <MenuItem key={q.id} value={q.id}>
-                    {q.quotationNumber} — {q.customerGroup?.groupName} {q.projectName ? `(${q.projectName})` : ''}
-                  </MenuItem>
+              <InputLabel>รูปแบบการตอบรับงาน</InputLabel>
+              <Select value={form.workflowType}
+                onChange={(e) => setForm({ ...form, workflowType: e.target.value })}
+                label="รูปแบบการตอบรับงาน" sx={{ borderRadius: '10px' }}>
+                {WORKFLOW_TYPES.map(w => (
+                  <MenuItem key={w.value} value={w.value} sx={{ whiteSpace: 'normal' }}>{w.label}</MenuItem>
                 ))}
               </Select>
             </FormControl>
+
+            {/* Row 2: Reference Quotation */}
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+              <FormControl fullWidth size="medium">
+                <InputLabel>อ้างอิงใบเสนอราคา</InputLabel>
+                <Select value={form.quotationId}
+                  onChange={(e) => {
+                    const qId = e.target.value;
+                    const q = quotations.find(x => x.id === qId);
+                    setForm({
+                      ...form,
+                      quotationId: qId,
+                      totalAmount: q ? Number(q.subtotal || q.totalAmount) : 0,
+                    });
+                  }}
+                  label="อ้างอิงใบเสนอราคา" sx={{ borderRadius: '10px' }}>
+                  <MenuItem value="">- ค้นหาเพื่ออ้างอิง -</MenuItem>
+                  {quotations.map(q => (
+                    <MenuItem key={q.id} value={q.id}>
+                      {q.quotationNumber} — {q.customerGroup?.groupName} {q.projectName ? `(${q.projectName})` : ''}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              {form.workflowType === 'WO_FIRST' && !form.quotationId && (
+                <Button variant="outlined" size="medium" onClick={() => { setReserveError(''); setReserveForm({ customerGroupId: '', date: new Date().toISOString().split('T')[0] }); setReserveDialogOpen(true); }}
+                  sx={{ whiteSpace: 'nowrap', borderRadius: '10px', textTransform: 'none', fontWeight: 600, mt: '1px', height: 56 }}>
+                  + จองเลขที่ใบเสนอราคา
+                </Button>
+              )}
+            </Box>
 
             {/* Row 3: Status (required) */}
             <FormControl fullWidth size="medium" required error={!form.statusCode}>

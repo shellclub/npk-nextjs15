@@ -206,6 +206,7 @@ model QuotationItem {
   materialPrice Decimal   @default(0) @db.Decimal(12, 2) // ราคาวัสดุ
   labourPrice   Decimal   @default(0) @db.Decimal(12, 2) // ราคาค่าแรง
   amount        Decimal   @default(0) @db.Decimal(12, 2) // จำนวนเงิน
+  isAdjustment  Boolean   @default(false) // true = รายการปรับแก้ (เพิ่ม/ลด), quantity ติดลบ = ลด
 }
 
 // ========================================
@@ -248,6 +249,7 @@ model WorkOrder {
   description     String?          // รายละเอียดงาน
   totalAmount     Decimal          @default(0) @db.Decimal(12, 2)
   status          String           @default("PENDING") // สถานะ (จาก WorkOrderStatusConfig)
+  workflowType    String           @default("QUOTE_FIRST") // QUOTE_FIRST | WO_FIRST | WORK_FIRST - ลำดับการตอบรับงาน
   notes           String?
   createdById     String
   createdBy       User             @relation(fields: [createdById], references: [id])

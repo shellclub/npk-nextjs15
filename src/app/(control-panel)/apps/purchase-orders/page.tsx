@@ -108,6 +108,18 @@ function PurchaseOrdersPage() {
 		return adds - deducts;
 	};
 
+	// สรุป ค่าแรง / ค่าของ / ยอดงานเพิ่ม / ยอดงานลด จากรายการ item จริงของ PO
+	const summarizePOItems = (po: PO) => {
+		const items: PO[] = po.items || [];
+		const normalItems = items.filter((it) => !it.isAdjustment);
+		const adjustmentItems = items.filter((it) => it.isAdjustment);
+		const totalLabour = normalItems.reduce((s: number, it: PO) => s + Number(it.totalLabour || 0), 0);
+		const totalMaterial = normalItems.reduce((s: number, it: PO) => s + Number(it.totalMaterial || 0), 0);
+		const workAdd = adjustmentItems.filter((it) => Number(it.quantity) >= 0).reduce((s: number, it: PO) => s + Number(it.amount || 0), 0);
+		const workDeduct = adjustmentItems.filter((it) => Number(it.quantity) < 0).reduce((s: number, it: PO) => s + Math.abs(Number(it.amount || 0)), 0);
+		return { totalLabour, totalMaterial, workAdd, workDeduct };
+	};
+
 	// Menu handlers
 	const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, po: PO) => {
 		event.stopPropagation();
@@ -217,15 +229,20 @@ function PurchaseOrdersPage() {
 									},
 								}}>
 									<TableCell sx={{ width: 36 }}>#</TableCell>
-									<TableCell>เลขPO / วันที่</TableCell>
+									<TableCell>เลข PO ช่าง</TableCell>
 									<TableCell>ทีมช่าง</TableCell>
-									<TableCell>ลูกค้า / สาขา</TableCell>
-									<TableCell>เลขอ้างอิง</TableCell>
-									<TableCell sx={{ bgcolor: '#F0FFF4 !important' }}>เลข WO / วันที่</TableCell>
-									<TableCell sx={{ bgcolor: '#FFFFF0 !important' }}>PO ลูกค้า</TableCell>
-									<TableCell>วันเริ่ม / สิ้นสุด</TableCell>
-									<TableCell>ประกัน</TableCell>
-									<TableCell align="right">ยอดรวม (บาท)</TableCell>
+									<TableCell align="right">ค่าแรง</TableCell>
+									<TableCell align="right">ค่าของ</TableCell>
+									<TableCell align="right">ยอดงานเพิ่ม</TableCell>
+									<TableCell align="right">ยอดงานลด</TableCell>
+									<TableCell align="right">สรุปค่างาน</TableCell>
+									<TableCell>เลขใบเสนอราคา / วันที่</TableCell>
+									<TableCell>ชื่อลูกค้า สาขา</TableCell>
+									<TableCell>ชื่องาน</TableCell>
+									<TableCell align="right">เสนอราคา</TableCell>
+									<TableCell sx={{ bgcolor: '#F0FFF4 !important' }}>WO</TableCell>
+									<TableCell sx={{ bgcolor: '#FFFFF0 !important' }}>PO</TableCell>
+									<TableCell align="center">แนบเอกสาร</TableCell>
 									<TableCell align="center">สถานะ</TableCell>
 									<TableCell align="center" sx={{ width: 60 }}>จัดการ</TableCell>
 								</TableRow>
@@ -249,110 +266,147 @@ function PurchaseOrdersPage() {
 									const projectName = po.quotation?.projectName
 										|| po.workOrder?.quotation?.projectName || '';
 
-									const poTotal = po.totalAmount ? Number(po.totalAmount) : calcPOTotal(po);
+										const poTotal = po.totalAmount ? Number(po.totalAmount) : calcPOTotal(po);
+										const quoteTotal = po.quotation?.totalAmount ?? po.workOrder?.quotation?.totalAmount ?? null;
+										const quoteDate = po.quotation?.date ?? po.workOrder?.quotation?.date ?? null;
+										const { totalLabour, totalMaterial, workAdd, workDeduct } = summarizePOItems(po);
 
-									return (
-										<TableRow key={po.id} hover
-											sx={{
-												cursor: 'pointer', opacity: isCancelled ? 0.5 : 1,
-												'&:hover': { bgcolor: '#F0F9FF' },
-												'& td': { fontSize: '13px', color: '#334155', py: 0.8, borderBottom: '1px solid #F1F5F9' },
-											}}
-											onClick={() => router.push(`/apps/purchase-orders/${po.id}`)}>
+										return (
+											<TableRow key={po.id} hover
+												sx={{
+													cursor: 'pointer', opacity: isCancelled ? 0.5 : 1,
+													'&:hover': { bgcolor: '#F0F9FF' },
+													'& td': { fontSize: '13px', color: '#334155', py: 0.8, borderBottom: '1px solid #F1F5F9' },
+												}}
+												onClick={() => router.push(`/apps/purchase-orders/${po.id}`)}>
 
-											{/* # */}
-											<TableCell sx={{ fontWeight: 500, color: '#94A3B8' }}>{index + 1}</TableCell>
+												{/* # */}
+												<TableCell sx={{ fontWeight: 500, color: '#94A3B8' }}>{index + 1}</TableCell>
 
-											{/* เลขPO / วันที่ */}
-											<TableCell>
-												<Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#0284C7', textDecoration: isCancelled ? 'line-through' : 'none' }}>
-													{po.poNumber}
-												</Typography>
-												<Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>{fmtDate(po.date)}</Typography>
-											</TableCell>
+												{/* เลข PO ช่าง */}
+												<TableCell>
+													<Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#0284C7', textDecoration: isCancelled ? 'line-through' : 'none' }}>
+														{po.poNumber}
+													</Typography>
+													<Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>{fmtDate(po.date)}</Typography>
+												</TableCell>
 
-											{/* ทีมช่าง */}
-											<TableCell>
-												<Typography sx={{ fontSize: '13px', fontWeight: 500 }}>{teamName}</Typography>
-											</TableCell>
+												{/* ทีมช่าง */}
+												<TableCell>
+													<Typography sx={{ fontSize: '13px', fontWeight: 500 }}>{teamName}</Typography>
+												</TableCell>
 
-											{/* ลูกค้า / สาขา */}
-											<TableCell>
-												<Typography sx={{ fontSize: '13px', fontWeight: 500, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-													{customerName}
-												</Typography>
-												{branchName && (
-													<Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>{branchName}</Typography>
-												)}
-											</TableCell>
+												{/* ค่าแรง */}
+												<TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', color: '#475569' }}>
+													{fmt(totalLabour)}
+												</TableCell>
 
-											{/* เลขอ้างอิง */}
-											<TableCell>
-												{refNo !== '-' ? (
-													<>
-														<Chip label={refNo} size="small" sx={{ fontSize: '11px', height: 22, bgcolor: '#F0F9FF', color: '#0369A1', border: '1px solid #BAE6FD' }} />
-														{projectName && (
-															<Typography sx={{ fontSize: '11px', color: '#64748B', mt: 0.3, maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-																{projectName}
-															</Typography>
-														)}
-													</>
-												) : '-'}
-											</TableCell>
+												{/* ค่าของ */}
+												<TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', color: '#475569' }}>
+													{fmt(totalMaterial)}
+												</TableCell>
 
-											{/* เลข WO / วันที่ */}
-											<TableCell sx={{ bgcolor: woNumber ? '#F0FFF4' : 'transparent' }}>
-												{woNumber ? (
-													<>
-														<Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#15803D' }}>{woNumber}</Typography>
-														<Typography sx={{ fontSize: '11px', color: '#6B7280' }}>{fmtDate(woDate)}</Typography>
-													</>
-												) : '-'}
-											</TableCell>
+												{/* ยอดงานเพิ่ม */}
+												<TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', color: workAdd ? '#059669' : '#CBD5E1' }}>
+													{workAdd ? fmt(workAdd) : '-'}
+												</TableCell>
 
-											{/* PO ลูกค้า */}
-											<TableCell sx={{ bgcolor: customerPO ? '#FFFFF0' : 'transparent' }}>
-												{customerPO ? (
-													<Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#A16207' }}>{customerPO}</Typography>
-												) : '-'}
-											</TableCell>
+												{/* ยอดงานลด */}
+												<TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', color: workDeduct ? '#DC2626' : '#CBD5E1' }}>
+													{workDeduct ? fmt(workDeduct) : '-'}
+												</TableCell>
 
-											{/* วันเริ่ม / สิ้นสุด */}
-											<TableCell>
-												<Typography sx={{ fontSize: '11px', color: '#475569' }}>{fmtDate(po.startDate)}</Typography>
-												<Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>{fmtDate(po.endDate)}</Typography>
-											</TableCell>
+												{/* สรุปค่างาน */}
+												<TableCell align="right" sx={{
+													fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: '14px !important',
+													color: isCancelled ? '#94A3B8' : '#1E293B',
+												}}>
+													{fmt(poTotal)}
+												</TableCell>
 
-											{/* ประกัน */}
-											<TableCell>
-												<Typography sx={{ fontSize: '11px', color: '#475569' }}>{fmtDate(po.warrantyStartDate)}</Typography>
-												<Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>{fmtDate(po.warrantyEndDate)}</Typography>
-											</TableCell>
+												{/* เลขใบเสนอราคา / วันที่ */}
+												<TableCell>
+													{refNo !== '-' ? (
+														<>
+															<Chip label={refNo} size="small" sx={{ fontSize: '11px', height: 22, bgcolor: '#F0F9FF', color: '#0369A1', border: '1px solid #BAE6FD' }} />
+															<Typography sx={{ fontSize: '11px', color: '#94A3B8', mt: 0.3 }}>{fmtDate(quoteDate)}</Typography>
+														</>
+													) : '-'}
+												</TableCell>
 
-											{/* ยอดรวม */}
-											<TableCell align="right" sx={{
-												fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: '14px !important',
-												color: isCancelled ? '#94A3B8' : '#1E293B',
-											}}>
-												{fmt(poTotal)}
-											</TableCell>
+												{/* ชื่อลูกค้า สาขา */}
+												<TableCell>
+													<Typography sx={{ fontSize: '13px', fontWeight: 500, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+														{customerName}
+													</Typography>
+													{branchName && (
+														<Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>{branchName}</Typography>
+													)}
+												</TableCell>
 
-											{/* สถานะ */}
-											<TableCell align="center">
-												<Chip label={sc.label} size="small" sx={{ fontSize: '11px', fontWeight: 600, bgcolor: sc.bgColor, color: sc.textColor, border: `1px solid ${sc.borderColor}`, borderRadius: '8px', minWidth: 64 }} />
-											</TableCell>
+												{/* ชื่องาน */}
+												<TableCell sx={{ maxWidth: 150 }}>
+													<Typography sx={{ fontSize: '12px', color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+														{projectName || '-'}
+													</Typography>
+												</TableCell>
 
-											{/* จัดการ */}
-											<TableCell align="center" onClick={(e) => e.stopPropagation()}>
-												<Tooltip title="จัดการ" arrow>
-													<IconButton size="small" onClick={(e) => handleMenuOpen(e, po)} disabled={actionLoading}
-														sx={{ color: '#64748B', borderRadius: '8px', '&:hover': { bgcolor: '#F1F5F9', color: '#0284C7' } }}>
-														<FuseSvgIcon size={18}>lucide:ellipsis-vertical</FuseSvgIcon>
-													</IconButton>
-												</Tooltip>
-											</TableCell>
-										</TableRow>
-									);
+												{/* เสนอราคา */}
+												<TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', color: '#475569' }}>
+													{quoteTotal != null ? fmt(quoteTotal) : '-'}
+												</TableCell>
+
+												{/* WO */}
+												<TableCell sx={{ bgcolor: woNumber ? '#F0FFF4' : 'transparent' }}>
+													{woNumber ? (
+														<>
+															<Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#15803D' }}>{woNumber}</Typography>
+															<Typography sx={{ fontSize: '11px', color: '#6B7280' }}>{fmtDate(woDate)}</Typography>
+														</>
+													) : '-'}
+												</TableCell>
+
+												{/* PO (ลูกค้า) */}
+												<TableCell sx={{ bgcolor: customerPO ? '#FFFFF0' : 'transparent' }}>
+													{customerPO ? (
+														<Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#A16207' }}>{customerPO}</Typography>
+													) : '-'}
+												</TableCell>
+
+												{/* แนบเอกสาร */}
+												<TableCell align="center" onClick={(e) => e.stopPropagation()}>
+													{po.contractorQuoteUrl ? (
+														<Tooltip title="ดูไฟล์แนบ" arrow>
+															<IconButton size="small" component="a" href={po.contractorQuoteUrl} target="_blank" rel="noopener noreferrer"
+																sx={{ color: '#059669', borderRadius: '8px', '&:hover': { bgcolor: '#ECFDF5' } }}>
+																<FuseSvgIcon size={18}>lucide:paperclip</FuseSvgIcon>
+															</IconButton>
+														</Tooltip>
+													) : (
+														<Typography
+															onClick={() => router.push(`/apps/purchase-orders/${po.id}`)}
+															sx={{ fontSize: '11px', color: '#CBD5E1', cursor: 'pointer', '&:hover': { color: '#94A3B8' } }}>
+															+ แนบ
+														</Typography>
+													)}
+												</TableCell>
+
+												{/* สถานะ */}
+												<TableCell align="center">
+													<Chip label={sc.label} size="small" sx={{ fontSize: '11px', fontWeight: 600, bgcolor: sc.bgColor, color: sc.textColor, border: `1px solid ${sc.borderColor}`, borderRadius: '8px', minWidth: 64 }} />
+												</TableCell>
+
+												{/* จัดการ */}
+												<TableCell align="center" onClick={(e) => e.stopPropagation()}>
+													<Tooltip title="จัดการ" arrow>
+														<IconButton size="small" onClick={(e) => handleMenuOpen(e, po)} disabled={actionLoading}
+															sx={{ color: '#64748B', borderRadius: '8px', '&:hover': { bgcolor: '#F1F5F9', color: '#0284C7' } }}>
+															<FuseSvgIcon size={18}>lucide:ellipsis-vertical</FuseSvgIcon>
+														</IconButton>
+													</Tooltip>
+												</TableCell>
+											</TableRow>
+										);
 								})}
 							</TableBody>
 						</Table>

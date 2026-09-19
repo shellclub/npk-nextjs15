@@ -114,6 +114,7 @@ export async function POST(request: NextRequest) {
                   unitPrice?: number;
                   materialPrice?: number;
                   labourPrice?: number;
+                  isAdjustment?: boolean;
                 },
                 index: number
               ) => {
@@ -132,6 +133,7 @@ export async function POST(request: NextRequest) {
                   materialPrice: matPrice,
                   labourPrice: labPrice,
                   amount,
+                  isAdjustment: Boolean(item.isAdjustment),
                 };
               }
             ),

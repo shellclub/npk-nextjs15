@@ -17,7 +17,7 @@ export async function GET(
         createdBy: { select: { name: true } },
         items: { orderBy: { itemOrder: 'asc' } },
         photos: { orderBy: { createdAt: 'asc' } },
-        workOrders: { select: { woNumber: true, poNumber: true }, where: { status: { not: 'CANCELLED' } } },
+        workOrders: { select: { woNumber: true, poNumber: true, warrantyStartDate: true, warrantyEndDate: true }, where: { status: { not: 'CANCELLED' } } },
       },
     });
 
@@ -79,6 +79,8 @@ export async function GET(
       branchDisplay: q.branch ? `${q.branch.code || ''} ${q.branch.name}` : '-',
       woNumber: q.workOrders?.[0]?.woNumber || '',
       poNumber: q.workOrders?.[0]?.poNumber || '',
+      warrantyStartText: q.workOrders?.[0]?.warrantyStartDate ? thaiDate(new Date(q.workOrders[0].warrantyStartDate)) : '',
+      warrantyEndText: q.workOrders?.[0]?.warrantyEndDate ? thaiDate(new Date(q.workOrders[0].warrantyEndDate)) : '',
       items: q.items,
       subtotal: Number(q.subtotal),
       discountAmount: Number(q.discountAmount),

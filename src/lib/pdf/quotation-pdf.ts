@@ -78,6 +78,8 @@ export interface QuotationPDFData {
   workOrders?: Array<{
     woNumber: string;
     poNumber?: string | null;
+    warrantyStartDate?: string | Date | null;
+    warrantyEndDate?: string | Date | null;
   }>;
   items: Array<{
     itemType?: string | null;
@@ -180,6 +182,8 @@ export function generateQuotationPDF(data: QuotationPDFData): jsPDF {
     : '-';
   const woNumber = data.workOrders?.[0]?.woNumber || '';
   const poNumber = data.workOrders?.[0]?.poNumber || '';
+  const warrantyStart = data.workOrders?.[0]?.warrantyStartDate;
+  const warrantyEnd = data.workOrders?.[0]?.warrantyEndDate;
 
   // Row 1: ชื่อลูกค้า / เลขที่
   doc.setFont('THSarabunNew', 'bold');
@@ -219,6 +223,13 @@ export function generateQuotationPDF(data: QuotationPDFData): jsPDF {
   doc.text('P/O', rightLabelX, y);
   doc.setFont('THSarabunNew', 'normal');
   drawRightValue(poNumber, y);
+  y += 5.5;
+
+  // Row 5: ระยะเวลาประกัน
+  doc.setFont('THSarabunNew', 'bold');
+  doc.text('ระยะเวลาประกัน :', leftCol, y);
+  doc.setFont('THSarabunNew', 'normal');
+  doc.text(`เริ่ม ${warrantyStart ? thaiDate(warrantyStart) : '-'}     สิ้นสุด ${warrantyEnd ? thaiDate(warrantyEnd) : '-'}`, leftValueX, y);
   y += 4;
 
   // ══════════════════════════════════════

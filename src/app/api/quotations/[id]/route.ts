@@ -16,7 +16,7 @@ export async function GET(
         branch: true,
         createdBy: { select: { name: true } },
         items: { orderBy: { itemOrder: 'asc' } },
-        workOrders: { select: { woNumber: true, poNumber: true }, where: { status: { not: 'CANCELLED' } } },
+        workOrders: { select: { woNumber: true, poNumber: true, warrantyStartDate: true, warrantyEndDate: true }, where: { status: { not: 'CANCELLED' } } },
       },
     });
 
@@ -100,6 +100,7 @@ export async function PATCH(
                   unitPrice?: number;
                   materialPrice?: number;
                   labourPrice?: number;
+                  isAdjustment?: boolean;
                 },
                 index: number
               ) => {
@@ -118,6 +119,7 @@ export async function PATCH(
                   materialPrice: matPrice,
                   labourPrice: labPrice,
                   amount,
+                  isAdjustment: Boolean(item.isAdjustment),
                 };
               }
             ),

@@ -68,6 +68,7 @@ type QuotationItem = {
   quantity: number;
   materialPrice: number;
   labourPrice: number;
+  isAdjustment?: boolean;
 };
 type ItemSuggestion = { description: string; unit: string; unitPrice: number };
 
@@ -138,6 +139,35 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
 
   const [items, setItems] = useState<QuotationItem[]>([]);
   const [nextTempId, setNextTempId] = useState(1);
+
+  // ── Adjustment (ปรับแก้) Dialog State ──
+  const [adjOpen, setAdjOpen] = useState(false);
+  const [adjIsNegative, setAdjIsNegative] = useState(false);
+  const [adjDesc, setAdjDesc] = useState('');
+  const [adjQty, setAdjQty] = useState('1');
+  const [adjUnit, setAdjUnit] = useState('งาน');
+  const [adjMat, setAdjMat] = useState('');
+  const [adjLab, setAdjLab] = useState('');
+
+  const handleAddAdjustment = () => {
+    if (!adjDesc.trim()) return;
+    const newId = nextTempId;
+    setNextTempId(newId + 1);
+    const qtyAbs = Math.abs(parseFloat(adjQty) || 1);
+    const newItem: QuotationItem = {
+      tempId: newId,
+      itemType: 'ITEM',
+      description: adjDesc,
+      unit: adjUnit,
+      quantity: adjIsNegative ? -qtyAbs : qtyAbs,
+      materialPrice: parseFloat(adjMat) || 0,
+      labourPrice: parseFloat(adjLab) || 0,
+      isAdjustment: true,
+    };
+    setItems([...items, newItem]);
+    setAdjOpen(false);
+    setAdjDesc(''); setAdjQty('1'); setAdjUnit('งาน'); setAdjMat(''); setAdjLab(''); setAdjIsNegative(false);
+  };
 
   // ── Add Customer Dialog State ──
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
@@ -215,7 +245,7 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
         setConditions(q.conditions || q.warranty || q.notes || '');
         const loadedItems = (q.items || []).map((item: {
           itemType?: string; parentIndex?: number; description: string; unit: string;
-          quantity: number; unitPrice: number; materialPrice?: number; labourPrice?: number;
+          quantity: number; unitPrice: number; materialPrice?: number; labourPrice?: number; isAdjustment?: boolean;
         }, idx: number) => ({
           tempId: idx + 1,
           itemType: (item.itemType || 'ITEM') as 'HEADER' | 'ITEM',
@@ -225,6 +255,7 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
           quantity: Number(item.quantity),
           materialPrice: Number(item.materialPrice || item.unitPrice || 0),
           labourPrice: Number(item.labourPrice || 0),
+          isAdjustment: Boolean(item.isAdjustment),
         }));
 
         if (loadedItems.length > 0) {
@@ -484,6 +515,7 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
           quantity: Number(item.quantity),
           materialPrice: Number(item.materialPrice),
           labourPrice: Number(item.labourPrice),
+          isAdjustment: Boolean(item.isAdjustment),
         };
       });
 
@@ -960,14 +992,34 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
                         );
                       }
 
+                      const isAdjItem = Boolean(item.isAdjustment);
+                      const isAdjNegative = isAdjItem && item.quantity < 0;
+
                       return (
-                        <TableRow key={item.tempId} sx={{ '&:hover': { bgcolor: 'action.hover' } }}>
+                        <TableRow key={item.tempId} sx={{
+                          bgcolor: isAdjItem ? (isAdjNegative ? '#FEF2F2' : '#F0FFF4') : 'transparent',
+                          '&:hover': { bgcolor: isAdjItem ? undefined : 'action.hover' },
+                        }}>
                           <TableCell align="center" sx={{ fontWeight: 600, color: 'text.secondary', fontSize: '12px' }}>
-                            {displayNumbers[index]}
+                            {isAdjItem ? (
+                              <Chip label={isAdjNegative ? '-' : '+'} size="small"
+                                sx={{ fontSize: '11px', fontWeight: 800, minWidth: 28,
+                                  bgcolor: isAdjNegative ? '#FEE2E2' : '#D1FAE5',
+                                  color: isAdjNegative ? '#DC2626' : '#059669',
+                                }} />
+                            ) : displayNumbers[index]}
                           </TableCell>
                           <TableCell>
                             {isReadOnly ? (
-                              <Typography fontSize="13px">{item.description}</Typography>
+                              <Typography fontSize="13px">
+                                {item.description}
+                                {isAdjItem && <Chip label="ปรับแก้" size="small" sx={{ ml: 1, fontSize: '10px', bgcolor: '#FEF3C7', color: '#D97706' }} />}
+                              </Typography>
+                            ) : isAdjItem ? (
+                              <Typography fontSize="13px">
+                                {item.description}
+                                <Chip label="ปรับแก้" size="small" sx={{ ml: 1, fontSize: '10px', bgcolor: '#FEF3C7', color: '#D97706' }} />
+                              </Typography>
                             ) : (
                               <Autocomplete
                                 freeSolo
@@ -1080,6 +1132,12 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
                     onClick={addHeader}
                     sx={{ textTransform: 'none', fontWeight: 600, borderStyle: 'dashed', borderWidth: 2 }}>
                     เพิ่มหัวข้อหลัก
+                  </Button>
+                  <Button variant="outlined"
+                    startIcon={<FuseSvgIcon size={16}>lucide:pencil-line</FuseSvgIcon>}
+                    onClick={() => setAdjOpen(true)}
+                    sx={{ textTransform: 'none', fontWeight: 600, borderStyle: 'dashed', borderWidth: 2, color: '#D97706', borderColor: '#D97706', '&:hover': { borderColor: '#B45309', bgcolor: '#FFFBEB' } }}>
+                    ปรับแก้รายการ
                   </Button>
                   <FormControl size="small" sx={{ minWidth: 280 }}>
                     <Select
@@ -1212,6 +1270,47 @@ function EditQuotationPage({ params }: { params: Promise<{ id: string }> }) {
             )}
         </motion.div>
       </Box>
+
+      {/* ── Adjustment (ปรับแก้) Dialog ── */}
+      <Dialog open={adjOpen} onClose={() => setAdjOpen(false)} maxWidth="sm" fullWidth
+        PaperProps={{ sx: { borderRadius: '16px' } }}>
+        <DialogTitle sx={{ fontWeight: 700, color: '#1E293B' }}>
+          เพิ่ม / ลดรายการ (ปรับแก้)
+        </DialogTitle>
+        <DialogContent sx={{ pt: '8px !important' }}>
+          <Typography sx={{ fontSize: '13px', color: '#64748B', mb: 2 }}>
+            ใช้สำหรับปรับยอดใบเสนอราคาเพิ่มเติมนอกเหนือจากรายการหลัก หากต้องการลดยอด ให้เลือก &quot;ลดรายการ&quot;
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1.5, mb: 2 }}>
+            <Button variant={!adjIsNegative ? 'contained' : 'outlined'} onClick={() => setAdjIsNegative(false)}
+              sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, bgcolor: !adjIsNegative ? '#22C55E' : 'transparent', color: !adjIsNegative ? '#fff' : '#22C55E', borderColor: '#22C55E', '&:hover': { bgcolor: '#16A34A', color: '#fff' } }}>
+              + เพิ่มรายการ
+            </Button>
+            <Button variant={adjIsNegative ? 'contained' : 'outlined'} onClick={() => setAdjIsNegative(true)}
+              sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, bgcolor: adjIsNegative ? '#DC2626' : 'transparent', color: adjIsNegative ? '#fff' : '#DC2626', borderColor: '#DC2626', '&:hover': { bgcolor: '#B91C1C', color: '#fff' } }}>
+              - ลดรายการ (ติดลบ)
+            </Button>
+          </Box>
+          <TextField label="รายละเอียด" fullWidth value={adjDesc} onChange={(e) => setAdjDesc(e.target.value)} sx={{ mb: 2, '& .MuiOutlinedInput-root': { borderRadius: '10px' } }} />
+          <Box sx={{ display: 'flex', gap: 1.5, mb: 2 }}>
+            <TextField label="จำนวน" value={adjQty} onChange={(e) => setAdjQty(e.target.value)} sx={{ flex: 1, '& .MuiOutlinedInput-root': { borderRadius: '10px' } }} inputProps={{ inputMode: 'decimal' }} />
+            <TextField label="หน่วย" value={adjUnit} onChange={(e) => setAdjUnit(e.target.value)} sx={{ flex: 1, '& .MuiOutlinedInput-root': { borderRadius: '10px' } }} />
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1.5 }}>
+            <TextField label="ค่าวัสดุ/หน่วย (Material)" value={adjMat} onChange={(e) => setAdjMat(e.target.value)} sx={{ flex: 1, '& .MuiOutlinedInput-root': { borderRadius: '10px' } }} inputProps={{ inputMode: 'decimal' }} />
+            <TextField label="ค่าแรง/หน่วย (Labour)" value={adjLab} onChange={(e) => setAdjLab(e.target.value)} sx={{ flex: 1, '& .MuiOutlinedInput-root': { borderRadius: '10px' } }} inputProps={{ inputMode: 'decimal' }} />
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, gap: 1 }}>
+          <Button onClick={() => setAdjOpen(false)} sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, color: '#64748B' }}>ยกเลิก</Button>
+          <Button variant="contained" onClick={handleAddAdjustment}
+            sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700, px: 3,
+              background: adjIsNegative ? 'linear-gradient(135deg, #DC2626, #B91C1C)' : 'linear-gradient(135deg, #22C55E, #16A34A)',
+            }}>
+            {adjIsNegative ? '- บันทึกรายการลด' : '+ บันทึกรายการเพิ่ม'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* ── Add Customer Dialog ── */}
       <Dialog open={addCustomerOpen} onClose={() => setAddCustomerOpen(false)} maxWidth="sm" fullWidth

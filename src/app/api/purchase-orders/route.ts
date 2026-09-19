@@ -37,6 +37,8 @@ export async function GET(request: NextRequest) {
               select: {
                 quotationNumber: true,
                 projectName: true,
+                date: true,
+                totalAmount: true,
                 customerGroup: { select: { groupName: true } },
                 branch: { select: { name: true, code: true } },
               },
@@ -47,6 +49,7 @@ export async function GET(request: NextRequest) {
           select: {
             quotationNumber: true,
             projectName: true,
+            date: true,
             subtotal: true,
             totalAmount: true,
             customerGroup: { select: { groupName: true } },
@@ -55,6 +58,7 @@ export async function GET(request: NextRequest) {
         },
         team: { select: { teamName: true, leaderName: true, leaderPhone: true, leaderAddress: true } },
         adjustments: { orderBy: { createdAt: 'asc' } },
+        items: { select: { totalMaterial: true, totalLabour: true, isAdjustment: true, quantity: true, amount: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
