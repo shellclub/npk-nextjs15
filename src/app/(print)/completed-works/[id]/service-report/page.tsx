@@ -4,53 +4,63 @@ import { useState, useEffect, use } from 'react';
 
 type ServiceItem = { id: string; itemNo: number; description: string };
 type CW = {
-  id: string; completionDate: string;
-  workOrder: {
-    woNumber: string; poNumber?: string | null; date: string;
-    quotation?: {
-      quotationNumber: string; projectName?: string | null;
-      customerGroup: { groupName: string };
-    } | null;
-  };
-  serviceItems: ServiceItem[];
+	id: string;
+	completionDate: string;
+	workOrder: {
+		woNumber: string;
+		poNumber?: string | null;
+		date: string;
+		quotation?: {
+			quotationNumber: string;
+			projectName?: string | null;
+			customerGroup: { groupName: string };
+		} | null;
+	};
+	serviceItems: ServiceItem[];
 };
 
 function ServiceReportPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const [data, setData] = useState<CW | null>(null);
-  const [loading, setLoading] = useState(true);
+	const { id } = use(params);
+	const [data, setData] = useState<CW | null>(null);
+	const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetch(`/api/completed-works/${id}`)
-      .then(r => r.json())
-      .then(d => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [id]);
+	useEffect(() => {
+		fetch(`/api/completed-works/${id}`)
+			.then((r) => r.json())
+			.then((d) => {
+				setData(d);
+				setLoading(false);
+			})
+			.catch(() => setLoading(false));
+	}, [id]);
 
-  useEffect(() => {
-    if (!loading && data) {
-      setTimeout(() => window.print(), 800);
-    }
-  }, [loading, data]);
+	useEffect(() => {
+		if (!loading && data) {
+			setTimeout(() => window.print(), 800);
+		}
+	}, [loading, data]);
 
-  if (loading) return <div style={{ padding: 40, textAlign: 'center', fontFamily: 'Sarabun, sans-serif' }}>กำลังโหลด...</div>;
-  if (!data) return <div style={{ padding: 40, textAlign: 'center', fontFamily: 'Sarabun, sans-serif' }}>ไม่พบข้อมูล</div>;
+	if (loading)
+		return <div style={{ padding: 40, textAlign: 'center', fontFamily: 'Sarabun, sans-serif' }}>กำลังโหลด...</div>;
 
-  const wo = data.workOrder;
-  const customerName = wo.quotation?.customerGroup?.groupName || '..............................................';
-  const branchName = wo.quotation?.projectName || '..............................................';
-  const poNumber = wo.poNumber || '..............................................';
-  const qtNumber = wo.quotation?.quotationNumber || '..............................................';
+	if (!data)
+		return <div style={{ padding: 40, textAlign: 'center', fontFamily: 'Sarabun, sans-serif' }}>ไม่พบข้อมูล</div>;
 
-  // Fill up to at least 15 rows
-  const items = [...data.serviceItems];
-  while (items.length < 15) {
-    items.push({ id: `empty-${items.length}`, itemNo: items.length + 1, description: '' });
-  }
+	const wo = data.workOrder;
+	const customerName = wo.quotation?.customerGroup?.groupName || '..............................................';
+	const branchName = wo.quotation?.projectName || '..............................................';
+	const poNumber = wo.poNumber || '..............................................';
+	const qtNumber = wo.quotation?.quotationNumber || '..............................................';
 
-  return (
-    <>
-      <style>{`
+	// Fill up to at least 15 rows
+	const items = [...data.serviceItems];
+	while (items.length < 15) {
+		items.push({ id: `empty-${items.length}`, itemNo: items.length + 1, description: '' });
+	}
+
+	return (
+		<>
+			<style>{`
         @page { size: A4 portrait; margin: 12mm; }
         @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -83,76 +93,116 @@ function ServiceReportPage({ params }: { params: Promise<{ id: string }> }) {
         .sr-sigsub { font-size: 10px; color: #666; }
       `}</style>
 
-      <div className="sr-page">
-        <div className="sr-header">
-          <img src="/images/logo/npk-logo.png" alt="NPK" className="sr-logo"
-            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-          <div className="sr-company">
-            <div className="sr-cname">บริษัท เอ็นพีเค เซอร์วิส แอนด์ ซัพพลาย จำกัด (สำนักงานใหญ่)</div>
-            <div className="sr-cname-en">NPK SERVICE & SUPPLY CO.,LTD.</div>
-            <div className="sr-caddr">210/19 หมู่ 4 ตำบลสนามชัย อำเภอเมืองสุพรรณบุรี จังหวัดสุพรรณบุรี 72000</div>
-            <div className="sr-caddr">Head Office ฿ 210/19 Moo.4 Tumbon Sanamchai, Mueang Supanburi, Suphanburi 72000</div>
-            <div className="sr-caddr">Tel. 09-8942-9891, 06-5961-9799, 09-3694-4591 E-mail : npkservicesupply@gmail.com</div>
-          </div>
-        </div>
+			<div className="sr-page">
+				<div className="sr-header">
+					<img
+						src="/api/company/asset/logo"
+						alt="NPK"
+						className="sr-logo"
+						onError={(e) => {
+							(e.target as HTMLImageElement).style.display = 'none';
+						}}
+					/>
+					<div className="sr-company">
+						<div className="sr-cname">บริษัท เอ็นพีเค เซอร์วิส แอนด์ ซัพพลาย จำกัด (สำนักงานใหญ่)</div>
+						<div className="sr-cname-en">NPK SERVICE & SUPPLY CO.,LTD.</div>
+						<div className="sr-caddr">
+							210/19 หมู่ 4 ตำบลสนามชัย อำเภอเมืองสุพรรณบุรี จังหวัดสุพรรณบุรี 72000
+						</div>
+						<div className="sr-caddr">
+							Head Office ฿ 210/19 Moo.4 Tumbon Sanamchai, Mueang Supanburi, Suphanburi 72000
+						</div>
+						<div className="sr-caddr">
+							Tel. 09-8942-9891, 06-5961-9799, 09-3694-4591 E-mail : npkservicesupply@gmail.com
+						</div>
+					</div>
+				</div>
 
-        <div className="sr-title">SERVICE REPORT</div>
+				<div className="sr-title">SERVICE REPORT</div>
 
-        <div className="sr-info">
-          <div className="sr-row">
-            <span className="sr-label">ผู้รับบริการ</span>
-            <span className="sr-val">{customerName}</span>
-          </div>
-          <div className="sr-row">
-            <span className="sr-label">สาขาที่ปฏิบัติงาน</span>
-            <span className="sr-val" style={{ flex: 0.6 }}>{branchName}</span>
-            <span className="sr-label">เลขที่คำสั่งงาน</span>
-            <span className="sr-val" style={{ flex: 0.4 }}>{poNumber}</span>
-          </div>
-          <div className="sr-row">
-            <span className="sr-label">อ้างถึง</span>
-            <span className="sr-val" style={{ flex: 0.6 }}></span>
-            <span className="sr-label">ใบเสนอราคาเลขที่</span>
-            <span className="sr-val" style={{ flex: 0.4 }}>{qtNumber}</span>
-          </div>
-        </div>
+				<div className="sr-info">
+					<div className="sr-row">
+						<span className="sr-label">ผู้รับบริการ</span>
+						<span className="sr-val">{customerName}</span>
+					</div>
+					<div className="sr-row">
+						<span className="sr-label">สาขาที่ปฏิบัติงาน</span>
+						<span
+							className="sr-val"
+							style={{ flex: 0.6 }}
+						>
+							{branchName}
+						</span>
+						<span className="sr-label">เลขที่คำสั่งงาน</span>
+						<span
+							className="sr-val"
+							style={{ flex: 0.4 }}
+						>
+							{poNumber}
+						</span>
+					</div>
+					<div className="sr-row">
+						<span className="sr-label">อ้างถึง</span>
+						<span
+							className="sr-val"
+							style={{ flex: 0.6 }}
+						></span>
+						<span className="sr-label">ใบเสนอราคาเลขที่</span>
+						<span
+							className="sr-val"
+							style={{ flex: 0.4 }}
+						>
+							{qtNumber}
+						</span>
+					</div>
+				</div>
 
-        <table className="sr-table">
-          <thead>
-            <tr>
-              <th className="sr-no">ลำดับที่</th>
-              <th>รายการแจ้งแก้ไข/ปรับปรุง/ซ่อมแซม</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item, idx) => (
-              <tr key={item.id || idx}>
-                <td className="sr-no">{item.description ? item.itemNo : ''}</td>
-                <td>{item.description}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+				<table className="sr-table">
+					<thead>
+						<tr>
+							<th className="sr-no">ลำดับที่</th>
+							<th>รายการแจ้งแก้ไข/ปรับปรุง/ซ่อมแซม</th>
+						</tr>
+					</thead>
+					<tbody>
+						{items.map((item, idx) => (
+							<tr key={item.id || idx}>
+								<td className="sr-no">{item.description ? item.itemNo : ''}</td>
+								<td>{item.description}</td>
+							</tr>
+						))}
+					</tbody>
+				</table>
 
-        <div className="sr-sigs">
-          <div className="sr-sig">
-            <div className="sr-siglabel" style={{ fontWeight: 'bold', marginBottom: '1mm' }}>ลงชื่อ</div>
-            <div className="sr-sigline"></div>
-            <div className="sr-siglabel">ผู้ส่งมอบงาน</div>
-            <div className="sr-sigsub">ตำแหน่ง ................................</div>
-            <div className="sr-sigsub">วันเดือน/ปี ...........................</div>
-          </div>
-          <div className="sr-sig">
-            <div className="sr-siglabel" style={{ fontWeight: 'bold', marginBottom: '1mm' }}>ลงชื่อ</div>
-            <div className="sr-sigline"></div>
-            <div className="sr-siglabel">ผู้ตรวจรับงาน</div>
-            <div className="sr-sigsub">ตำแหน่ง ................................</div>
-            <div className="sr-sigsub">วันเดือน/ปี ...........................</div>
-          </div>
-        </div>
-      </div>
-    </>
-  );
+				<div className="sr-sigs">
+					<div className="sr-sig">
+						<div
+							className="sr-siglabel"
+							style={{ fontWeight: 'bold', marginBottom: '1mm' }}
+						>
+							ลงชื่อ
+						</div>
+						<div className="sr-sigline"></div>
+						<div className="sr-siglabel">ผู้ส่งมอบงาน</div>
+						<div className="sr-sigsub">ตำแหน่ง ................................</div>
+						<div className="sr-sigsub">วันเดือน/ปี ...........................</div>
+					</div>
+					<div className="sr-sig">
+						<div
+							className="sr-siglabel"
+							style={{ fontWeight: 'bold', marginBottom: '1mm' }}
+						>
+							ลงชื่อ
+						</div>
+						<div className="sr-sigline"></div>
+						<div className="sr-siglabel">ผู้ตรวจรับงาน</div>
+						<div className="sr-sigsub">ตำแหน่ง ................................</div>
+						<div className="sr-sigsub">วันเดือน/ปี ...........................</div>
+					</div>
+				</div>
+			</div>
+		</>
+	);
 }
 
 export default ServiceReportPage;

@@ -1,14 +1,22 @@
-import clsx from 'clsx';
-import 'src/styles/splash-screen.css';
 import 'src/styles/index.css';
-import '../../public/assets/fonts/material-design-icons/MaterialIconsOutlined.css';
-import '../../public/assets/fonts/Geist/geist.css';
-import '../../public/assets/fonts/meteocons/style.css';
-import '../../public/assets/styles/prism.css';
+import { Prompt, Sarabun } from 'next/font/google';
 import { SessionProvider } from 'next-auth/react';
 import { auth } from '@auth/authJs';
 import generateMetadata from '../utils/generateMetadata';
 import App from './App';
+
+const prompt = Prompt({
+	subsets: ['thai', 'latin'],
+	weight: ['400', '500', '600'],
+	variable: '--font-prompt',
+	display: 'swap'
+});
+const sarabun = Sarabun({
+	subsets: ['thai', 'latin'],
+	weight: ['400', '600'],
+	variable: '--font-sarabun',
+	display: 'swap'
+});
 
 // eslint-disable-next-line react-refresh/only-export-components
 export const metadata = await generateMetadata({
@@ -28,7 +36,10 @@ export default async function RootLayout({
 	const session = await auth();
 
 	return (
-		<html lang="th">
+		<html
+			lang="th"
+			className={`${prompt.variable} ${sarabun.variable}`}
+		>
 			<head>
 				<meta charSet="utf-8" />
 				<meta
@@ -40,9 +51,6 @@ export default async function RootLayout({
 					content="#000000"
 				/>
 				<base href="/" />
-				<link rel="preconnect" href="https://fonts.googleapis.com" />
-				<link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-				<link href="https://fonts.googleapis.com/css2?family=Kanit:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400;1,500&display=swap" rel="stylesheet" />
 				{/*
 					manifest.json provides metadata used when your web app is added to the
 					homescreen on Android. See https://developers.google.com/web/fundamentals/engage-and-retain/web-app-manifest/
@@ -55,12 +63,8 @@ export default async function RootLayout({
 					rel="shortcut icon"
 					href="/favicon.ico"
 				/>
-				<noscript id="emotion-insertion-point" />
 			</head>
-			<body
-				id="root"
-				className={clsx('loading')}
-			>
+			<body id="root">
 				<SessionProvider
 					basePath="/auth"
 					session={session}

@@ -1,481 +1,264 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, use } from 'react';
-import { useRouter } from 'next/navigation';
-import Typography from '@mui/material/Typography';
-import Paper from '@mui/material/Paper';
-import Button from '@mui/material/Button';
-import IconButton from '@mui/material/IconButton';
-import Box from '@mui/material/Box';
-import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
-import Divider from '@mui/material/Divider';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
-import FuseSvgIcon from '@fuse/core/FuseSvgIcon';
-import FusePageCarded from '@fuse/core/FusePageCarded';
-import { styled } from '@mui/material/styles';
-import { motion } from 'motion/react';
+import { ArrowLeft, FileText, Image as ImageIcon, Trash2, Truck } from 'lucide-react';
+import { useParams } from 'next/navigation';
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAlert } from '@/components/shared/AlertProvider';
+import {
+	Button,
+	Card,
+	CardHeader,
+	ConfirmDialog,
+	Dialog,
+	FileDrop,
+	IconButton,
+	InfoCard,
+	PageHeader,
+	StatusBadge
+} from '@/components/ui';
+import { formatDateShort, formatMoney } from '@/lib/format';
+import { COMPLETED_STATUS, FALLBACK } from '@/lib/status';
+import { sendJson, useApi } from '@/lib/use-api';
 
-const Root = styled(FusePageCarded)(() => ({
-  '& .container': { maxWidth: '100%!important' },
-  '& .FusePageCarded-wrapper': { margin: 0, borderRadius: 0, boxShadow: 'none' },
-  padding: 0,
-}));
-
-type Photo = { id: string; fileName: string; fileUrl: string; photoType: string; createdAt: string };
-type ServiceItem = { id: string; itemNo: number; description: string };
+type Photo = { id: string; fileName: string; fileUrl: string; photoType: string };
 type CW = {
-  id: string; completionDate: string; status: string; notes?: string | null;
-  hasPhotos: boolean; hasWorkReceipt: boolean;
-  workOrder: {
-    id: string; woNumber: string; date: string; description?: string | null;
-    totalAmount: number; poNumber?: string | null;
-    quotation?: {
-      quotationNumber: string; projectName?: string | null;
-      customerGroup: { groupName: string };
-    } | null;
-    team?: { teamName: string } | null;
-  };
-  photos: Photo[];
-  serviceItems: ServiceItem[];
+	id: string;
+	completionDate: string;
+	status: string;
+	notes?: string | null;
+	hasPhotos: boolean;
+	hasWorkReceipt: boolean;
+	workOrder: {
+		id: string;
+		woNumber: string;
+		date: string;
+		description?: string | null;
+		totalAmount: number;
+		poNumber?: string | null;
+		quotation?: {
+			quotationNumber: string;
+			projectName?: string | null;
+			customerGroup: { groupName: string };
+		} | null;
+		team?: { teamName: string } | null;
+	};
+	photos: Photo[];
+	serviceItems: { id: string; itemNo: number; description: string }[];
 };
 
-const statusConfig: Record<string, { label: string; bgColor: string; textColor: string }> = {
-  COMPLETED: { label: 'เสร็จสิ้น', bgColor: '#FEF3C7', textColor: '#D97706' },
-  PENDING_PAYMENT: { label: 'รอจ่ายค่าแรง', bgColor: '#DBEAFE', textColor: '#2563EB' },
-  PAID: { label: 'จ่ายแล้ว', bgColor: '#D1FAE5', textColor: '#059669' },
-};
+export default function CompletedWorkDetailPage() {
+	const { id } = useParams<{ id: string }>();
+	const alert = useAlert();
+	const qc = useQueryClient();
+	const { data: cw, isLoading, isError } = useApi<CW>(`/api/completed-works/${id}`);
+	const [uploading, setUploading] = useState(false);
+	const [view, setView] = useState<string | null>(null);
+	const [del, setDel] = useState<Photo | null>(null);
+	const refresh = () => qc.invalidateQueries({ queryKey: [`/api/completed-works/${id}`] });
 
-function CompletedWorkDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const router = useRouter();
-  const alert = useAlert();
-  const [data, setData] = useState<CW | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
+	async function upload(files: File[], photoType: string) {
+		if (!files.length) return;
 
-  // Lightbox
-  const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [lightboxPhotos, setLightboxPhotos] = useState<Photo[]>([]);
-  const [lightboxIndex, setLightboxIndex] = useState(0);
+		setUploading(true);
 
-  // Delete confirm
-  const [deleteTarget, setDeleteTarget] = useState<Photo | null>(null);
-  const [deleting, setDeleting] = useState(false);
+		try {
+			const fd = new FormData();
+			files.forEach((f) => fd.append('files', f));
+			fd.append('photoType', photoType);
 
-  const photoInputRef = useRef<HTMLInputElement>(null);
-  const receiptInputRef = useRef<HTMLInputElement>(null);
+			const r = await fetch(`/api/completed-works/${id}/upload`, { method: 'POST', body: fd });
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/completed-works/${id}`);
-      if (!res.ok) throw new Error('Not found');
-      const d = await res.json();
-      setData(d);
-    } catch { setData(null); }
-    finally { setLoading(false); }
-  }, [id]);
+			if (!r.ok) throw new Error();
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+			alert.showSuccess('อัปโหลดสำเร็จ', `${files.length} ไฟล์`);
+			await refresh();
+		} catch {
+			alert.showError('อัปโหลดไม่สำเร็จ');
+		} finally {
+			setUploading(false);
+		}
+	}
 
-  const handleUpload = async (files: FileList | null, photoType: string) => {
-    if (!files || files.length === 0) return;
-    setUploading(true);
-    try {
-      const fd = new FormData();
-      Array.from(files).forEach(f => fd.append('files', f));
-      fd.append('photoType', photoType);
-      const res = await fetch(`/api/completed-works/${id}/upload`, { method: 'POST', body: fd });
-      if (!res.ok) throw new Error('Upload failed');
-      alert.showSuccess('อัพโหลดสำเร็จ', `เพิ่ม ${files.length} ไฟล์แล้ว`);
-      fetchData();
-    } catch {
-      alert.showError('เกิดข้อผิดพลาด', 'ไม่สามารถอัพโหลดได้');
-    } finally {
-      setUploading(false);
-      // Reset input value so same file can be re-selected
-      if (photoInputRef.current) photoInputRef.current.value = '';
-      if (receiptInputRef.current) receiptInputRef.current.value = '';
-    }
-  };
+	async function remove() {
+		if (!del) return;
 
-  const handleDelete = async () => {
-    if (!deleteTarget) return;
-    setDeleting(true);
-    try {
-      const res = await fetch(`/api/completed-works/${id}/photos/${deleteTarget.id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Delete failed');
-      alert.showSuccess('ลบสำเร็จ', `ลบรูป ${deleteTarget.fileName} แล้ว`);
-      setDeleteTarget(null);
-      fetchData();
-    } catch {
-      alert.showError('เกิดข้อผิดพลาด', 'ไม่สามารถลบได้');
-    } finally { setDeleting(false); }
-  };
+		try {
+			await sendJson(`/api/completed-works/${id}/photos/${del.id}`, 'DELETE');
+			await refresh();
+		} catch {
+			alert.showError('ลบไม่สำเร็จ');
+		}
 
-  const openLightbox = (photos: Photo[], index: number) => {
-    setLightboxPhotos(photos);
-    setLightboxIndex(index);
-    setLightboxOpen(true);
-  };
+		setDel(null);
+	}
 
-  if (loading) {
-    return <div className="w-full flex items-center justify-center py-80"><CircularProgress /></div>;
-  }
-  if (!data) {
-    return <div className="w-full flex items-center justify-center py-80"><Typography>ไม่พบข้อมูล</Typography></div>;
-  }
+	if (isLoading) return <p className="text-ink-muted py-20 text-center">กำลังโหลด...</p>;
 
-  const wo = data.workOrder;
-  const sc = statusConfig[data.status] || statusConfig['COMPLETED'];
-  const workPhotos = data.photos.filter(p => p.photoType === 'WORK');
-  const receiptPhotos = data.photos.filter(p => p.photoType === 'RECEIPT');
+	if (isError || !cw?.id) {
+		return (
+			<div className="flex flex-col items-center gap-4 py-20">
+				<p role="alert">ไม่พบข้อมูลงานเสร็จ</p>
+				<Button href="/apps/completed-works">กลับรายการ</Button>
+			</div>
+		);
+	}
 
-  // Photo card component with hover actions
-  const PhotoCard = ({ photo, allPhotos, index }: { photo: Photo; allPhotos: Photo[]; index: number }) => (
-    <Box sx={{
-      position: 'relative', width: 160, height: 160, borderRadius: '10px', overflow: 'hidden',
-      border: '2px solid #E2E8F0', cursor: 'pointer',
-      '&:hover .photo-overlay': { opacity: 1 },
-      transition: 'transform 0.2s, box-shadow 0.2s',
-      '&:hover': { transform: 'scale(1.03)', boxShadow: '0 4px 16px rgba(0,0,0,0.12)' },
-    }}>
-      <img src={photo.fileUrl} alt={photo.fileName}
-        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-        onClick={() => openLightbox(allPhotos, index)} />
-      {/* Hover overlay */}
-      <Box className="photo-overlay" sx={{
-        position: 'absolute', inset: 0, bgcolor: 'rgba(0,0,0,0.5)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1,
-        opacity: 0, transition: 'opacity 0.2s',
-      }}>
-        <IconButton size="small" onClick={() => openLightbox(allPhotos, index)}
-          sx={{ bgcolor: 'rgba(255,255,255,0.9)', '&:hover': { bgcolor: '#fff' } }}>
-          <FuseSvgIcon size={18} sx={{ color: '#3B82F6' }}>lucide:zoom-in</FuseSvgIcon>
-        </IconButton>
-        <IconButton size="small" onClick={(e) => { e.stopPropagation(); setDeleteTarget(photo); }}
-          sx={{ bgcolor: 'rgba(255,255,255,0.9)', '&:hover': { bgcolor: '#fff' } }}>
-          <FuseSvgIcon size={18} sx={{ color: '#EF4444' }}>lucide:trash-2</FuseSvgIcon>
-        </IconButton>
-      </Box>
-      {/* File name */}
-      <Box sx={{
-        position: 'absolute', bottom: 0, left: 0, right: 0, px: 1, py: 0.5,
-        bgcolor: 'rgba(0,0,0,0.6)', color: '#fff', fontSize: '10px',
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      }}>
-        {photo.fileName}
-      </Box>
-    </Box>
-  );
+	const wo = cw.workOrder;
+	const m = COMPLETED_STATUS[cw.status] ?? FALLBACK;
+	const gallery = (title: string, type: string, hint: string) => {
+		const list = cw.photos.filter((p) => p.photoType === type);
 
-  const header = (
-    <div className="flex flex-auto flex-col py-4">
-      <Typography sx={{ fontSize: '14px', color: '#94A3B8', mb: 0.5 }}>
-        จัดการงาน {'>'} งานเสร็จแล้วทั้งหมด {'>'} {wo.woNumber}
-      </Typography>
-      <div className="flex flex-auto items-center gap-8">
-        <IconButton onClick={() => router.back()}>
-          <FuseSvgIcon>lucide:arrow-left</FuseSvgIcon>
-        </IconButton>
-        <motion.span initial={{ x: -20 }} animate={{ x: 0, transition: { delay: 0.2 } }}>
-          <Typography sx={{ fontSize: '24px', fontWeight: 800, color: '#1E293B' }}>
-            {wo.woNumber}
-          </Typography>
-        </motion.span>
-        <Chip label={sc.label} size="small" sx={{ bgcolor: sc.bgColor, color: sc.textColor, fontWeight: 600, ml: 1 }} />
-        <Box sx={{ flex: 1 }} />
-        <Button variant="outlined" size="small"
-          startIcon={<FuseSvgIcon size={16}>lucide:image</FuseSvgIcon>}
-          onClick={() => window.open(`/completed-works/${id}/print`, '_blank')}
-          sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
-          พิมพ์รูปภาพ
-        </Button>
-        <Button variant="outlined" size="small"
-          startIcon={<FuseSvgIcon size={16}>lucide:truck</FuseSvgIcon>}
-          onClick={() => window.open(`/api/work-orders/${wo.id}/delivery-note`, '_blank')}
-          sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600, ml: 1, borderColor: '#059669', color: '#059669' }}>
-          ใบส่งมอบงาน
-        </Button>
-        <Button variant="outlined" size="small"
-          startIcon={<FuseSvgIcon size={16}>lucide:file-text</FuseSvgIcon>}
-          onClick={() => window.open(`/completed-works/${id}/service-report`, '_blank')}
-          sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600, ml: 1 }}>
-          Service Report
-        </Button>
-      </div>
-    </div>
-  );
+		return (
+			<Card>
+				<CardHeader title={`${title} (${list.length})`} />
+				<FileDrop
+					label={uploading ? 'กำลังอัปโหลด...' : hint}
+					accept="image/*"
+					multiple
+					onFiles={(f) => upload(f, type)}
+				/>
+				{list.length > 0 && (
+					<ul className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
+						{list.map((p) => (
+							<li
+								key={p.id}
+								className="border-line relative overflow-hidden rounded-lg border"
+							>
+								<button
+									type="button"
+									aria-label={`ดูรูป ${p.fileName}`}
+									onClick={() => setView(p.fileUrl)}
+									className="focus-visible:outline-focus block w-full cursor-zoom-in focus-visible:outline-2 focus-visible:outline-offset-2"
+								>
+									<img
+										src={p.fileUrl}
+										alt={p.fileName}
+										className="h-32 w-full object-cover"
+									/>
+								</button>
+								<div className="text-ink-muted flex items-center justify-between px-2 py-1 text-[13px]">
+									<span className="truncate">{p.fileName}</span>
+									<IconButton
+										aria-label={`ลบรูป ${p.fileName}`}
+										className="size-9"
+										onClick={() => setDel(p)}
+									>
+										<Trash2 size={16} />
+									</IconButton>
+								</div>
+							</li>
+						))}
+					</ul>
+				)}
+			</Card>
+		);
+	};
 
-  const content = (
-    <Paper className="flex h-full w-full flex-auto flex-col overflow-auto rounded-b-none" elevation={0}>
-      <Box sx={{ px: { xs: 2, md: 4 }, py: 3, maxWidth: 1100 }}>
-        <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>
-
-          {/* WO Info Card */}
-          <Box sx={{ bgcolor: '#F8FAFC', borderRadius: '12px', p: 2.5, mb: 3, border: '1px solid #E2E8F0' }}>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' }, gap: 2 }}>
-              <Box><Typography sx={{ fontSize: '12px', color: '#94A3B8' }}>ลูกค้า</Typography>
-                <Typography sx={{ fontWeight: 600 }}>{wo.quotation?.customerGroup?.groupName || '-'}</Typography></Box>
-              <Box><Typography sx={{ fontSize: '12px', color: '#94A3B8' }}>โครงการ</Typography>
-                <Typography sx={{ fontWeight: 600, color: '#059669' }}>{wo.quotation?.projectName || wo.description || '-'}</Typography></Box>
-              <Box><Typography sx={{ fontSize: '12px', color: '#94A3B8' }}>ยอดรวม</Typography>
-                <Typography sx={{ fontWeight: 700, fontSize: '18px' }}>{Number(wo.totalAmount).toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท</Typography></Box>
-              <Box><Typography sx={{ fontSize: '12px', color: '#94A3B8' }}>อ้างอิง QT</Typography>
-                <Typography sx={{ fontWeight: 500 }}>{wo.quotation?.quotationNumber || '-'}</Typography></Box>
-              <Box><Typography sx={{ fontSize: '12px', color: '#94A3B8' }}>ทีมช่าง</Typography>
-                <Typography sx={{ fontWeight: 500 }}>{wo.team?.teamName || '-'}</Typography></Box>
-              <Box><Typography sx={{ fontSize: '12px', color: '#94A3B8' }}>วันที่เสร็จงาน</Typography>
-                <Typography sx={{ fontWeight: 500 }}>{new Date(data.completionDate).toLocaleDateString('th-TH', { day: '2-digit', month: 'long', year: 'numeric' })}</Typography></Box>
-            </Box>
-          </Box>
-
-          {/* ═══ Work Photos Section ═══ */}
-          <Box sx={{ mb: 3 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
-              <Typography sx={{ fontSize: '16px', fontWeight: 700, color: '#1E293B', display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Box sx={{
-                  width: 32, height: 32, borderRadius: '8px',
-                  background: 'linear-gradient(135deg, #059669, #047857)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  <FuseSvgIcon size={18} sx={{ color: '#fff' }}>lucide:camera</FuseSvgIcon>
-                </Box>
-                รูปภาพงาน ({workPhotos.length})
-              </Typography>
-              <Button size="small" variant="contained" onClick={() => photoInputRef.current?.click()}
-                startIcon={<FuseSvgIcon size={14}>lucide:plus</FuseSvgIcon>}
-                disabled={uploading}
-                sx={{
-                  borderRadius: '8px', textTransform: 'none', fontWeight: 600,
-                  background: 'linear-gradient(135deg, #059669, #047857)',
-                  '&:hover': { background: 'linear-gradient(135deg, #047857, #065F46)' },
-                }}>
-                เพิ่มรูปภาพ
-              </Button>
-              <input ref={photoInputRef} type="file" accept="image/*" multiple hidden
-                onChange={(e) => handleUpload(e.target.files, 'WORK')} />
-            </Box>
-
-            {workPhotos.length > 0 ? (
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
-                {workPhotos.map((p, idx) => (
-                  <PhotoCard key={p.id} photo={p} allPhotos={workPhotos} index={idx} />
-                ))}
-                {/* Add more button */}
-                <Box
-                  onClick={() => photoInputRef.current?.click()}
-                  sx={{
-                    width: 160, height: 160, borderRadius: '10px',
-                    border: '2px dashed #CBD5E1', cursor: 'pointer',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                    '&:hover': { borderColor: '#059669', bgcolor: '#F0FDF4' },
-                    transition: 'all 0.2s',
-                  }}>
-                  <FuseSvgIcon size={28} sx={{ color: '#94A3B8', mb: 0.5 }}>lucide:image-plus</FuseSvgIcon>
-                  <Typography sx={{ fontSize: '12px', color: '#94A3B8' }}>เพิ่มรูปภาพ</Typography>
-                </Box>
-              </Box>
-            ) : (
-              <Box
-                onClick={() => photoInputRef.current?.click()}
-                sx={{
-                  border: '2px dashed #CBD5E1', borderRadius: '12px', p: 4, cursor: 'pointer',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center',
-                  '&:hover': { borderColor: '#059669', bgcolor: '#F0FDF4' },
-                  transition: 'all 0.2s',
-                }}>
-                <FuseSvgIcon size={40} sx={{ color: '#94A3B8', mb: 1 }}>lucide:image-plus</FuseSvgIcon>
-                <Typography sx={{ color: '#64748B' }}>คลิกเพื่ออัพโหลดรูปภาพ</Typography>
-                <Typography sx={{ fontSize: '12px', color: '#94A3B8', mt: 0.5 }}>รองรับ JPG, PNG, WebP</Typography>
-              </Box>
-            )}
-          </Box>
-
-          <Divider sx={{ my: 2.5 }} />
-
-          {/* ═══ Receipt Photos Section ═══ */}
-          <Box sx={{ mb: 3 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
-              <Typography sx={{ fontSize: '16px', fontWeight: 700, color: '#1E293B', display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Box sx={{
-                  width: 32, height: 32, borderRadius: '8px',
-                  background: 'linear-gradient(135deg, #3B82F6, #2563EB)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  <FuseSvgIcon size={18} sx={{ color: '#fff' }}>lucide:file-check</FuseSvgIcon>
-                </Box>
-                ใบรับงาน ({receiptPhotos.length})
-              </Typography>
-              <Button size="small" variant="contained" onClick={() => receiptInputRef.current?.click()}
-                startIcon={<FuseSvgIcon size={14}>lucide:plus</FuseSvgIcon>}
-                disabled={uploading}
-                sx={{
-                  borderRadius: '8px', textTransform: 'none', fontWeight: 600,
-                  background: 'linear-gradient(135deg, #3B82F6, #2563EB)',
-                  '&:hover': { background: 'linear-gradient(135deg, #2563EB, #1D4ED8)' },
-                }}>
-                เพิ่มใบรับงาน
-              </Button>
-              <input ref={receiptInputRef} type="file" accept="image/*,.pdf" multiple hidden
-                onChange={(e) => handleUpload(e.target.files, 'RECEIPT')} />
-            </Box>
-
-            {receiptPhotos.length > 0 ? (
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
-                {receiptPhotos.map((p, idx) => (
-                  <PhotoCard key={p.id} photo={p} allPhotos={receiptPhotos} index={idx} />
-                ))}
-                <Box
-                  onClick={() => receiptInputRef.current?.click()}
-                  sx={{
-                    width: 160, height: 160, borderRadius: '10px',
-                    border: '2px dashed #CBD5E1', cursor: 'pointer',
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                    '&:hover': { borderColor: '#3B82F6', bgcolor: '#EFF6FF' },
-                    transition: 'all 0.2s',
-                  }}>
-                  <FuseSvgIcon size={28} sx={{ color: '#94A3B8', mb: 0.5 }}>lucide:file-up</FuseSvgIcon>
-                  <Typography sx={{ fontSize: '12px', color: '#94A3B8' }}>เพิ่มใบรับงาน</Typography>
-                </Box>
-              </Box>
-            ) : (
-              <Box
-                onClick={() => receiptInputRef.current?.click()}
-                sx={{
-                  border: '2px dashed #CBD5E1', borderRadius: '12px', p: 4, cursor: 'pointer',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center',
-                  '&:hover': { borderColor: '#3B82F6', bgcolor: '#EFF6FF' },
-                  transition: 'all 0.2s',
-                }}>
-                <FuseSvgIcon size={40} sx={{ color: '#94A3B8', mb: 1 }}>lucide:file-up</FuseSvgIcon>
-                <Typography sx={{ color: '#64748B' }}>คลิกเพื่ออัพโหลดใบรับงาน</Typography>
-              </Box>
-            )}
-          </Box>
-
-          <Divider sx={{ my: 2.5 }} />
-
-          {/* ═══ Service Report Items ═══ */}
-          <Box sx={{ mb: 3 }}>
-            <Typography sx={{ fontSize: '16px', fontWeight: 700, color: '#1E293B', mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box sx={{
-                width: 32, height: 32, borderRadius: '8px',
-                background: 'linear-gradient(135deg, #7C3AED, #6D28D9)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
-                <FuseSvgIcon size={18} sx={{ color: '#fff' }}>lucide:clipboard-list</FuseSvgIcon>
-              </Box>
-              Service Report ({data.serviceItems.length} รายการ)
-            </Typography>
-            {data.serviceItems.length > 0 ? (
-              <Box sx={{ bgcolor: '#FAFBFC', borderRadius: '10px', border: '1px solid #E2E8F0', p: 2 }}>
-                {data.serviceItems.map(item => (
-                  <Box key={item.id} sx={{ display: 'flex', gap: 1.5, py: 0.8, borderBottom: '1px solid #F1F5F9', '&:last-child': { borderBottom: 'none' } }}>
-                    <Typography sx={{ fontWeight: 700, color: '#64748B', minWidth: 30 }}>{item.itemNo}.</Typography>
-                    <Typography sx={{ fontSize: '14px' }}>{item.description}</Typography>
-                  </Box>
-                ))}
-              </Box>
-            ) : (
-              <Typography sx={{ color: '#94A3B8' }}>ยังไม่มีรายการ Service Report</Typography>
-            )}
-          </Box>
-
-          {/* Notes */}
-          {data.notes && (
-            <Box sx={{ bgcolor: '#FFFBEB', borderRadius: '10px', border: '1px solid #FCD34D', p: 2, mb: 2 }}>
-              <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#92400E', mb: 0.5 }}>หมายเหตุ</Typography>
-              <Typography sx={{ fontSize: '14px', color: '#78350F' }}>{data.notes}</Typography>
-            </Box>
-          )}
-
-        </motion.div>
-      </Box>
-
-      {/* ═══ Lightbox Dialog ═══ */}
-      <Dialog open={lightboxOpen} onClose={() => setLightboxOpen(false)} maxWidth={false}
-        PaperProps={{ sx: { bgcolor: 'transparent', boxShadow: 'none', maxWidth: '90vw', maxHeight: '90vh' } }}
-        slotProps={{ backdrop: { sx: { bgcolor: 'rgba(0,0,0,0.85)' } } }}>
-        {lightboxPhotos.length > 0 && (
-          <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <img src={lightboxPhotos[lightboxIndex]?.fileUrl} alt=""
-              style={{ maxWidth: '85vw', maxHeight: '85vh', objectFit: 'contain', borderRadius: 8 }} />
-
-            {/* Close button */}
-            <IconButton onClick={() => setLightboxOpen(false)}
-              sx={{ position: 'absolute', top: -10, right: -10, bgcolor: 'rgba(255,255,255,0.9)', '&:hover': { bgcolor: '#fff' } }}>
-              <FuseSvgIcon size={20}>lucide:x</FuseSvgIcon>
-            </IconButton>
-
-            {/* Navigation */}
-            {lightboxPhotos.length > 1 && (
-              <>
-                <IconButton
-                  onClick={() => setLightboxIndex(prev => (prev - 1 + lightboxPhotos.length) % lightboxPhotos.length)}
-                  sx={{ position: 'absolute', left: -50, bgcolor: 'rgba(255,255,255,0.8)', '&:hover': { bgcolor: '#fff' } }}>
-                  <FuseSvgIcon size={24}>lucide:chevron-left</FuseSvgIcon>
-                </IconButton>
-                <IconButton
-                  onClick={() => setLightboxIndex(prev => (prev + 1) % lightboxPhotos.length)}
-                  sx={{ position: 'absolute', right: -50, bgcolor: 'rgba(255,255,255,0.8)', '&:hover': { bgcolor: '#fff' } }}>
-                  <FuseSvgIcon size={24}>lucide:chevron-right</FuseSvgIcon>
-                </IconButton>
-              </>
-            )}
-
-            {/* Counter */}
-            <Box sx={{
-              position: 'absolute', bottom: -30, left: '50%', transform: 'translateX(-50%)',
-              bgcolor: 'rgba(0,0,0,0.6)', color: '#fff', px: 2, py: 0.5, borderRadius: '12px', fontSize: '13px',
-            }}>
-              {lightboxIndex + 1} / {lightboxPhotos.length}
-            </Box>
-          </Box>
-        )}
-      </Dialog>
-
-      {/* ═══ Delete Confirm Dialog ═══ */}
-      <Dialog open={!!deleteTarget} onClose={() => setDeleteTarget(null)}
-        PaperProps={{ sx: { borderRadius: '16px', p: 1, minWidth: 360 } }}>
-        <DialogTitle sx={{ fontWeight: 700, fontSize: '18px' }}>
-          ยืนยันลบรูปภาพ
-        </DialogTitle>
-        <DialogContent>
-          {deleteTarget && (
-            <Box sx={{ textAlign: 'center' }}>
-              <img src={deleteTarget.fileUrl} alt="" style={{ maxWidth: 200, maxHeight: 150, borderRadius: 8, objectFit: 'cover' }} />
-              <Typography sx={{ mt: 1, fontSize: '14px', color: '#64748B' }}>
-                {deleteTarget.fileName}
-              </Typography>
-              <Typography sx={{ mt: 0.5, fontSize: '13px', color: '#EF4444' }}>
-                การลบจะไม่สามารถเรียกคืนได้
-              </Typography>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button variant="outlined" onClick={() => setDeleteTarget(null)}
-            sx={{ borderRadius: '8px', textTransform: 'none' }}>
-            ยกเลิก
-          </Button>
-          <Button variant="contained" color="error" onClick={handleDelete} disabled={deleting}
-            startIcon={deleting ? <CircularProgress size={16} color="inherit" /> : <FuseSvgIcon size={16}>lucide:trash-2</FuseSvgIcon>}
-            sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600 }}>
-            ลบ
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-    </Paper>
-  );
-
-  return <Root header={header} content={content} scroll="content" />;
+	return (
+		<>
+			<PageHeader
+				title={
+					<span className="inline-flex items-center gap-2">
+						<IconButton
+							aria-label="กลับรายการ"
+							href="/apps/completed-works"
+						>
+							<ArrowLeft size={22} />
+						</IconButton>
+						{wo.woNumber}
+					</span>
+				}
+				badge={
+					<StatusBadge
+						label={m.label}
+						tone={m.tone}
+					/>
+				}
+				subtitle={`เสร็จงานเมื่อ ${formatDateShort(cw.completionDate)}`}
+				actions={
+					<>
+						<Button
+							variant="outline"
+							icon={<ImageIcon size={18} />}
+							onClick={() => window.open(`/completed-works/${id}/print`, '_blank')}
+						>
+							พิมพ์รูปภาพ Report
+						</Button>
+						<Button
+							variant="outline"
+							icon={<FileText size={18} />}
+							onClick={() => window.open(`/completed-works/${id}/service-report`, '_blank')}
+						>
+							พิมพ์ Service Report
+						</Button>
+						<Button
+							variant="outline"
+							icon={<Truck size={18} />}
+							onClick={() => window.open(`/api/work-orders/${wo.id}/delivery-note`, '_blank')}
+						>
+							ใบส่งมอบงาน
+						</Button>
+					</>
+				}
+			/>
+			<div className="grid grid-cols-[repeat(auto-fit,minmax(340px,1fr))] gap-6">
+				<InfoCard
+					title="ข้อมูลงาน"
+					rows={[
+						['ลูกค้า', wo.quotation?.customerGroup.groupName ?? '-'],
+						['โครงการ', wo.quotation?.projectName || wo.description || '-'],
+						['อ้างอิง QT', wo.quotation?.quotationNumber ?? '-'],
+						['PO ลูกค้า', wo.poNumber],
+						['ทีมช่าง', wo.team?.teamName ?? '-'],
+						['มูลค่างาน', formatMoney(wo.totalAmount)]
+					]}
+				/>
+				<Card>
+					<CardHeader title={`Service Report (${cw.serviceItems.length} รายการ)`} />
+					{cw.serviceItems.length ? (
+						<ol className="flex flex-col gap-2">
+							{cw.serviceItems.map((s) => (
+								<li
+									key={s.id}
+									className="flex gap-3"
+								>
+									<span className="text-ink-muted w-6 text-right font-semibold">{s.itemNo}.</span>
+									{s.description}
+								</li>
+							))}
+						</ol>
+					) : (
+						<p className="text-ink-muted">ไม่มีรายการ</p>
+					)}
+					{cw.notes && <p className="bg-warn-soft text-warn rounded-lg px-4 py-3">{cw.notes}</p>}
+				</Card>
+			</div>
+			{gallery('รูปภาพงาน', 'WORK', 'ลากรูปงานมาวาง หรือคลิกเพื่อเลือก')}
+			{gallery('ใบรับงาน', 'RECEIPT', 'ลากรูปใบรับงานมาวาง หรือคลิกเพื่อเลือก')}
+			<Dialog
+				open={!!view}
+				onClose={() => setView(null)}
+				title="ดูรูปภาพ"
+				size="lg"
+			>
+				{view && (
+					<img
+						src={view}
+						alt="รูปขยาย"
+						className="max-h-[70vh] w-full object-contain"
+					/>
+				)}
+			</Dialog>
+			<ConfirmDialog
+				open={!!del}
+				danger
+				title="ลบรูปภาพ"
+				message={`ต้องการลบรูป ${del?.fileName ?? ''} ใช่หรือไม่`}
+				confirmLabel="ลบ"
+				onClose={() => setDel(null)}
+				onConfirm={remove}
+			/>
+		</>
+	);
 }
-
-export default CompletedWorkDetailPage;

@@ -1,157 +1,61 @@
 import NextAuth from 'next-auth';
-import { User } from '@auth/user';
-import { createStorage } from 'unstorage';
-import memoryDriver from 'unstorage/drivers/memory';
-import vercelKVDriver from 'unstorage/drivers/vercel-kv';
-import { UnstorageAdapter } from '@auth/unstorage-adapter';
-import type { NextAuthConfig } from 'next-auth';
-import type { Provider } from 'next-auth/providers';
 import Credentials from 'next-auth/providers/credentials';
-import Facebook from 'next-auth/providers/facebook';
-import Google from 'next-auth/providers/google';
-import { authGetDbUserByEmail, authCreateDbUser } from './authApi';
-
-const storage = createStorage({
-	driver: process.env.VERCEL
-		? vercelKVDriver({
-				url: process.env.AUTH_KV_REST_API_URL,
-				token: process.env.AUTH_KV_REST_API_TOKEN,
-				env: false
-			})
-		: memoryDriver()
-});
-
-export const providers: Provider[] = [
-	Credentials({
-		authorize(formInput) {
-			/**
-			 * !! This is just for demonstration purposes
-			 * You can create your own validation logic here
-			 * !! Do not use this in production
-			 */
-
-			/**
-			 * Sign in
-			 */
-			if (formInput.formType === 'signin') {
-				if (formInput.password === '' || formInput.email !== 'admin@fusetheme.com') {
-					return null;
-				}
-			}
-
-			/**
-			 * Sign up
-			 */
-			if (formInput.formType === 'signup') {
-				if (formInput.password === '' || formInput.email === '') {
-					return null;
-				}
-			}
-
-			/**
-			 * Response Success with email
-			 */
-			return {
-				email: formInput?.email as string
-			};
-		}
-	}),
-	Google,
-	Facebook
-];
+import type { NextAuthConfig, NextAuthResult } from 'next-auth';
+import type { User } from '@auth/user';
+import { prisma } from '@/lib/prisma';
+import { verifyPassword } from '@/lib/password';
 
 const config = {
-	theme: { logo: '/assets/images/logo/logo.svg' },
-	adapter: UnstorageAdapter(storage),
-	pages: {
-		signIn: '/sign-in'
-	},
-	providers,
+	pages: { signIn: '/sign-in' },
+	providers: [
+		Credentials({
+			async authorize(credentials) {
+				const email = typeof credentials?.email === 'string' ? credentials.email.trim().toLowerCase() : '';
+				const password = typeof credentials?.password === 'string' ? credentials.password : '';
+
+				if (!email || !password) return null;
+
+				const dbUser = await prisma.user.findUnique({ where: { email } });
+
+				if (!dbUser || !dbUser.isActive || !verifyPassword(password, dbUser.password)) return null;
+
+				return { id: dbUser.id, email: dbUser.email, name: dbUser.name, image: dbUser.avatar };
+			}
+		})
+	],
 	basePath: '/auth',
 	trustHost: true,
 	callbacks: {
-		authorized() {
-			/** Checkout information to how to use middleware for authorization
-			 * https://next-auth.js.org/configuration/nextjs#middleware
-			 */
-			return true;
-		},
-		jwt({ token, trigger, account, user }) {
-			if (trigger === 'update') {
-				token.name = user.name;
-			}
-
-			if (account?.provider === 'keycloak') {
-				return { ...token, accessToken: account.access_token };
-			}
+		jwt({ token, user }) {
+			if (user?.id) token.userId = user.id;
 
 			return token;
 		},
 		async session({ session, token }) {
-			if (token.accessToken && typeof token.accessToken === 'string') {
-				session.accessToken = token.accessToken;
-			}
+			const userId = typeof token.userId === 'string' ? token.userId : undefined;
+			const dbUser = userId ? await prisma.user.findUnique({ where: { id: userId } }) : null;
 
-			if (session) {
-				try {
-					const mockApiInstance = (await import('src/@mock-utils/mockApi')).default;
-					const api = mockApiInstance('users');
+			// ผู้ใช้ถูกลบหรือปิดใช้งานหลังออก token → ถือเป็น guest (ไม่มี session.db)
+			if (!dbUser?.isActive) return { ...session, db: undefined as unknown as User };
 
-					let userDbData = await api.find({ email: session.user.email });
+			session.db = {
+				id: dbUser.id,
+				email: dbUser.email,
+				displayName: dbUser.name,
+				photoURL: dbUser.avatar ?? undefined,
+				role: [dbUser.role.toLowerCase()]
+			};
 
-					if (!userDbData) {
-						// User not found, create a new user
-						userDbData = await api.create({
-							email: session.user.email,
-							role: ['admin'],
-							displayName: session.user.name || session.user.email,
-							photoURL: session.user.image || ''
-						} as Record<string, unknown> & { id?: string });
-					}
-
-					session.db = userDbData as User;
-					return session;
-				} catch (error) {
-					console.error('Session callback error:', error);
-					throw error;
-				}
-			}
-
-			return null;
+			return session;
 		}
-	},
-	experimental: {
-		enableWebAuthn: true
 	},
 	session: {
 		strategy: 'jwt',
-		maxAge: 30 * 24 * 60 * 60 // 30 days
+		maxAge: 30 * 24 * 60 * 60 // 30 วัน
 	},
-	debug: process.env.NODE_ENV !== 'production'
+	debug: false
 } satisfies NextAuthConfig;
 
-export type AuthJsProvider = {
-	id: string;
-	name: string;
-	style?: {
-		text?: string;
-		bg?: string;
-	};
-};
+const nextAuth: NextAuthResult = NextAuth(config);
 
-export const authJsProviderMap: AuthJsProvider[] = providers
-	.map((provider) => {
-		const providerData = typeof provider === 'function' ? provider() : provider;
-
-		return {
-			id: providerData.id,
-			name: providerData.name,
-			style: {
-				text: (providerData as { style?: { text: string } }).style?.text,
-				bg: (providerData as { style?: { bg: string } }).style?.bg
-			}
-		};
-	})
-	.filter((provider) => provider.id !== 'credentials');
-
-export const { handlers, auth, signIn, signOut } = NextAuth(config);
+export const { handlers, auth } = nextAuth;

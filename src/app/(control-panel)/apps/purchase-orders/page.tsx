@@ -1,563 +1,401 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { Ban, CircleCheck, Eye, Pencil, Plus, Printer } from 'lucide-react';
 import Link from 'next/link';
-import Typography from '@mui/material/Typography';
-import Paper from '@mui/material/Paper';
-import Button from '@mui/material/Button';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import Chip from '@mui/material/Chip';
-import TextField from '@mui/material/TextField';
-import InputAdornment from '@mui/material/InputAdornment';
-import IconButton from '@mui/material/IconButton';
-import Box from '@mui/material/Box';
-import Tooltip from '@mui/material/Tooltip';
-import MenuItem from '@mui/material/MenuItem';
-import Menu from '@mui/material/Menu';
-import ListItemIcon from '@mui/material/ListItemIcon';
-import ListItemText from '@mui/material/ListItemText';
-import Select from '@mui/material/Select';
-import FormControl from '@mui/material/FormControl';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
-import Divider from '@mui/material/Divider';
+import { useRouter } from 'next/navigation';
+import { useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+	ActionMenu,
+	Button,
+	Card,
+	ConfirmDialog,
+	DataTable,
+	FilterField,
+	FilterTabs,
+	IconButton,
+	MoneyText,
+	PageHeader,
+	Pagination,
+	PrintPreviewDialog,
+	SearchInput,
+	StatCard,
+	StatGrid,
+	StatusBadge,
+	TwoLine
+} from '@/components/ui';
 import { useAlert } from '@/components/shared/AlertProvider';
-import CircularProgress from '@mui/material/CircularProgress';
-import FuseSvgIcon from '@fuse/core/FuseSvgIcon';
-import FusePageCarded from '@fuse/core/FusePageCarded';
-import { styled } from '@mui/material/styles';
-import { motion } from 'motion/react';
+import { COST_TYPE_LABEL, quotationMargins, summarizePO, type POItemLite } from '@/components/purchase-orders/po-math';
+import { formatMoney, monthKey } from '@/lib/format';
+import { FALLBACK, PO_STATUS } from '@/lib/status';
+import { sendJson, useApi } from '@/lib/use-api';
 
-const Root = styled(FusePageCarded)(() => ({ '& .container': { maxWidth: '100%!important' } }));
-
-function fmt(n: number | string) {
-	return Number(n).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-function fmtDate(d: string | Date | null | undefined) {
-	if (!d) return '-';
-	return new Date(d).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' });
-}
-
-const statusConfig: Record<string, { label: string; bgColor: string; textColor: string; borderColor: string }> = {
-	DRAFT: { label: 'แบบร่าง', bgColor: '#F8FAFC', textColor: '#64748B', borderColor: '#CBD5E1' },
-	APPROVED: { label: 'อนุมัติ', bgColor: '#ECFDF5', textColor: '#059669', borderColor: '#6EE7B7' },
-	ORDERED: { label: 'สั่งซื้อแล้ว', bgColor: '#EFF6FF', textColor: '#2563EB', borderColor: '#93C5FD' },
-	RECEIVED: { label: 'รับแล้ว', bgColor: '#EEF2FF', textColor: '#4F46E5', borderColor: '#A5B4FC' },
-	CANCELLED: { label: 'ยกเลิก', bgColor: '#FEF2F2', textColor: '#DC2626', borderColor: '#FCA5A5' },
+type PO = {
+	id: string;
+	poNumber: string;
+	date: string;
+	status: string;
+	contractorQuoteUrl?: string | null;
+	quotationId?: string | null;
+	costType?: string;
+	payeeName?: string | null;
+	workOrder?: {
+		woNumber: string;
+		description?: string | null;
+		quotation?: {
+			projectName?: string | null;
+			customerGroup?: { groupName: string };
+			branch?: { name: string } | null;
+		} | null;
+	} | null;
+	quotation?: {
+		projectName?: string | null;
+		subtotal?: number | string | null;
+		customerGroup?: { groupName: string };
+		branch?: { name: string } | null;
+	} | null;
+	team?: { teamName: string; leaderName?: string } | null;
+	items?: POItemLite[];
 };
 
-const statusOptions = [
-	{ value: 'ALL', label: 'แสดงทั้งหมด' }, { value: 'DRAFT', label: 'แบบร่าง' },
-	{ value: 'APPROVED', label: 'อนุมัติ' }, { value: 'ORDERED', label: 'สั่งซื้อแล้ว' },
-	{ value: 'RECEIVED', label: 'รับแล้ว' }, { value: 'CANCELLED', label: 'ยกเลิก' },
-];
+const PAGE_SIZE = 10;
+const TABS = ['ALL', 'DRAFT', 'APPROVED', 'ORDERED', 'RECEIVED', 'CANCELLED'] as const;
+const ref = (p: PO) => p.quotation ?? p.workOrder?.quotation;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type PO = any;
-
-function PurchaseOrdersPage() {
+export default function PurchaseOrdersPage() {
 	const router = useRouter();
-	const [data, setData] = useState<PO[]>([]);
-	const [loading, setLoading] = useState(true);
-	const [search, setSearch] = useState('');
-	const [statusFilter, setStatusFilter] = useState('ALL');
-
-	// Action menu state
-	const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
-	const [menuPO, setMenuPO] = useState<PO | null>(null);
-
-	// Cancel dialog
-	const [cancelOpen, setCancelOpen] = useState(false);
-	const [cancelTarget, setCancelTarget] = useState<PO | null>(null);
-	const [actionLoading, setActionLoading] = useState(false);
-
-	// Print preview dialog
-	const [printOpen, setPrintOpen] = useState(false);
-	const [printPOId, setPrintPOId] = useState('');
-	const [printPONumber, setPrintPONumber] = useState('');
-
-	// Snackbar
 	const alert = useAlert();
+	const qc = useQueryClient();
+	const { data, isLoading } = useApi<PO[]>('/api/purchase-orders');
+	const list = useMemo(() => (Array.isArray(data) ? data : []), [data]);
+	const [tab, setTab] = useState('ALL');
+	const [q, setQ] = useState('');
+	const [page, setPage] = useState(1);
+	const [print, setPrint] = useState<PO | null>(null);
+	const [cancel, setCancel] = useState<PO | null>(null);
+	const [busy, setBusy] = useState(false);
 
-	const fetchData = useCallback(async () => {
-		setLoading(true);
+	const filtered = useMemo(() => {
+		const k = q.trim().toLowerCase();
+
+		return list.filter(
+			(p) =>
+				(tab === 'ALL' || p.status === tab) &&
+				(!k ||
+					`${p.poNumber} ${p.team?.teamName ?? ''} ${p.workOrder?.woNumber ?? ''} ${ref(p)?.projectName ?? ''} ${ref(p)?.customerGroup?.groupName ?? ''}`
+						.toLowerCase()
+						.includes(k))
+		);
+	}, [list, tab, q]);
+	const margins = useMemo(() => quotationMargins(list), [list]);
+	const rows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+	const year = monthKey(new Date()).slice(0, 4);
+	const live = list.filter((p) => p.status !== 'CANCELLED');
+	const net = (a: PO[]) => a.reduce((s, p) => s + summarizePO(p.items).net, 0);
+	const adjNet = live.reduce((s, p) => {
+		const x = summarizePO(p.items);
+		return s + x.add - x.deduct;
+	}, 0);
+	const refresh = () => qc.invalidateQueries({ queryKey: ['/api/purchase-orders'] });
+
+	async function approve(p: PO) {
+		setBusy(true);
+
 		try {
-			const params = new URLSearchParams();
-			if (statusFilter !== 'ALL') params.set('status', statusFilter);
-			if (search) params.set('search', search);
-			const res = await fetch(`/api/purchase-orders?${params.toString()}`);
-			const json = await res.json();
-			setData(Array.isArray(json) ? json : []);
-		} catch { setData([]); } finally { setLoading(false); }
-	}, [statusFilter, search]);
-
-	useEffect(() => { fetchData(); }, [fetchData]);
-
-	// Calc PO total from adjustments
-	const calcPOTotal = (po: PO) => {
-		const adds = (po.adjustments || []).filter((a: PO) => a.adjustmentType === 'ADD').reduce((s: number, a: PO) => s + Number(a.amount), 0);
-		const deducts = (po.adjustments || []).filter((a: PO) => a.adjustmentType === 'DEDUCT').reduce((s: number, a: PO) => s + Number(a.amount), 0);
-		return adds - deducts;
-	};
-
-	// สรุป ค่าแรง / ค่าของ / ยอดงานเพิ่ม / ยอดงานลด จากรายการ item จริงของ PO
-	const summarizePOItems = (po: PO) => {
-		const items: PO[] = po.items || [];
-		const normalItems = items.filter((it) => !it.isAdjustment);
-		const adjustmentItems = items.filter((it) => it.isAdjustment);
-		const totalLabour = normalItems.reduce((s: number, it: PO) => s + Number(it.totalLabour || 0), 0);
-		const totalMaterial = normalItems.reduce((s: number, it: PO) => s + Number(it.totalMaterial || 0), 0);
-		const workAdd = adjustmentItems.filter((it) => Number(it.quantity) >= 0).reduce((s: number, it: PO) => s + Number(it.amount || 0), 0);
-		const workDeduct = adjustmentItems.filter((it) => Number(it.quantity) < 0).reduce((s: number, it: PO) => s + Math.abs(Number(it.amount || 0)), 0);
-		return { totalLabour, totalMaterial, workAdd, workDeduct };
-	};
-
-	// Menu handlers
-	const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, po: PO) => {
-		event.stopPropagation();
-		setMenuAnchor(event.currentTarget);
-		setMenuPO(po);
-	};
-	const handleMenuClose = () => { setMenuAnchor(null); setMenuPO(null); };
-
-	const handleEdit = () => {
-		if (menuPO) router.push(`/apps/purchase-orders/${menuPO.id}`);
-		handleMenuClose();
-	};
-
-	const handleApprove = async () => {
-		if (!menuPO) return;
-		setActionLoading(true);
-		try {
-			await fetch(`/api/purchase-orders/${menuPO.id}`, {
-				method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ status: 'APPROVED' }),
-			});
-			alert.showSuccess('อนุมัติเรียบร้อย', `${menuPO.poNumber} ได้รับการอนุมัติแล้ว`);
-			fetchData();
+			await sendJson(`/api/purchase-orders/${p.id}`, 'PATCH', { status: 'APPROVED' });
+			alert.showSuccess('อนุมัติเรียบร้อย', p.poNumber);
+			await refresh();
 		} catch {
 			alert.showError('เกิดข้อผิดพลาด', 'ไม่สามารถอนุมัติได้ กรุณาลองใหม่');
-		} finally { setActionLoading(false); handleMenuClose(); }
-	};
+		} finally {
+			setBusy(false);
+		}
+	}
 
-	const handleCancelClick = () => {
-		if (!menuPO) return;
-		setCancelTarget(menuPO);
-		setCancelOpen(true);
-		handleMenuClose();
-	};
-	const handleCancelConfirm = async () => {
-		if (!cancelTarget) return;
-		setActionLoading(true);
+	async function doCancel() {
+		if (!cancel) return;
+
+		setBusy(true);
+
 		try {
-			await fetch(`/api/purchase-orders/${cancelTarget.id}`, { method: 'DELETE' });
-			alert.showSuccess('ยกเลิกเรียบร้อย', `${cancelTarget.poNumber} ถูกยกเลิกแล้ว`);
-			fetchData();
+			await sendJson(`/api/purchase-orders/${cancel.id}`, 'DELETE');
+			alert.showSuccess('ยกเลิกเรียบร้อย', cancel.poNumber);
+			await refresh();
 		} catch {
 			alert.showError('เกิดข้อผิดพลาด', 'ไม่สามารถยกเลิกได้ กรุณาลองใหม่');
-		} finally { setActionLoading(false); setCancelOpen(false); }
-	};
-
-	// ===== HEADER =====
-	const header = (
-		<div className="flex flex-auto flex-col py-4">
-			<Typography sx={{ fontSize: '14px', color: '#94A3B8', mb: 0.5 }}>
-				เอกสาร {'>'} ใบสั่งซื้อให้ช่าง
-			</Typography>
-			<div className="flex min-w-0 flex-auto flex-col gap-8 sm:flex-row sm:items-center">
-				<div className="flex flex-auto items-center gap-8">
-					<motion.span initial={{ x: -20 }} animate={{ x: 0, transition: { delay: 0.2 } }}>
-						<Typography sx={{ fontSize: '28px', fontWeight: 800, color: '#1E293B', letterSpacing: '-0.02em' }}>
-							ใบสั่งซื้อให้ช่าง (PO)
-						</Typography>
-					</motion.span>
-					<div className="flex flex-1 items-center justify-end gap-12">
-						<FormControl size="small" sx={{ minWidth: 140 }}>
-							<Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}
-								sx={{ borderRadius: '10px', fontSize: '14px', bgcolor: '#F8FAFC', border: '1px solid #E2E8F0', '& .MuiOutlinedInput-notchedOutline': { border: 'none' }, fontWeight: 500 }}>
-								{statusOptions.map(o => <MenuItem key={o.value} value={o.value} sx={{ fontSize: '14px' }}>{o.label}</MenuItem>)}
-							</Select>
-						</FormControl>
-						<TextField placeholder="ค้นหา PO, ผู้รับจ้าง, ชื่องาน..." value={search} onChange={(e) => setSearch(e.target.value)} size="small"
-							sx={{ minWidth: 280, '& .MuiOutlinedInput-root': { borderRadius: '10px', fontSize: '14px', bgcolor: '#F8FAFC' } }}
-							InputProps={{ startAdornment: <InputAdornment position="start"><FuseSvgIcon size={18} color="action">lucide:search</FuseSvgIcon></InputAdornment> }} />
-						<motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0, transition: { delay: 0.2 } }}>
-							<Link href="/apps/purchase-orders/new" passHref>
-								<Button variant="contained" size="large"
-									startIcon={<FuseSvgIcon size={20}>lucide:plus</FuseSvgIcon>}
-									sx={{ background: 'linear-gradient(135deg, #22C55E 0%, #16A34A 100%)', borderRadius: '12px', px: 3, py: 1, fontSize: '15px', fontWeight: 700, textTransform: 'none', boxShadow: '0 4px 14px rgba(34,197,94,0.3)', '&:hover': { background: 'linear-gradient(135deg, #16A34A 0%, #15803D 100%)' } }}>
-									สร้าง PO ใหม่
-								</Button>
-							</Link>
-						</motion.div>
-					</div>
-				</div>
-			</div>
-		</div>
-	);
-
-	// ===== CONTENT =====
-	const content = (
-		<Paper className="flex h-full w-full flex-auto flex-col overflow-hidden rounded-b-none" elevation={0}>
-			{loading ? (
-				<Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}>
-					<CircularProgress sx={{ color: '#38BDF8' }} />
-				</Box>
-			) : data.length === 0 ? (
-				<Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 10 }}>
-					<FuseSvgIcon sx={{ color: '#CBD5E1', mb: 1 }} size={48}>lucide:shopping-cart</FuseSvgIcon>
-					<Typography sx={{ fontSize: '16px', color: '#94A3B8' }}>ไม่พบรายการใบสั่งซื้อ</Typography>
-				</Box>
-			) : (
-				<>
-					<TableContainer sx={{ flex: 1 }}>
-						<Table stickyHeader size="small">
-							<TableHead>
-								<TableRow sx={{
-									'& th': {
-										fontSize: '12px', fontWeight: 700, color: '#475569',
-										borderBottom: '2px solid #E2E8F0', py: 1.2, bgcolor: '#F8FAFC',
-										whiteSpace: 'nowrap',
-									},
-								}}>
-									<TableCell sx={{ width: 36 }}>#</TableCell>
-									<TableCell>เลข PO ช่าง</TableCell>
-									<TableCell>ทีมช่าง</TableCell>
-									<TableCell align="right">ค่าแรง</TableCell>
-									<TableCell align="right">ค่าของ</TableCell>
-									<TableCell align="right">ยอดงานเพิ่ม</TableCell>
-									<TableCell align="right">ยอดงานลด</TableCell>
-									<TableCell align="right">สรุปค่างาน</TableCell>
-									<TableCell>เลขใบเสนอราคา / วันที่</TableCell>
-									<TableCell>ชื่อลูกค้า สาขา</TableCell>
-									<TableCell>ชื่องาน</TableCell>
-									<TableCell align="right">เสนอราคา</TableCell>
-									<TableCell sx={{ bgcolor: '#F0FFF4 !important' }}>WO</TableCell>
-									<TableCell sx={{ bgcolor: '#FFFFF0 !important' }}>PO</TableCell>
-									<TableCell align="center">แนบเอกสาร</TableCell>
-									<TableCell align="center">สถานะ</TableCell>
-									<TableCell align="center" sx={{ width: 60 }}>จัดการ</TableCell>
-								</TableRow>
-							</TableHead>
-							<TableBody>
-								{data.map((po: PO, index: number) => {
-									const sc = statusConfig[po.status] || statusConfig.DRAFT;
-									const isCancelled = po.status === 'CANCELLED';
-
-									// Extract info from relations
-									const teamName = po.team?.leaderName || po.team?.teamName || '-';
-									const customerName = po.quotation?.customerGroup?.groupName
-										|| po.workOrder?.quotation?.customerGroup?.groupName || '-';
-									const branchName = po.quotation?.branch?.name
-										|| po.workOrder?.quotation?.branch?.name || '';
-									const refNo = po.quotation?.quotationNumber
-										|| po.workOrder?.quotation?.quotationNumber || '-';
-									const woNumber = po.workOrder?.woNumber || '';
-									const woDate = po.workOrder?.date;
-									const customerPO = po.workOrder?.poNumber || '';
-									const projectName = po.quotation?.projectName
-										|| po.workOrder?.quotation?.projectName || '';
-
-										const poTotal = po.totalAmount ? Number(po.totalAmount) : calcPOTotal(po);
-										const quoteTotal = po.quotation?.totalAmount ?? po.workOrder?.quotation?.totalAmount ?? null;
-										const quoteDate = po.quotation?.date ?? po.workOrder?.quotation?.date ?? null;
-										const { totalLabour, totalMaterial, workAdd, workDeduct } = summarizePOItems(po);
-
-										return (
-											<TableRow key={po.id} hover
-												sx={{
-													cursor: 'pointer', opacity: isCancelled ? 0.5 : 1,
-													'&:hover': { bgcolor: '#F0F9FF' },
-													'& td': { fontSize: '13px', color: '#334155', py: 0.8, borderBottom: '1px solid #F1F5F9' },
-												}}
-												onClick={() => router.push(`/apps/purchase-orders/${po.id}`)}>
-
-												{/* # */}
-												<TableCell sx={{ fontWeight: 500, color: '#94A3B8' }}>{index + 1}</TableCell>
-
-												{/* เลข PO ช่าง */}
-												<TableCell>
-													<Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#0284C7', textDecoration: isCancelled ? 'line-through' : 'none' }}>
-														{po.poNumber}
-													</Typography>
-													<Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>{fmtDate(po.date)}</Typography>
-												</TableCell>
-
-												{/* ทีมช่าง */}
-												<TableCell>
-													<Typography sx={{ fontSize: '13px', fontWeight: 500 }}>{teamName}</Typography>
-												</TableCell>
-
-												{/* ค่าแรง */}
-												<TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', color: '#475569' }}>
-													{fmt(totalLabour)}
-												</TableCell>
-
-												{/* ค่าของ */}
-												<TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', color: '#475569' }}>
-													{fmt(totalMaterial)}
-												</TableCell>
-
-												{/* ยอดงานเพิ่ม */}
-												<TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', color: workAdd ? '#059669' : '#CBD5E1' }}>
-													{workAdd ? fmt(workAdd) : '-'}
-												</TableCell>
-
-												{/* ยอดงานลด */}
-												<TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', color: workDeduct ? '#DC2626' : '#CBD5E1' }}>
-													{workDeduct ? fmt(workDeduct) : '-'}
-												</TableCell>
-
-												{/* สรุปค่างาน */}
-												<TableCell align="right" sx={{
-													fontWeight: 700, fontVariantNumeric: 'tabular-nums', fontSize: '14px !important',
-													color: isCancelled ? '#94A3B8' : '#1E293B',
-												}}>
-													{fmt(poTotal)}
-												</TableCell>
-
-												{/* เลขใบเสนอราคา / วันที่ */}
-												<TableCell>
-													{refNo !== '-' ? (
-														<>
-															<Chip label={refNo} size="small" sx={{ fontSize: '11px', height: 22, bgcolor: '#F0F9FF', color: '#0369A1', border: '1px solid #BAE6FD' }} />
-															<Typography sx={{ fontSize: '11px', color: '#94A3B8', mt: 0.3 }}>{fmtDate(quoteDate)}</Typography>
-														</>
-													) : '-'}
-												</TableCell>
-
-												{/* ชื่อลูกค้า สาขา */}
-												<TableCell>
-													<Typography sx={{ fontSize: '13px', fontWeight: 500, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-														{customerName}
-													</Typography>
-													{branchName && (
-														<Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>{branchName}</Typography>
-													)}
-												</TableCell>
-
-												{/* ชื่องาน */}
-												<TableCell sx={{ maxWidth: 150 }}>
-													<Typography sx={{ fontSize: '12px', color: '#64748B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-														{projectName || '-'}
-													</Typography>
-												</TableCell>
-
-												{/* เสนอราคา */}
-												<TableCell align="right" sx={{ fontVariantNumeric: 'tabular-nums', color: '#475569' }}>
-													{quoteTotal != null ? fmt(quoteTotal) : '-'}
-												</TableCell>
-
-												{/* WO */}
-												<TableCell sx={{ bgcolor: woNumber ? '#F0FFF4' : 'transparent' }}>
-													{woNumber ? (
-														<>
-															<Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#15803D' }}>{woNumber}</Typography>
-															<Typography sx={{ fontSize: '11px', color: '#6B7280' }}>{fmtDate(woDate)}</Typography>
-														</>
-													) : '-'}
-												</TableCell>
-
-												{/* PO (ลูกค้า) */}
-												<TableCell sx={{ bgcolor: customerPO ? '#FFFFF0' : 'transparent' }}>
-													{customerPO ? (
-														<Typography sx={{ fontSize: '12px', fontWeight: 600, color: '#A16207' }}>{customerPO}</Typography>
-													) : '-'}
-												</TableCell>
-
-												{/* แนบเอกสาร */}
-												<TableCell align="center" onClick={(e) => e.stopPropagation()}>
-													{po.contractorQuoteUrl ? (
-														<Tooltip title="ดูไฟล์แนบ" arrow>
-															<IconButton size="small" component="a" href={po.contractorQuoteUrl} target="_blank" rel="noopener noreferrer"
-																sx={{ color: '#059669', borderRadius: '8px', '&:hover': { bgcolor: '#ECFDF5' } }}>
-																<FuseSvgIcon size={18}>lucide:paperclip</FuseSvgIcon>
-															</IconButton>
-														</Tooltip>
-													) : (
-														<Typography
-															onClick={() => router.push(`/apps/purchase-orders/${po.id}`)}
-															sx={{ fontSize: '11px', color: '#CBD5E1', cursor: 'pointer', '&:hover': { color: '#94A3B8' } }}>
-															+ แนบ
-														</Typography>
-													)}
-												</TableCell>
-
-												{/* สถานะ */}
-												<TableCell align="center">
-													<Chip label={sc.label} size="small" sx={{ fontSize: '11px', fontWeight: 600, bgcolor: sc.bgColor, color: sc.textColor, border: `1px solid ${sc.borderColor}`, borderRadius: '8px', minWidth: 64 }} />
-												</TableCell>
-
-												{/* จัดการ */}
-												<TableCell align="center" onClick={(e) => e.stopPropagation()}>
-													<Tooltip title="จัดการ" arrow>
-														<IconButton size="small" onClick={(e) => handleMenuOpen(e, po)} disabled={actionLoading}
-															sx={{ color: '#64748B', borderRadius: '8px', '&:hover': { bgcolor: '#F1F5F9', color: '#0284C7' } }}>
-															<FuseSvgIcon size={18}>lucide:ellipsis-vertical</FuseSvgIcon>
-														</IconButton>
-													</Tooltip>
-												</TableCell>
-											</TableRow>
-										);
-								})}
-							</TableBody>
-						</Table>
-					</TableContainer>
-
-					{/* Footer */}
-					<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 3, py: 1.5, borderTop: '1px solid #E2E8F0', bgcolor: '#FAFBFC' }}>
-						<Typography sx={{ fontSize: '14px', color: '#64748B' }}>แสดง {data.length} รายการ</Typography>
-						<Typography sx={{ fontSize: '15px', fontWeight: 600, color: '#0284C7' }}>
-							ยอดรวม <Box component="span" sx={{ fontSize: '17px', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-								{fmt(data.filter((p: PO) => p.status !== 'CANCELLED').reduce((s: number, p: PO) => s + (p.totalAmount ? Number(p.totalAmount) : calcPOTotal(p)), 0))}
-							</Box> บาท
-						</Typography>
-					</Box>
-				</>
-			)}
-
-			{/* ========== Action Menu ========== */}
-			<Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={handleMenuClose}
-				anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-				transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-				slotProps={{ paper: { sx: { borderRadius: '12px', minWidth: 200, boxShadow: '0 8px 30px rgba(0,0,0,0.12)', py: 0.5 } } }}>
-				<MenuItem onClick={handleEdit} sx={{ py: 1.2, gap: 1.5 }}>
-					<ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#0284C7' }}>lucide:eye</FuseSvgIcon></ListItemIcon>
-					<ListItemText>ดูรายละเอียด</ListItemText>
-				</MenuItem>
-				<MenuItem onClick={() => { if (menuPO) { setPrintPOId(menuPO.id); setPrintPONumber(menuPO.poNumber); setPrintOpen(true); } handleMenuClose(); }} sx={{ py: 1.2, gap: 1.5 }}>
-					<ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#8B5CF6' }}>lucide:printer</FuseSvgIcon></ListItemIcon>
-					<ListItemText>พิมพ์</ListItemText>
-				</MenuItem>
-				{menuPO && menuPO.status !== 'CANCELLED' && (
-					<MenuItem onClick={handleEdit} sx={{ py: 1.2, gap: 1.5 }}>
-						<ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#0EA5E9' }}>lucide:pencil</FuseSvgIcon></ListItemIcon>
-						<ListItemText>แก้ไข</ListItemText>
-					</MenuItem>
-				)}
-				{menuPO && menuPO.status === 'DRAFT' && (
-					<MenuItem onClick={handleApprove} sx={{ py: 1.2, gap: 1.5 }}>
-						<ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#22C55E' }}>lucide:check-circle</FuseSvgIcon></ListItemIcon>
-						<ListItemText>อนุมัติ</ListItemText>
-					</MenuItem>
-				)}
-				{menuPO && menuPO.status !== 'CANCELLED' && menuPO.status !== 'RECEIVED' && (
-					<>
-						<Divider sx={{ my: 0.5 }} />
-						<MenuItem onClick={handleCancelClick} sx={{ py: 1.2, gap: 1.5, color: '#DC2626' }}>
-							<ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#DC2626' }}>lucide:trash-2</FuseSvgIcon></ListItemIcon>
-							<ListItemText primaryTypographyProps={{ color: '#DC2626' }}>ยกเลิก</ListItemText>
-						</MenuItem>
-					</>
-				)}
-			</Menu>
-
-			{/* ========== CANCEL DIALOG ========== */}
-			<Dialog open={cancelOpen} onClose={() => setCancelOpen(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
-				<DialogTitle sx={{ fontSize: '18px', fontWeight: 700, color: '#1E293B', display: 'flex', alignItems: 'center', gap: 1 }}>
-					<FuseSvgIcon sx={{ color: '#EF4444' }} size={24}>lucide:alert-triangle</FuseSvgIcon>
-					ยืนยันการยกเลิก
-				</DialogTitle>
-				<Divider />
-				<DialogContent sx={{ pt: 2.5 }}>
-					<Typography sx={{ fontSize: '15px', color: '#475569', mb: 1 }}>คุณต้องการยกเลิกใบสั่งซื้อ:</Typography>
-					<Typography sx={{ fontSize: '16px', fontWeight: 700, color: '#0284C7' }}>{cancelTarget?.poNumber}</Typography>
-				</DialogContent>
-				<Divider />
-				<DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
-					<Button onClick={() => setCancelOpen(false)} variant="outlined"
-						sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, color: '#64748B', borderColor: '#E2E8F0' }}>
-						ไม่ยกเลิก
-					</Button>
-					<Button onClick={handleCancelConfirm} variant="contained" disabled={actionLoading}
-						sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700, bgcolor: '#EF4444', '&:hover': { bgcolor: '#DC2626' } }}>
-						{actionLoading ? 'กำลังดำเนินการ...' : 'ยืนยันยกเลิก'}
-					</Button>
-				</DialogActions>
-			</Dialog>
-
-
-		</Paper>
-	);
+		} finally {
+			setBusy(false);
+			setCancel(null);
+		}
+	}
 
 	return (
 		<>
-			<Root header={header} content={content} scroll="content" />
-
-			{/* ══ Print Preview Dialog — เหมือนใบเสนอราคา ══ */}
-			<Dialog
-				open={printOpen}
-				onClose={() => setPrintOpen(false)}
-				maxWidth={false}
-				fullWidth
-				PaperProps={{
-					sx: {
-						borderRadius: '16px',
-						width: '90vw',
-						maxWidth: '1100px',
-						height: '90vh',
-						display: 'flex',
-						flexDirection: 'column',
-						overflow: 'hidden',
-					},
-				}}
-			>
-				{/* Top Bar */}
-				<Box sx={{
-					display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-					px: 3, py: 1.5,
-					borderBottom: '1px solid', borderColor: 'divider',
-					bgcolor: '#F8FAFC', flexShrink: 0,
-				}}>
-					<Typography sx={{ fontSize: '16px', fontWeight: 700, color: '#1565C0' }}>
-						{printPONumber}
-					</Typography>
-					<Box sx={{ display: 'flex', gap: 1 }}>
-						<Button
-							variant="outlined"
-							onClick={() => setPrintOpen(false)}
-							sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, borderColor: '#E2E8F0', color: '#64748B', '&:hover': { borderColor: '#CBD5E1', bgcolor: '#F1F5F9' } }}
-						>
-							ปิดหน้าต่าง
-						</Button>
-						<Button
-							variant="contained"
-							startIcon={<FuseSvgIcon size={18}>lucide:printer</FuseSvgIcon>}
-							onClick={() => {
-								const iframe = document.getElementById('po-list-print-iframe') as HTMLIFrameElement;
-								iframe?.contentWindow?.print();
+			<PageHeader
+				title="ใบสั่งซื้อให้ช่าง"
+				subtitle="ใบสั่งงานให้ทีมช่าง พร้อมยอดงานเพิ่ม/ลดที่ตรวจสอบย้อนหลังได้"
+				actions={
+					<Button
+						href="/apps/purchase-orders/new"
+						icon={<Plus size={18} />}
+					>
+						สร้างใบสั่งซื้อ
+					</Button>
+				}
+			/>
+			<StatGrid>
+				<StatCard
+					tone="tint"
+					label="ใบสั่งซื้อปีนี้"
+					value={`${live.filter((p) => monthKey(p.date).slice(0, 4) === year).length} ใบ`}
+					sub={formatMoney(net(live.filter((p) => monthKey(p.date).slice(0, 4) === year)), 0)}
+				/>
+				<StatCard
+					label="แบบร่าง / อนุมัติ"
+					color="info"
+					value={`${list.filter((p) => p.status === 'DRAFT').length} / ${list.filter((p) => p.status === 'APPROVED').length}`}
+				/>
+				<StatCard
+					label="สั่งซื้อแล้ว"
+					color="success"
+					value={`${list.filter((p) => p.status === 'ORDERED').length} ใบ`}
+				/>
+				<StatCard
+					tone="warn"
+					color="warn"
+					label="ยอดปรับแก้สุทธิ"
+					value={formatMoney(adjNet, 0)}
+					sub="ลบรายการปรับแก้ไม่ได้ (เก็บเป็นหลักฐาน)"
+				/>
+			</StatGrid>
+			<Card>
+				<FilterTabs
+					tabs={TABS.map((t) => ({
+						value: t,
+						label: t === 'ALL' ? 'แสดงทั้งหมด' : (PO_STATUS[t] ?? FALLBACK).label,
+						count: t === 'ALL' ? list.length : list.filter((p) => p.status === t).length
+					}))}
+					value={tab}
+					onChange={(v) => {
+						setTab(v);
+						setPage(1);
+					}}
+				/>
+				<FilterField
+					label="ค้นหา"
+					className="max-w-xl"
+				>
+					{(id) => (
+						<SearchInput
+							id={id}
+							value={q}
+							onChange={(e) => {
+								setQ(e.target.value);
+								setPage(1);
 							}}
-							sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, background: 'linear-gradient(135deg,#0284C7,#0369A1)', '&:hover': { background: 'linear-gradient(135deg,#0369A1,#075985)' } }}
-						>
-							พิมพ์
-						</Button>
-					</Box>
-				</Box>
-
-				{/* iframe Preview */}
-				<Box sx={{ flex: 1, bgcolor: '#E2E8F0', overflow: 'hidden', display: 'flex' }}>
-					<iframe
-						id="po-list-print-iframe"
-						src={printOpen && printPOId ? `/api/purchase-orders/${printPOId}/pdf` : 'about:blank'}
-						style={{
-							flex: 1, border: 'none', background: '#fff',
-							margin: '16px auto', maxWidth: '800px',
-							boxShadow: '0 4px 20px rgba(0,0,0,0.15)', borderRadius: '4px',
-						}}
-						title="Print Preview"
-					/>
-				</Box>
-			</Dialog>
+							placeholder="เลข PO ทีมช่าง WO ลูกค้า หรือโครงการ"
+						/>
+					)}
+				</FilterField>
+				<DataTable
+					loading={isLoading}
+					rows={rows}
+					rowKey={(r) => r.id}
+					empty="ยังไม่มีใบสั่งซื้อ"
+					columns={[
+						{
+							key: 'no',
+							header: 'เลข PO ช่าง',
+							cell: (r) => (
+								<Link
+									href={`/apps/purchase-orders/${r.id}`}
+									className="font-semibold whitespace-nowrap"
+								>
+									{r.poNumber}
+								</Link>
+							)
+						},
+						{
+							key: 'p',
+							header: 'ชื่องาน / ลูกค้า สาขา',
+							cell: (r) => (
+								<TwoLine
+									title={ref(r)?.projectName || r.workOrder?.description || '-'}
+									sub={`${ref(r)?.customerGroup?.groupName ?? '-'}${ref(r)?.branch?.name ? ` · ${ref(r)?.branch?.name}` : ''}`}
+								/>
+							)
+						},
+						{
+							key: 't',
+							header: 'ทีมช่าง / ผู้ติดต่อ',
+							cell: (r) => (
+								<TwoLine
+									title={
+										r.team
+											? `${r.team.teamName}${r.team.leaderName ? ` / ${r.team.leaderName}` : ''}`
+											: (r.payeeName ?? '-')
+									}
+									sub={COST_TYPE_LABEL[r.costType ?? 'LABOUR']}
+								/>
+							)
+						},
+						{
+							key: 'm',
+							header: 'ค่าของ',
+							money: true,
+							cell: (r) => formatMoney(summarizePO(r.items).material)
+						},
+						{
+							key: 'l',
+							header: 'ค่าแรง',
+							money: true,
+							cell: (r) => formatMoney(summarizePO(r.items).labour)
+						},
+						{
+							key: 'a',
+							header: 'ยอดงานเพิ่ม',
+							money: true,
+							cell: (r) => (
+								<MoneyText
+									value={summarizePO(r.items).add}
+									sign="+"
+								/>
+							)
+						},
+						{
+							key: 'd',
+							header: 'ยอดงานลด',
+							money: true,
+							cell: (r) => (
+								<MoneyText
+									value={summarizePO(r.items).deduct}
+									sign="-"
+								/>
+							)
+						},
+						{
+							key: 'n',
+							header: 'สรุปค่างาน',
+							money: true,
+							cell: (r) => <MoneyText value={summarizePO(r.items).net} />
+						},
+						{
+							key: 'gap',
+							header: 'ส่วนต่างจากเสนอราคา',
+							money: true,
+							cell: (r) =>
+								r.quotationId && margins.has(r.quotationId) ? (
+									<span
+										className={
+											(margins.get(r.quotationId) ?? 0) < 0 ? 'text-danger font-semibold' : ''
+										}
+									>
+										{formatMoney(margins.get(r.quotationId))}
+									</span>
+								) : (
+									'-'
+								)
+						},
+						{
+							key: 's',
+							header: 'สถานะ',
+							cell: (r) => {
+								const m = PO_STATUS[r.status] ?? FALLBACK;
+								return (
+									<StatusBadge
+										label={m.label}
+										tone={m.tone}
+									/>
+								);
+							}
+						},
+						{
+							key: 'f',
+							header: 'แนบเอกสาร',
+							cell: (r) =>
+								r.contractorQuoteUrl ? (
+									<a
+										href={r.contractorQuoteUrl}
+										target="_blank"
+										rel="noopener noreferrer"
+										className="bg-tint rounded-sm px-2 py-0.5 text-sm"
+									>
+										ใบเสนอราคาช่าง
+									</a>
+								) : (
+									<span className="text-ink-muted">-</span>
+								)
+						},
+						{
+							key: 'act',
+							header: <span className="sr-only">จัดการ</span>,
+							align: 'right',
+							cell: (r) => (
+								<div className="flex items-center justify-end">
+									<IconButton
+										aria-label={`ดู ${r.poNumber}`}
+										href={`/apps/purchase-orders/${r.id}`}
+									>
+										<Eye size={18} />
+									</IconButton>
+									<IconButton
+										aria-label={`พิมพ์ ${r.poNumber}`}
+										onClick={() => setPrint(r)}
+									>
+										<Printer size={18} />
+									</IconButton>
+									<ActionMenu
+										disabled={busy}
+										actions={[
+											{
+												label: 'แก้ไข',
+												icon: Pencil,
+												hidden: r.status === 'CANCELLED',
+												onClick: () => router.push(`/apps/purchase-orders/${r.id}`)
+											},
+											{
+												label: 'อนุมัติ',
+												icon: CircleCheck,
+												hidden: r.status !== 'DRAFT',
+												onClick: () => approve(r)
+											},
+											{
+												label: 'ยกเลิกใบสั่งซื้อ',
+												icon: Ban,
+												danger: true,
+												hidden: r.status === 'CANCELLED',
+												onClick: () => setCancel(r)
+											}
+										]}
+									/>
+								</div>
+							)
+						}
+					]}
+				/>
+				<Pagination
+					page={page}
+					pageSize={PAGE_SIZE}
+					total={filtered.length}
+					onChange={setPage}
+				/>
+			</Card>
+			<PrintPreviewDialog
+				open={!!print}
+				onClose={() => setPrint(null)}
+				title={print?.poNumber ?? ''}
+				src={print ? `/api/purchase-orders/${print.id}/pdf` : ''}
+			/>
+			<ConfirmDialog
+				open={!!cancel}
+				danger
+				busy={busy}
+				title="ยกเลิกใบสั่งซื้อ"
+				message={`ต้องการยกเลิก ${cancel?.poNumber ?? ''} ใช่หรือไม่`}
+				confirmLabel="ยกเลิกใบสั่งซื้อ"
+				onClose={() => setCancel(null)}
+				onConfirm={doCancel}
+			/>
 		</>
 	);
 }
-
-export default PurchaseOrdersPage;

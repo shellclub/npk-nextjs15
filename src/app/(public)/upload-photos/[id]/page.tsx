@@ -1,515 +1,531 @@
 'use client';
 
-import { useState, useEffect, useCallback, use } from 'react';
+import clsx from 'clsx';
+import { Camera, CheckCircle2, ImagePlus, Images, Trash2, TriangleAlert, Upload, X } from 'lucide-react';
+import { use, useCallback, useEffect, useRef, useState } from 'react';
+import { Button, ConfirmDialog, IconButton, Input } from '@/components/ui';
 
 type Photo = {
-  id: string;
-  fileName: string;
-  fileUrl: string;
-  fileSize: number;
-  caption: string | null;
-  photoType: string;
-  uploadedBy: string | null;
-  createdAt: string;
+	id: string;
+	fileName: string;
+	fileUrl: string;
+	fileSize: number;
+	caption: string | null;
+	photoType: string;
+	uploadedBy: string | null;
+	createdAt: string;
 };
 
-type QuotationInfo = {
-  quotationNumber: string;
-  projectName: string;
-  customerName: string;
-};
+type QuotationInfo = { quotationNumber: string; projectName: string; customerName: string };
+type Queued = { id: number; file: File; preview: string; failed?: boolean };
+
+const NAME_KEY = 'npk-photo-uploader';
+const MAX_SIDE = 1920;
 
 function formatFileSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+	if (bytes < 1024) return `${bytes} B`;
+
+	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+
+	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** ย่อรูปจากกล้องมือถือ (มัก 5–10 MB) ก่อนส่ง ประหยัดเน็ตและเร็วขึ้น ถ้าอ่านรูปไม่ได้ (เช่น HEIC) จะส่งไฟล์เดิม */
+async function shrink(file: File): Promise<File> {
+	try {
+		if (!file.type.startsWith('image/') || file.size < 600 * 1024) return file;
+
+		const bmp = await createImageBitmap(file);
+		const scale = Math.min(1, MAX_SIDE / Math.max(bmp.width, bmp.height));
+		const canvas = document.createElement('canvas');
+		canvas.width = Math.round(bmp.width * scale);
+		canvas.height = Math.round(bmp.height * scale);
+		canvas.getContext('2d')?.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+		bmp.close();
+
+		const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/jpeg', 0.85));
+
+		if (!blob || blob.size >= file.size) return file;
+
+		return new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' });
+	} catch {
+		return file;
+	}
 }
 
 export default function UploadPhotosPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
-  const [photos, setPhotos] = useState<Photo[]>([]);
-  const [quotation, setQuotation] = useState<QuotationInfo | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [uploadedBy, setUploadedBy] = useState('');
-  const [caption, setCaption] = useState('');
-  const [dragOver, setDragOver] = useState(false);
-  const [previewFiles, setPreviewFiles] = useState<{ file: File; preview: string }[]>([]);
-  const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [lightbox, setLightbox] = useState<string | null>(null);
+	const { id } = use(params);
+	const [photos, setPhotos] = useState<Photo[]>([]);
+	const [quotation, setQuotation] = useState<QuotationInfo | null>(null);
+	const [loading, setLoading] = useState(true);
+	const [uploadedBy, setUploadedBy] = useState('');
+	const [caption, setCaption] = useState('');
+	const [queue, setQueue] = useState<Queued[]>([]);
+	const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+	const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
+	const [lightbox, setLightbox] = useState<Photo | null>(null);
+	const [del, setDel] = useState<Photo | null>(null);
+	const seq = useRef(0);
+	const queueRef = useRef<Queued[]>([]);
 
-  const fetchPhotos = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/quotations/${id}/photos`);
-      const data = await res.json();
-      setPhotos(Array.isArray(data) ? data : []);
-    } catch { setPhotos([]); }
-  }, [id]);
+	useEffect(() => {
+		queueRef.current = queue;
+	}, [queue]);
 
-  const fetchQuotation = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/quotations/${id}`);
-      if (!res.ok) throw new Error('Not found');
-      const data = await res.json();
-      setQuotation({
-        quotationNumber: data.quotationNumber,
-        projectName: data.projectName || '-',
-        customerName: data.customerGroup?.groupName || '-',
-      });
-    } catch {
-      setQuotation(null);
-    }
-  }, [id]);
+	// จำชื่อผู้ถ่ายรูปไว้ในเครื่อง ไม่ต้องพิมพ์ซ้ำทุกครั้งบนมือถือ
+	useEffect(() => {
+		try {
+			setUploadedBy(localStorage.getItem(NAME_KEY) ?? '');
+		} catch {
+			/* ignore */
+		}
+	}, []);
 
-  useEffect(() => {
-    setLoading(true);
-    Promise.all([fetchPhotos(), fetchQuotation()]).finally(() => setLoading(false));
-  }, [fetchPhotos, fetchQuotation]);
+	// คืนหน่วยความจำของ preview ตอนออกจากหน้า
+	useEffect(() => () => queueRef.current.forEach((q) => URL.revokeObjectURL(q.preview)), []);
 
-  const handleFileSelect = (files: FileList | null) => {
-    if (!files) return;
-    const newFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
-    const previews = newFiles.map(file => ({
-      file,
-      preview: URL.createObjectURL(file),
-    }));
-    setPreviewFiles(prev => [...prev, ...previews]);
-  };
+	const load = useCallback(async () => {
+		const [p, q] = await Promise.all([
+			fetch(`/api/quotations/${id}/photos`)
+				.then((r) => r.json())
+				.catch(() => []),
+			fetch(`/api/quotations/${id}`)
+				.then((r) => (r.ok ? r.json() : null))
+				.catch(() => null)
+		]);
+		setPhotos(Array.isArray(p) ? p : []);
+		setQuotation(
+			q
+				? {
+						quotationNumber: q.quotationNumber,
+						projectName: q.projectName || '-',
+						customerName: q.customerGroup?.groupName || '-'
+					}
+				: null
+		);
+	}, [id]);
 
-  const removePreview = (index: number) => {
-    setPreviewFiles(prev => {
-      const updated = [...prev];
-      URL.revokeObjectURL(updated[index].preview);
-      updated.splice(index, 1);
-      return updated;
-    });
-  };
+	useEffect(() => {
+		load().finally(() => setLoading(false));
+	}, [load]);
 
-  const handleUpload = async () => {
-    if (previewFiles.length === 0) return;
-    setUploading(true);
-    setMessage(null);
+	function add(files: FileList | null) {
+		const imgs = Array.from(files ?? []).filter(
+			(f) => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name)
+		);
 
-    try {
-      const formData = new FormData();
-      previewFiles.forEach(pf => formData.append('photos', pf.file));
-      formData.append('photoType', 'BEFORE');
-      if (uploadedBy) formData.append('uploadedBy', uploadedBy);
-      if (caption) formData.append('caption', caption);
+		if (!imgs.length) return;
 
-      const res = await fetch(`/api/quotations/${id}/photos`, {
-        method: 'POST',
-        body: formData,
-      });
+		setMessage(null);
+		setQueue((q) => [
+			...q,
+			...imgs.map((file) => ({ id: ++seq.current, file, preview: URL.createObjectURL(file) }))
+		]);
+	}
 
-      if (!res.ok) throw new Error('Upload failed');
+	function drop(item: Queued) {
+		URL.revokeObjectURL(item.preview);
+		setQueue((q) => q.filter((x) => x.id !== item.id));
+	}
 
-      setMessage({ text: `อัพโหลดสำเร็จ ${previewFiles.length} รูป`, type: 'success' });
-      previewFiles.forEach(pf => URL.revokeObjectURL(pf.preview));
-      setPreviewFiles([]);
-      setCaption('');
-      fetchPhotos();
-    } catch {
-      setMessage({ text: 'เกิดข้อผิดพลาดในการอัพโหลด', type: 'error' });
-    } finally {
-      setUploading(false);
-    }
-  };
+	async function upload() {
+		if (!queue.length || progress) return;
 
-  const handleDelete = async (photoId: string) => {
-    if (!confirm('ต้องการลบรูปนี้?')) return;
-    try {
-      await fetch(`/api/quotations/${id}/photos?photoId=${photoId}`, { method: 'DELETE' });
-      fetchPhotos();
-    } catch { /* ignore */ }
-  };
+		try {
+			localStorage.setItem(NAME_KEY, uploadedBy);
+		} catch {
+			/* ignore */
+		}
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    handleFileSelect(e.dataTransfer.files);
-  };
+		const items = queue;
+		let done = 0;
+		let failed = 0;
+		setMessage(null);
+		setProgress({ done: 0, total: items.length });
 
-  if (loading) {
-    return (
-      <div style={{
-        minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
-      }}>
-        <div style={{ textAlign: 'center', color: '#94A3B8' }}>
-          <div style={{
-            width: 48, height: 48, border: '3px solid #334155', borderTop: '3px solid #38BDF8',
-            borderRadius: '50%', animation: 'spin 1s linear infinite', margin: '0 auto 16px',
-          }} />
-          <p>กำลังโหลด...</p>
-          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-        </div>
-      </div>
-    );
-  }
+		// ส่งทีละรูป: เน็ตมือถือหลุดแล้วรูปที่ส่งแล้วไม่หาย และรูปที่พลาดยังค้างให้ลองใหม่
+		for (const it of items) {
+			try {
+				const fd = new FormData();
+				fd.append('photos', await shrink(it.file));
+				fd.append('photoType', 'BEFORE');
 
-  if (!quotation) {
-    return (
-      <div style={{
-        minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)', color: '#F1F5F9',
-      }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 64, marginBottom: 16 }}>🔍</div>
-          <h2 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>ไม่พบใบเสนอราคา</h2>
-          <p style={{ color: '#94A3B8' }}>ลิงก์อาจไม่ถูกต้อง หรือเอกสารถูกลบ</p>
-        </div>
-      </div>
-    );
-  }
+				if (uploadedBy.trim()) fd.append('uploadedBy', uploadedBy.trim());
 
-  return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'linear-gradient(135deg, #0F172A 0%, #1E293B 100%)',
-      fontFamily: "'Inter', 'Sarabun', sans-serif",
-    }}>
-      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet" />
+				if (caption.trim()) fd.append('caption', caption.trim());
 
-      {/* Header */}
-      <div style={{
-        background: 'rgba(15, 23, 42, 0.8)', backdropFilter: 'blur(20px)',
-        borderBottom: '1px solid rgba(56, 189, 248, 0.1)',
-        padding: '16px 24px', position: 'sticky', top: 0, zIndex: 50,
-      }}>
-        <div style={{ maxWidth: 900, margin: '0 auto' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{
-              width: 40, height: 40, borderRadius: 12,
-              background: 'linear-gradient(135deg, #38BDF8, #0284C7)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 20,
-            }}>📷</div>
-            <div>
-              <h1 style={{ fontSize: 18, fontWeight: 700, color: '#F1F5F9', margin: 0 }}>
-                แนบรูปภาพก่อนทำงาน
-              </h1>
-              <p style={{ fontSize: 13, color: '#64748B', margin: 0 }}>
-                {quotation.quotationNumber} • {quotation.projectName}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
+				const r = await fetch(`/api/quotations/${id}/photos`, { method: 'POST', body: fd });
 
-      <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 16px' }}>
-        {/* Info Card */}
-        <div style={{
-          background: 'rgba(30, 41, 59, 0.6)', backdropFilter: 'blur(10px)',
-          border: '1px solid rgba(56, 189, 248, 0.15)', borderRadius: 16,
-          padding: '20px 24px', marginBottom: 24,
-        }}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-            <div>
-              <div style={{ fontSize: 12, color: '#64748B', fontWeight: 600, marginBottom: 4 }}>เลขที่ใบเสนอราคา</div>
-              <div style={{ fontSize: 16, color: '#38BDF8', fontWeight: 700 }}>{quotation.quotationNumber}</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 12, color: '#64748B', fontWeight: 600, marginBottom: 4 }}>ลูกค้า</div>
-              <div style={{ fontSize: 14, color: '#E2E8F0', fontWeight: 500 }}>{quotation.customerName}</div>
-            </div>
-            <div style={{ gridColumn: 'span 2' }}>
-              <div style={{ fontSize: 12, color: '#64748B', fontWeight: 600, marginBottom: 4 }}>ชื่อโครงการ/งาน</div>
-              <div style={{ fontSize: 14, color: '#E2E8F0', fontWeight: 500 }}>{quotation.projectName}</div>
-            </div>
-          </div>
-        </div>
+				if (!r.ok) throw new Error();
 
-        {/* Upload Section */}
-        <div style={{
-          background: 'rgba(30, 41, 59, 0.6)', backdropFilter: 'blur(10px)',
-          border: '1px solid rgba(56, 189, 248, 0.15)', borderRadius: 16,
-          padding: '24px', marginBottom: 24,
-        }}>
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: '#F1F5F9', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{
-              width: 28, height: 28, borderRadius: 8,
-              background: 'linear-gradient(135deg, #22C55E, #16A34A)',
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 14,
-            }}>📤</span>
-            อัพโหลดรูปภาพ
-          </h2>
+				URL.revokeObjectURL(it.preview);
+				setQueue((q) => q.filter((x) => x.id !== it.id));
+				done++;
+			} catch {
+				failed++;
+				setQueue((q) => q.map((x) => (x.id === it.id ? { ...x, failed: true } : x)));
+			}
 
-          {/* Uploader Name */}
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#94A3B8', marginBottom: 6 }}>
-              ชื่อผู้ถ่ายรูป
-            </label>
-            <input
-              type="text"
-              value={uploadedBy}
-              onChange={(e) => setUploadedBy(e.target.value)}
-              placeholder="ระบุชื่อผู้ถ่ายรูป..."
-              style={{
-                width: '100%', padding: '10px 14px', borderRadius: 10,
-                background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(100, 116, 139, 0.3)',
-                color: '#F1F5F9', fontSize: 14, outline: 'none', boxSizing: 'border-box',
-              }}
-            />
-          </div>
+			setProgress({ done: done + failed, total: items.length });
+		}
 
-          {/* Caption */}
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#94A3B8', marginBottom: 6 }}>
-              คำอธิบาย (ไม่บังคับ)
-            </label>
-            <input
-              type="text"
-              value={caption}
-              onChange={(e) => setCaption(e.target.value)}
-              placeholder="เช่น สภาพหน้างานก่อนทำงาน..."
-              style={{
-                width: '100%', padding: '10px 14px', borderRadius: 10,
-                background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(100, 116, 139, 0.3)',
-                color: '#F1F5F9', fontSize: 14, outline: 'none', boxSizing: 'border-box',
-              }}
-            />
-          </div>
+		setProgress(null);
+		setMessage(
+			failed
+				? { ok: false, text: `ส่งสำเร็จ ${done} รูป ไม่สำเร็จ ${failed} รูป กดอัปโหลดอีกครั้งเพื่อลองใหม่` }
+				: { ok: true, text: `อัปโหลดสำเร็จ ${done} รูป` }
+		);
 
-          {/* Drop Zone */}
-          <div
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={handleDrop}
-            onClick={() => document.getElementById('photo-input')?.click()}
-            style={{
-              border: `2px dashed ${dragOver ? '#38BDF8' : 'rgba(100, 116, 139, 0.3)'}`,
-              borderRadius: 16, padding: '40px 20px', textAlign: 'center',
-              cursor: 'pointer', transition: 'all 0.2s',
-              background: dragOver ? 'rgba(56, 189, 248, 0.05)' : 'rgba(15, 23, 42, 0.3)',
-              marginBottom: 16,
-            }}
-          >
-            <input
-              id="photo-input"
-              type="file"
-              multiple
-              accept="image/*"
-              onChange={(e) => handleFileSelect(e.target.files)}
-              style={{ display: 'none' }}
-            />
-            <div style={{ fontSize: 48, marginBottom: 12 }}>📸</div>
-            <p style={{ fontSize: 15, fontWeight: 600, color: '#E2E8F0', margin: '0 0 4px' }}>
-              กดเพื่อเลือกรูป หรือลากไฟล์มาวางที่นี่
-            </p>
-            <p style={{ fontSize: 13, color: '#64748B', margin: 0 }}>
-              รองรับไฟล์ JPG, PNG, HEIC • ไม่จำกัดจำนวน
-            </p>
-          </div>
+		if (!failed) setCaption('');
 
-          {/* Preview Files */}
-          {previewFiles.length > 0 && (
-            <div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <span style={{ fontSize: 13, fontWeight: 600, color: '#94A3B8' }}>
-                  เลือกแล้ว {previewFiles.length} รูป
-                </span>
-                <button
-                  onClick={() => {
-                    previewFiles.forEach(pf => URL.revokeObjectURL(pf.preview));
-                    setPreviewFiles([]);
-                  }}
-                  style={{
-                    background: 'none', border: 'none', color: '#EF4444',
-                    fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                  }}
-                >
-                  ล้างทั้งหมด
-                </button>
-              </div>
-              <div style={{
-                display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
-                gap: 12, marginBottom: 16,
-              }}>
-                {previewFiles.map((pf, i) => (
-                  <div key={i} style={{ position: 'relative' }}>
-                    <img
-                      src={pf.preview}
-                      alt={pf.file.name}
-                      style={{
-                        width: '100%', height: 120, objectFit: 'cover',
-                        borderRadius: 10, border: '1px solid rgba(100, 116, 139, 0.2)',
-                      }}
-                    />
-                    <button
-                      onClick={(e) => { e.stopPropagation(); removePreview(i); }}
-                      style={{
-                        position: 'absolute', top: 4, right: 4,
-                        width: 24, height: 24, borderRadius: '50%',
-                        background: 'rgba(239, 68, 68, 0.9)', border: 'none',
-                        color: '#fff', fontSize: 14, cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}
-                    >×</button>
-                    <div style={{
-                      fontSize: 10, color: '#94A3B8', marginTop: 4,
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}>
-                      {pf.file.name}
-                    </div>
-                  </div>
-                ))}
-              </div>
+		await load();
+	}
 
-              <button
-                onClick={handleUpload}
-                disabled={uploading}
-                style={{
-                  width: '100%', padding: '14px', borderRadius: 12,
-                  background: uploading
-                    ? 'linear-gradient(135deg, #475569, #334155)'
-                    : 'linear-gradient(135deg, #22C55E, #16A34A)',
-                  border: 'none', color: '#fff', fontSize: 16, fontWeight: 700,
-                  cursor: uploading ? 'not-allowed' : 'pointer',
-                  boxShadow: uploading ? 'none' : '0 4px 14px rgba(34, 197, 94, 0.35)',
-                  transition: 'all 0.2s',
-                }}
-              >
-                {uploading ? '⏳ กำลังอัพโหลด...' : `📤 อัพโหลด ${previewFiles.length} รูป`}
-              </button>
-            </div>
-          )}
+	async function remove() {
+		if (!del) return;
 
-          {/* Message */}
-          {message && (
-            <div style={{
-              marginTop: 16, padding: '12px 16px', borderRadius: 10,
-              background: message.type === 'success' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-              border: `1px solid ${message.type === 'success' ? 'rgba(34, 197, 94, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
-              color: message.type === 'success' ? '#4ADE80' : '#F87171',
-              fontSize: 14, fontWeight: 600,
-            }}>
-              {message.type === 'success' ? '✅' : '❌'} {message.text}
-            </div>
-          )}
-        </div>
+		await fetch(`/api/quotations/${id}/photos?photoId=${del.id}`, { method: 'DELETE' }).catch(() => null);
+		setDel(null);
+		await load();
+	}
 
-        {/* Uploaded Photos Gallery */}
-        <div style={{
-          background: 'rgba(30, 41, 59, 0.6)', backdropFilter: 'blur(10px)',
-          border: '1px solid rgba(56, 189, 248, 0.15)', borderRadius: 16,
-          padding: '24px',
-        }}>
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: '#F1F5F9', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{
-              width: 28, height: 28, borderRadius: 8,
-              background: 'linear-gradient(135deg, #38BDF8, #0284C7)',
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 14,
-            }}>🖼️</span>
-            รูปภาพที่อัพโหลดแล้ว ({photos.length})
-          </h2>
+	if (loading) {
+		return (
+			<div className="text-ink-muted flex min-h-screen items-center justify-center text-[17px]">กำลังโหลด...</div>
+		);
+	}
 
-          {photos.length === 0 ? (
-            <div style={{
-              textAlign: 'center', padding: '40px 20px',
-              color: '#64748B',
-            }}>
-              <div style={{ fontSize: 48, marginBottom: 12, opacity: 0.5 }}>🖼️</div>
-              <p style={{ fontSize: 14, fontWeight: 500 }}>ยังไม่มีรูปภาพ</p>
-            </div>
-          ) : (
-            <div style={{
-              display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
-              gap: 16,
-            }}>
-              {photos.map((photo) => (
-                <div key={photo.id} style={{
-                  background: 'rgba(15, 23, 42, 0.5)', borderRadius: 12,
-                  overflow: 'hidden', border: '1px solid rgba(100, 116, 139, 0.15)',
-                }}>
-                  <div
-                    style={{ position: 'relative', cursor: 'pointer' }}
-                    onClick={() => setLightbox(photo.fileUrl)}
-                  >
-                    <img
-                      src={photo.fileUrl}
-                      alt={photo.fileName}
-                      style={{
-                        width: '100%', height: 160, objectFit: 'cover',
-                        display: 'block',
-                      }}
-                    />
-                    <div style={{
-                      position: 'absolute', top: 6, right: 6,
-                      background: photo.photoType === 'BEFORE'
-                        ? 'rgba(56, 189, 248, 0.9)'
-                        : 'rgba(34, 197, 94, 0.9)',
-                      color: '#fff', fontSize: 10, fontWeight: 700,
-                      padding: '2px 8px', borderRadius: 6,
-                    }}>
-                      {photo.photoType === 'BEFORE' ? 'ก่อนทำ' : 'หลังทำ'}
-                    </div>
-                  </div>
-                  <div style={{ padding: '10px 12px' }}>
-                    <div style={{
-                      fontSize: 12, color: '#E2E8F0', fontWeight: 500,
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                      marginBottom: 4,
-                    }}>
-                      {photo.caption || photo.fileName}
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 11, color: '#64748B' }}>
-                        {photo.uploadedBy || '-'} • {formatFileSize(photo.fileSize)}
-                      </span>
-                      <button
-                        onClick={() => handleDelete(photo.id)}
-                        style={{
-                          background: 'none', border: 'none',
-                          color: '#EF4444', fontSize: 12, cursor: 'pointer', fontWeight: 600,
-                          padding: '2px 6px', borderRadius: 4,
-                        }}
-                      >
-                        ลบ
-                      </button>
-                    </div>
-                    <div style={{ fontSize: 10, color: '#475569', marginTop: 4 }}>
-                      {new Date(photo.createdAt).toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
+	if (!quotation) {
+		return (
+			<div className="flex min-h-screen flex-col items-center justify-center gap-2 px-6 text-center">
+				<TriangleAlert
+					size={40}
+					aria-hidden="true"
+					className="text-warn"
+				/>
+				<h1 className="font-display text-[22px] font-semibold">ไม่พบใบเสนอราคา</h1>
+				<p className="text-ink-muted text-[16px]">ลิงก์อาจไม่ถูกต้อง หรือเอกสารถูกลบ</p>
+			</div>
+		);
+	}
 
-      {/* Lightbox */}
-      {lightbox && (
-        <div
-          onClick={() => setLightbox(null)}
-          style={{
-            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(0,0,0,0.9)', zIndex: 999,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'zoom-out',
-          }}
-        >
-          <img
-            src={lightbox}
-            alt="Preview"
-            style={{
-              maxWidth: '95vw', maxHeight: '95vh', objectFit: 'contain',
-              borderRadius: 8,
-            }}
-          />
-          <button
-            onClick={() => setLightbox(null)}
-            style={{
-              position: 'absolute', top: 20, right: 20,
-              width: 40, height: 40, borderRadius: '50%',
-              background: 'rgba(255,255,255,0.15)', border: 'none',
-              color: '#fff', fontSize: 24, cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
-          >×</button>
-        </div>
-      )}
-    </div>
-  );
+	const busy = !!progress;
+
+	return (
+		<div className="min-h-screen pb-32">
+			<header className="bg-brand sticky top-0 z-30 px-4 py-3 text-white">
+				<div className="mx-auto flex max-w-3xl items-center gap-3">
+					<span
+						aria-hidden="true"
+						className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-white/15"
+					>
+						<Camera size={24} />
+					</span>
+					<div className="min-w-0">
+						<h1 className="font-display text-[19px] leading-tight font-semibold">แนบรูปก่อนทำงาน</h1>
+						<p className="truncate text-[15px] text-white/85">{quotation.quotationNumber}</p>
+					</div>
+				</div>
+			</header>
+
+			<main className="mx-auto flex max-w-3xl flex-col gap-4 px-4 py-4">
+				<section className="bg-surface shadow-depth rounded-3xl p-4 ring-1 ring-black/[0.04]">
+					<dl className="grid gap-3 text-[16px] sm:grid-cols-2">
+						<div>
+							<dt className="text-ink-muted text-[14px]">ลูกค้า</dt>
+							<dd className="font-medium">{quotation.customerName}</dd>
+						</div>
+						<div>
+							<dt className="text-ink-muted text-[14px]">ชื่องาน / โครงการ</dt>
+							<dd className="font-medium">{quotation.projectName}</dd>
+						</div>
+					</dl>
+				</section>
+
+				<section
+					aria-labelledby="up-h"
+					className="bg-surface shadow-depth flex flex-col gap-4 rounded-3xl p-4 ring-1 ring-black/[0.04]"
+				>
+					<h2
+						id="up-h"
+						className="font-display text-[18px] font-semibold"
+					>
+						เพิ่มรูปภาพ
+					</h2>
+
+					{/* ปุ่มใหญ่ นิ้วโป้งกดง่าย: ถ่ายจากกล้อง / เลือกจากอัลบั้ม */}
+					<div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2">
+						<label
+							className={clsx(
+								'bg-primary hover:bg-primary-hover focus-within:outline-focus font-display flex min-h-20 cursor-pointer items-center justify-center gap-3 rounded-2xl px-4 py-4 text-center text-[18px] font-semibold text-white transition-colors focus-within:outline-2 focus-within:outline-offset-2',
+								busy && 'pointer-events-none opacity-50'
+							)}
+						>
+							<Camera
+								size={28}
+								aria-hidden="true"
+							/>
+							ถ่ายรูป
+							<input
+								type="file"
+								accept="image/*"
+								capture="environment"
+								className="sr-only"
+								disabled={busy}
+								onChange={(e) => {
+									add(e.target.files);
+									e.target.value = '';
+								}}
+							/>
+						</label>
+						<label
+							className={clsx(
+								'border-brand bg-tint text-primary-ink hover:bg-line focus-within:outline-focus font-display flex min-h-20 cursor-pointer items-center justify-center gap-3 rounded-2xl border px-4 py-4 text-center text-[18px] font-semibold transition-colors focus-within:outline-2 focus-within:outline-offset-2',
+								busy && 'pointer-events-none opacity-50'
+							)}
+						>
+							<ImagePlus
+								size={28}
+								aria-hidden="true"
+							/>
+							เลือกจากอัลบั้ม
+							<input
+								type="file"
+								accept="image/*"
+								multiple
+								className="sr-only"
+								disabled={busy}
+								onChange={(e) => {
+									add(e.target.files);
+									e.target.value = '';
+								}}
+							/>
+						</label>
+					</div>
+
+					<div className="grid gap-3 sm:grid-cols-2">
+						<div className="flex flex-col gap-1.5">
+							<label
+								htmlFor="by"
+								className="text-[16px] font-medium"
+							>
+								ชื่อผู้ถ่ายรูป
+							</label>
+							<Input
+								id="by"
+								autoComplete="name"
+								placeholder="ระบุชื่อผู้ถ่ายรูป"
+								value={uploadedBy}
+								onChange={(e) => setUploadedBy(e.target.value)}
+							/>
+						</div>
+						<div className="flex flex-col gap-1.5">
+							<label
+								htmlFor="cap"
+								className="text-[16px] font-medium"
+							>
+								คำอธิบาย (ไม่บังคับ)
+							</label>
+							<Input
+								id="cap"
+								placeholder="เช่น สภาพหน้างานก่อนทำ"
+								value={caption}
+								onChange={(e) => setCaption(e.target.value)}
+							/>
+						</div>
+					</div>
+
+					{queue.length > 0 && (
+						<div className="flex flex-col gap-3">
+							<div className="flex items-center justify-between">
+								<span className="text-[16px] font-medium">รอส่ง {queue.length} รูป</span>
+								{!busy && (
+									<button
+										type="button"
+										onClick={() => queue.forEach(drop)}
+										className="text-danger focus-visible:outline-focus min-h-11 cursor-pointer px-2 text-[15px] font-medium focus-visible:outline-2 focus-visible:outline-offset-2"
+									>
+										ล้างทั้งหมด
+									</button>
+								)}
+							</div>
+							<ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+								{queue.map((q) => (
+									<li
+										key={q.id}
+										className="relative"
+									>
+										<img
+											src={q.preview}
+											alt={q.file.name}
+											className={clsx(
+												'aspect-square w-full rounded-xl border object-cover',
+												q.failed ? 'border-danger' : 'border-line'
+											)}
+										/>
+										{q.failed && (
+											<span className="bg-danger absolute bottom-1.5 left-1.5 rounded-md px-2 py-0.5 text-[13px] font-medium text-white">
+												ส่งไม่สำเร็จ
+											</span>
+										)}
+										{!busy && (
+											<IconButton
+												aria-label={`เอารูป ${q.file.name} ออก`}
+												className="bg-surface shadow-card absolute top-1.5 right-1.5 size-11"
+												onClick={() => drop(q)}
+											>
+												<X size={20} />
+											</IconButton>
+										)}
+									</li>
+								))}
+							</ul>
+						</div>
+					)}
+
+					{message && (
+						<p
+							role="status"
+							className={clsx(
+								'flex items-start gap-2 rounded-xl px-4 py-3 text-[16px] font-medium',
+								message.ok ? 'bg-tint text-primary-ink' : 'bg-danger/10 text-danger'
+							)}
+						>
+							{message.ok ? (
+								<CheckCircle2
+									size={22}
+									aria-hidden="true"
+									className="mt-0.5 shrink-0"
+								/>
+							) : (
+								<TriangleAlert
+									size={22}
+									aria-hidden="true"
+									className="mt-0.5 shrink-0"
+								/>
+							)}
+							{message.text}
+						</p>
+					)}
+				</section>
+
+				<section
+					aria-labelledby="gal-h"
+					className="bg-surface shadow-depth flex flex-col gap-3 rounded-3xl p-4 ring-1 ring-black/[0.04]"
+				>
+					<h2
+						id="gal-h"
+						className="font-display flex items-center gap-2 text-[18px] font-semibold"
+					>
+						<Images
+							size={22}
+							aria-hidden="true"
+							className="text-primary-ink"
+						/>
+						รูปที่อัปโหลดแล้ว ({photos.length})
+					</h2>
+					{photos.length === 0 ? (
+						<p className="text-ink-muted py-8 text-center text-[16px]">ยังไม่มีรูปภาพ</p>
+					) : (
+						<ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+							{photos.map((p) => (
+								<li
+									key={p.id}
+									className="border-line overflow-hidden rounded-xl border"
+								>
+									<button
+										type="button"
+										onClick={() => setLightbox(p)}
+										aria-label={`ดูรูป ${p.caption || p.fileName}`}
+										className="focus-visible:outline-focus block w-full cursor-zoom-in focus-visible:outline-2 focus-visible:-outline-offset-2"
+									>
+										<img
+											src={p.fileUrl}
+											alt={p.caption || p.fileName}
+											loading="lazy"
+											className="aspect-square w-full object-cover"
+										/>
+									</button>
+									<div className="flex items-center justify-between gap-1 pl-3">
+										<div className="min-w-0 py-1.5 text-[13px]">
+											<div className="truncate font-medium">
+												{p.caption || p.uploadedBy || p.fileName}
+											</div>
+											<div className="text-ink-muted truncate">
+												{new Date(p.createdAt).toLocaleDateString('th-TH', {
+													day: 'numeric',
+													month: 'short',
+													year: '2-digit'
+												})}{' '}
+												• {formatFileSize(p.fileSize)}
+											</div>
+										</div>
+										<IconButton
+											aria-label={`ลบรูป ${p.fileName}`}
+											className="size-11 shrink-0"
+											onClick={() => setDel(p)}
+										>
+											<Trash2 size={18} />
+										</IconButton>
+									</div>
+								</li>
+							))}
+						</ul>
+					)}
+				</section>
+			</main>
+
+			{/* แถบอัปโหลดติดขอบล่าง: ปุ่มอยู่ในระยะนิ้วโป้งเสมอ */}
+			{queue.length > 0 && (
+				<div className="border-line bg-surface/95 fixed inset-x-0 bottom-0 z-40 border-t p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur">
+					<div className="mx-auto max-w-3xl">
+						<Button
+							className="h-14 w-full text-[18px]"
+							icon={<Upload size={22} />}
+							disabled={busy}
+							onClick={upload}
+						>
+							{progress
+								? `กำลังอัปโหลด ${progress.done}/${progress.total}`
+								: `อัปโหลด ${queue.length} รูป`}
+						</Button>
+					</div>
+				</div>
+			)}
+
+			{lightbox && (
+				<div
+					role="dialog"
+					aria-modal="true"
+					aria-label="ดูรูปภาพ"
+					className="fixed inset-0 z-50 flex items-center justify-center bg-black/90"
+					onClick={() => setLightbox(null)}
+				>
+					<img
+						src={lightbox.fileUrl}
+						alt={lightbox.caption || lightbox.fileName}
+						className="max-h-full max-w-full object-contain"
+					/>
+					<IconButton
+						aria-label="ปิด"
+						autoFocus
+						className="absolute top-3 right-3 size-12 bg-white/20 text-white hover:bg-white/30"
+						onClick={() => setLightbox(null)}
+					>
+						<X size={26} />
+					</IconButton>
+				</div>
+			)}
+
+			<ConfirmDialog
+				open={!!del}
+				danger
+				title="ลบรูปภาพ"
+				message={`ต้องการลบรูป ${del?.fileName ?? ''} ใช่หรือไม่`}
+				confirmLabel="ลบ"
+				onClose={() => setDel(null)}
+				onConfirm={remove}
+			/>
+		</div>
+	);
 }

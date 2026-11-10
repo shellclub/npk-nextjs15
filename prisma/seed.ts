@@ -1,4 +1,6 @@
 import 'dotenv/config';
+import { randomBytes } from 'node:crypto';
+import { hashPassword } from '../src/lib/password';
 import pg from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
@@ -50,16 +52,24 @@ async function main() {
   // ========================================
   // 2. ผู้ใช้งาน
   // ========================================
+  // รหัสผ่านเริ่มต้นอ่านจาก ADMIN_PASSWORD; ถ้าไม่ตั้งไว้จะสุ่มให้และพิมพ์ออกมาครั้งเดียว
   const existingAdmin = await prisma.user.findFirst({ where: { email: 'admin@npkservice.com' } });
-  const admin = existingAdmin || await prisma.user.create({
-    data: {
-      email: 'admin@npkservice.com',
-      password: '$2b$10$examplehashedpassword', // placeholder
-      name: 'ผู้ดูแลระบบ NPK',
-      role: 'ADMIN',
-    },
-  });
+  const needsPassword = !existingAdmin || !existingAdmin.password.startsWith('scrypt$');
+  const adminPassword = process.env.ADMIN_PASSWORD || randomBytes(9).toString('base64url');
+  const admin = existingAdmin
+    ? needsPassword
+      ? await prisma.user.update({ where: { id: existingAdmin.id }, data: { password: hashPassword(adminPassword) } })
+      : existingAdmin
+    : await prisma.user.create({
+        data: {
+          email: 'admin@npkservice.com',
+          password: hashPassword(adminPassword),
+          name: 'ผู้ดูแลระบบ NPK',
+          role: 'ADMIN',
+        },
+      });
   console.log('✅ ผู้ใช้งาน:', admin.name);
+  if (needsPassword) console.log(`🔑 รหัสผ่านผู้ดูแลระบบ (${admin.email}): ${adminPassword}`);
 
   // ========================================
   // 3. ข้อมูลลูกค้า (5 กลุ่ม)
@@ -833,9 +843,25 @@ async function main() {
 
   for (const s of woStatusDefaults) {
     await prisma.workOrderStatusConfig.upsert({
-      where: { code: s.code },
+      where: { code_appliesTo: { code: s.code, appliesTo: 'WO' } },
       update: { name: s.name, color: s.color, bgColor: s.bgColor, sortOrder: s.sortOrder },
-      create: s,
+      create: { ...s, appliesTo: 'WO' },
+    });
+  }
+
+  const quotationStatusDefaults = [
+    { name: 'ร่าง', code: 'DRAFT', color: '#334155', bgColor: '#F1F5F9', sortOrder: 1, isDefault: true },
+    { name: 'ส่งแล้ว', code: 'SENT', color: '#2563EB', bgColor: '#DBEAFE', sortOrder: 2 },
+    { name: 'อนุมัติ', code: 'APPROVED', color: '#059669', bgColor: '#D1FAE5', sortOrder: 3 },
+    { name: 'ปฏิเสธ', code: 'REJECTED', color: '#C4161C', bgColor: '#FBE3E3', sortOrder: 4 },
+    { name: 'หมดอายุ', code: 'EXPIRED', color: '#D97706', bgColor: '#FEF3C7', sortOrder: 5 },
+    { name: 'ยกเลิก', code: 'CANCELLED', color: '#DC2626', bgColor: '#FEE2E2', sortOrder: 6 },
+  ];
+  for (const s of quotationStatusDefaults) {
+    await prisma.workOrderStatusConfig.upsert({
+      where: { code_appliesTo: { code: s.code, appliesTo: 'QUOTATION' } },
+      update: {},
+      create: { ...s, appliesTo: 'QUOTATION' },
     });
   }
   console.log('✅ WorkOrderStatusConfig:', woStatusDefaults.length, 'สถานะ');

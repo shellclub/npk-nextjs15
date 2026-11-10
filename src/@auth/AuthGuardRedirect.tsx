@@ -1,78 +1,45 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
-import FuseUtils from '@fuse/utils';
-import {
-	getSessionRedirectUrl,
-	resetSessionRedirectUrl,
-	setSessionRedirectUrl
-} from '@fuse/core/FuseAuthorization/sessionRedirectUrl';
-import { FuseRouteObjectType } from '@fuse/core/FuseLayout/FuseLayout';
-import usePathname from '@fuse/hooks/usePathname';
-import FuseLoading from '@fuse/core/FuseLoading';
-import useNavigate from '@fuse/hooks/useNavigate';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+import type { ReactNode } from 'react';
 import useUser from './useUser';
 
-type AuthGuardProps = {
-	auth: FuseRouteObjectType['auth'];
-	children: React.ReactNode;
-	loginRedirectUrl?: string;
+type Props = {
+	/** role ที่เข้าได้; อาร์เรย์ว่าง = เฉพาะผู้ที่ยังไม่ล็อกอิน */
+	auth: string[];
+	children: ReactNode;
 };
 
-function AuthGuardRedirect({ auth, children, loginRedirectUrl = '/' }: AuthGuardProps) {
-	const { data: user, isGuest } = useUser();
-	const userRole = user?.role;
-	const navigate = useNavigate();
-
-	const [accessGranted, setAccessGranted] = useState<boolean>(false);
+/** ป้องกันหน้าฝั่ง client: guest → /sign-in, ล็อกอินแล้วแต่ไม่มีสิทธิ์ → /401 */
+function AuthGuardRedirect({ auth, children }: Props) {
+	const { data: user, isGuest, isLoading } = useUser();
+	const router = useRouter();
 	const pathname = usePathname();
+	const onlyGuest = auth.length === 0;
+	const roles = Array.isArray(user?.role) ? user.role : user?.role ? [user.role] : [];
+	const allowed = onlyGuest ? isGuest : !isGuest && roles.some((r) => auth.includes(r));
 
-	// Function to handle redirection
-	const handleRedirection = useCallback(() => {
-		const redirectUrl = getSessionRedirectUrl() || loginRedirectUrl;
-
-		if (isGuest) {
-			navigate('/sign-in');
-		} else {
-			navigate(redirectUrl);
-			resetSessionRedirectUrl();
-		}
-	}, [isGuest, loginRedirectUrl, navigate]);
-
-	// Check user's permissions and set access granted state
 	useEffect(() => {
-		const isOnlyGuestAllowed = Array.isArray(auth) && auth.length === 0;
-		const userHasPermission = FuseUtils.hasPermission(auth, userRole);
-		const ignoredPaths = ['/', '/callback', '/sign-in', '/sign-out', '/logout', '/404'];
+		if (isLoading || allowed) return;
 
-		if (!auth || (auth && userHasPermission) || (isOnlyGuestAllowed && isGuest)) {
-			setAccessGranted(true);
-			return;
-		}
+		if (onlyGuest) router.replace('/dashboards');
+		else if (isGuest) router.replace('/sign-in');
+		else router.replace('/401');
+	}, [allowed, isGuest, isLoading, onlyGuest, pathname, router]);
 
-		if (!userHasPermission) {
-			if (isGuest && !ignoredPaths.includes(pathname)) {
-				setSessionRedirectUrl(pathname);
-			} else if (!isGuest && !ignoredPaths.includes(pathname)) {
-				/**
-				 * If user is member but don't have permission to view the route
-				 * redirected to main route '/'
-				 */
-				if (isOnlyGuestAllowed) {
-					setSessionRedirectUrl('/');
-				} else {
-					setSessionRedirectUrl('/401');
-				}
-			}
-		}
+	if (!allowed) {
+		return (
+			<div
+				role="status"
+				className="text-ink-muted flex min-h-screen items-center justify-center"
+			>
+				กำลังโหลด...
+			</div>
+		);
+	}
 
-		handleRedirection();
-	}, [auth, userRole, isGuest, pathname, handleRedirection]);
-
-	// Return children if access is granted, otherwise null
-	return accessGranted ? children : <FuseLoading />;
+	return <>{children}</>;
 }
-
-// the landing page "/" redirected to /example but the example npt
 
 export default AuthGuardRedirect;

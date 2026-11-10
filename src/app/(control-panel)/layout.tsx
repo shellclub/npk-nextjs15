@@ -1,12 +1,13 @@
-import MainLayout from 'src/components/MainLayout';
+import authRoles from '@auth/authRoles';
 import AuthGuardRedirect from '@auth/AuthGuardRedirect';
 import { AlertProvider } from '@/components/shared/AlertProvider';
+import { AppShell } from '@/components/app-shell/AppShell';
 
-function Layout({ children }) {
+function Layout({ children }: { children: React.ReactNode }) {
 	return (
-		<AuthGuardRedirect auth={['admin']}>
+		<AuthGuardRedirect auth={authRoles.staff}>
 			<AlertProvider>
-				<MainLayout>{children}</MainLayout>
+				<AppShell>{children}</AppShell>
 			</AlertProvider>
 		</AuthGuardRedirect>
 	);
