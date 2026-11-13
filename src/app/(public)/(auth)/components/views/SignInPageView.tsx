@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { Button, Field, IconButton, Input } from '@/components/ui';
 
 const schema = z.object({
-	email: z.string().min(1, 'กรุณากรอกอีเมล').email('รูปแบบอีเมลไม่ถูกต้อง'),
+	email: z.string().trim().min(1, 'กรุณากรอกอีเมลหรือชื่อผู้ใช้'),
 	password: z.string().min(1, 'กรุณากรอกรหัสผ่าน'),
 	remember: z.boolean().optional()
 });
@@ -167,7 +167,7 @@ function SignInPageView() {
 							</p>
 						)}
 						<Field
-							label="อีเมล"
+							label="อีเมลหรือชื่อผู้ใช้"
 							error={errors.email?.message}
 						>
 							{(id, bad) => (
@@ -179,7 +179,7 @@ function SignInPageView() {
 									/>
 									<Input
 										id={id}
-										type="email"
+										type="text"
 										autoComplete="username"
 										placeholder="name@npkservice.co.th"
 										aria-invalid={bad}
