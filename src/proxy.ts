@@ -24,12 +24,11 @@ export async function proxy(req: NextRequest) {
 		return NextResponse.next();
 	}
 
-	const secureCookie = req.nextUrl.protocol === 'https:' || req.headers.get('x-forwarded-proto') === 'https';
-	const token = await getToken({
-		req,
-		secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
-		secureCookie
-	});
+	// ชื่อ cookie ขึ้นกับ AUTH_URL (http → authjs.session-token, https → __Secure-...) ไม่ใช่โปรโตคอลที่ผู้ใช้เข้ามา
+	// จึงลองทั้งสองแบบ (ลายเซ็น JWT ยังตรวจด้วย secret เสมอ)
+	const secret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET;
+	const token =
+		(await getToken({ req, secret, secureCookie: false })) ?? (await getToken({ req, secret, secureCookie: true }));
 
 	if (!token?.userId) {
 		return NextResponse.json({ error: 'กรุณาเข้าสู่ระบบ' }, { status: 401 });
