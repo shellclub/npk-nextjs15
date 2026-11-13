@@ -58,6 +58,16 @@ model User {
   workOrders    WorkOrder[]
 }
 
+// สิทธิ์เข้าถึงเมนูต่อ role (แถวที่มี = อนุญาต) ADMIN เข้าได้ทุกเมนูเสมอจึงไม่เก็บ
+model RolePermission {
+  id        String   @id @default(cuid())
+  role      UserRole
+  menuKey   String
+  createdAt DateTime @default(now())
+
+  @@unique([role, menuKey])
+}
+
 enum UserRole {
   ADMIN
   MANAGER

@@ -8,4 +8,6 @@ export type User = {
 	displayName: string;
 	photoURL?: string;
 	email?: string;
+	/** เมนูที่เข้าได้ (ว่างสำหรับ admin เพราะเข้าได้ทุกเมนู) */
+	menus: string[];
 };

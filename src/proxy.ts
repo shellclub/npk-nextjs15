@@ -1,10 +1,12 @@
 import { getToken } from 'next-auth/jwt';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { canCallApi } from '@/lib/permissions';
+import { loadAccess } from '@/lib/permissions-server';
 
 /**
  * เส้นทาง API ที่เปิดสาธารณะโดยตั้งใจ (หน้าสาธารณะ/หน้าพิมพ์/ช่างอัปโหลดรูปหน้างานเรียกใช้โดยไม่ล็อกอิน)
- * ที่เหลือใน /api ต้องมี session ที่ถูกต้อง
+ * ที่เหลือใน /api ต้องมี session และ role ต้องมีสิทธิ์ตาม src/lib/permissions.ts
  */
 const PUBLIC_API: { pattern: RegExp; methods?: string[] }[] = [
 	{ pattern: /^\/api\/auth(\/|$)/ },
@@ -16,6 +18,8 @@ const PUBLIC_API: { pattern: RegExp; methods?: string[] }[] = [
 	{ pattern: /^\/api\/quotations\/[^/]+$/, methods: ['GET'] },
 	{ pattern: /^\/api\/quotations\/[^/]+\/photos$/, methods: ['GET', 'POST', 'DELETE'] }
 ];
+
+const json = (error: string, status: number) => NextResponse.json({ error }, { status });
 
 export async function proxy(req: NextRequest) {
 	const { pathname } = req.nextUrl;
@@ -30,8 +34,15 @@ export async function proxy(req: NextRequest) {
 	const token =
 		(await getToken({ req, secret, secureCookie: false })) ?? (await getToken({ req, secret, secureCookie: true }));
 
-	if (!token?.userId) {
-		return NextResponse.json({ error: 'กรุณาเข้าสู่ระบบ' }, { status: 401 });
+	if (!token?.userId) return json('กรุณาเข้าสู่ระบบ', 401);
+
+	// role/สถานะมาจากฐานข้อมูล (แคชสั้น ๆ) ไม่เชื่อค่าใน token → ปิดบัญชี/เปลี่ยน role มีผลทันที
+	const access = await loadAccess(token.userId);
+
+	if (!access?.isActive) return json('กรุณาเข้าสู่ระบบ', 401);
+
+	if (!canCallApi(access.role, access.menus, pathname, req.method)) {
+		return json('คุณไม่มีสิทธิ์ใช้งานส่วนนี้', 403);
 	}
 
 	return NextResponse.next();

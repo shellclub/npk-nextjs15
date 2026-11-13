@@ -4,6 +4,7 @@ import type { NextAuthConfig, NextAuthResult } from 'next-auth';
 import type { User } from '@auth/user';
 import { prisma } from '@/lib/prisma';
 import { verifyPassword } from '@/lib/password';
+import { menusForRole } from '@/lib/permissions-server';
 
 const config = {
 	pages: { signIn: '/sign-in' },
@@ -43,7 +44,8 @@ const config = {
 				email: dbUser.email,
 				displayName: dbUser.name,
 				photoURL: dbUser.avatar ?? undefined,
-				role: [dbUser.role.toLowerCase()]
+				role: [dbUser.role.toLowerCase()],
+				menus: dbUser.role === 'ADMIN' ? [] : await menusForRole(dbUser.role)
 			};
 
 			return session;

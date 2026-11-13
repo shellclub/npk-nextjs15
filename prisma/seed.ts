@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { randomBytes } from 'node:crypto';
 import { hashPassword } from '../src/lib/password';
+import { DEFAULT_GRANTS } from '../src/lib/permissions';
 import pg from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
@@ -70,6 +71,16 @@ async function main() {
       });
   console.log('✅ ผู้ใช้งาน:', admin.name);
   if (needsPassword) console.log(`🔑 รหัสผ่านผู้ดูแลระบบ (${admin.email}): ${adminPassword}`);
+
+  // สิทธิ์เมนูเริ่มต้นของแต่ละ role: ใส่ครั้งแรกเท่านั้น (หลังจากนั้น ADMIN ปรับเองในหน้า "สิทธิ์การเข้าถึง" ห้ามทับ)
+  if ((await prisma.rolePermission.count()) === 0) {
+    await prisma.rolePermission.createMany({
+      data: Object.entries(DEFAULT_GRANTS).flatMap(([role, keys]) =>
+        keys.map((menuKey) => ({ role: role as 'MANAGER' | 'STAFF' | 'ACCOUNTANT', menuKey }))
+      ),
+    });
+    console.log('✅ สิทธิ์เมนูเริ่มต้นของแต่ละ role');
+  }
 
   // ========================================
   // 3. ข้อมูลลูกค้า (5 กลุ่ม)

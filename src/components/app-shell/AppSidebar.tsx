@@ -6,7 +6,8 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import useUser from '@auth/useUser';
-import { dashboardItem, findActive, NAV_COUNT_KEYS, navGroups, type NavItem } from './nav';
+import { hasMenu } from '@/lib/permissions';
+import { dashboardItem, findActive, NAV_COUNT_KEYS, visibleGroups, type NavItem } from './nav';
 import { useNavCounts } from './useNavCounts';
 
 function NavLink({ item, active, count }: { item: NavItem; active: boolean; count?: number }) {
@@ -42,7 +43,9 @@ function NavLink({ item, active, count }: { item: NavItem; active: boolean; coun
 
 export function AppSidebar() {
 	const pathname = usePathname();
-	const { signOut } = useUser();
+	const { signOut, data: user } = useUser();
+	const role = Array.isArray(user?.role) ? user.role[0] : user?.role;
+	const groups = visibleGroups(role, user?.menus);
 	const { data: counts } = useNavCounts();
 	const activeId = findActive(pathname).item?.id;
 
@@ -70,11 +73,13 @@ export function AppSidebar() {
 				aria-label="เมนูหลัก"
 				className="flex flex-col gap-0.5"
 			>
-				<NavLink
-					item={dashboardItem}
-					active={activeId === dashboardItem.id}
-				/>
-				{navGroups.map((g) => (
+				{hasMenu(role, user?.menus, dashboardItem.id) && (
+					<NavLink
+						item={dashboardItem}
+						active={activeId === dashboardItem.id}
+					/>
+				)}
+				{groups.map((g) => (
 					<div
 						key={g.id}
 						className="flex flex-col gap-0.5"

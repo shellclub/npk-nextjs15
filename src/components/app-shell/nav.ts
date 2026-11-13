@@ -1,3 +1,4 @@
+import { hasMenu } from '@/lib/permissions';
 import {
 	BarChart3,
 	Building2,
@@ -12,9 +13,11 @@ import {
 	LayoutDashboard,
 	Receipt,
 	Settings,
+	ShieldCheck,
 	ShoppingCart,
 	Tags,
 	Upload,
+	Users,
 	type LucideIcon
 } from 'lucide-react';
 
@@ -34,7 +37,9 @@ const ICONS: Record<string, LucideIcon> = {
 	'building-2': Building2,
 	'hard-hat': HardHat,
 	settings: Settings,
-	tags: Tags
+	tags: Tags,
+	users: Users,
+	'shield-check': ShieldCheck
 };
 
 export type NavItem = { id: string; title: string; href: string; Icon: LucideIcon };
@@ -92,8 +97,23 @@ export const navGroups: NavGroup[] = [
 			item('master.company', 'ข้อมูลบริษัท', '/apps/company-settings', 'settings'),
 			item('master.wo-statuses', 'ตั้งค่าสถานะ WO', '/apps/work-order-statuses', 'tags')
 		]
+	},
+	{
+		id: 'admin',
+		title: 'ผู้ดูแลระบบ',
+		items: [
+			item('admin.users', 'จัดการผู้ใช้', '/apps/users', 'users'),
+			item('admin.permissions', 'สิทธิ์การเข้าถึง', '/apps/role-permissions', 'shield-check')
+		]
 	}
 ];
+
+/** เมนูที่ role นี้เห็น/เข้าได้ (กลุ่มที่ไม่มีเมนูเหลือจะถูกตัดออก) */
+export function visibleGroups(role: string | null | undefined, menus: readonly string[] | undefined): NavGroup[] {
+	return navGroups
+		.map((g) => ({ ...g, items: g.items.filter((i) => hasMenu(role, menus, i.id)) }))
+		.filter((g) => g.items.length > 0);
+}
 
 /** จับคู่ pathname กับเมนูที่ยาวที่สุด เพื่อทำ active + breadcrumb */
 export function findActive(pathname: string): { group?: NavGroup; item?: NavItem } {

@@ -112,18 +112,24 @@ export function AppTopbar() {
 						</span>
 					)}
 				</Link>
-				<div
-					aria-hidden="true"
-					className="bg-brand font-display text-on-brand flex size-11 items-center justify-center rounded-full font-semibold"
+				<Link
+					href="/apps/account"
+					aria-label="บัญชีของฉัน / เปลี่ยนรหัสผ่าน"
+					className="focus-visible:outline-focus flex items-center gap-3 rounded-xl no-underline outline-offset-2 focus-visible:outline-2"
 				>
-					{name.slice(0, 2).toUpperCase()}
-				</div>
-				<div>
-					<div className="font-display text-[15px] leading-[22px] font-semibold">{name}</div>
-					<div className="text-ink-muted text-[13px] leading-[18px]">
-						{(role && ROLE_LABEL[role]) || role || ''}
+					<div
+						aria-hidden="true"
+						className="bg-brand font-display text-on-brand flex size-11 items-center justify-center rounded-full font-semibold"
+					>
+						{name.slice(0, 2).toUpperCase()}
 					</div>
-				</div>
+					<div>
+						<div className="font-display text-[15px] leading-[22px] font-semibold">{name}</div>
+						<div className="text-ink-muted text-[13px] leading-[18px]">
+							{(role && ROLE_LABEL[role]) || role || ''}
+						</div>
+					</div>
+				</Link>
 			</div>
 		</header>
 	);
