@@ -32,7 +32,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: sh -c "npx prisma db push --schema=./prisma/schema.prisma && npx tsx prisma/seed.ts"
+    command: sh -c "npx prisma db execute --file prisma/pre-push.sql && npx prisma db push --schema=./prisma/schema.prisma && npx tsx prisma/seed.ts"
     restart: "no"
 
   # Next.js Application (Production)
