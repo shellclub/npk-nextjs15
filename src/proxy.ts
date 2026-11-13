@@ -1,0 +1,43 @@
+import { getToken } from 'next-auth/jwt';
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+
+/**
+ * เส้นทาง API ที่เปิดสาธารณะโดยตั้งใจ (หน้าสาธารณะ/หน้าพิมพ์/ช่างอัปโหลดรูปหน้างานเรียกใช้โดยไม่ล็อกอิน)
+ * ที่เหลือใน /api ต้องมี session ที่ถูกต้อง
+ */
+const PUBLIC_API: { pattern: RegExp; methods?: string[] }[] = [
+	{ pattern: /^\/api\/auth(\/|$)/ },
+	{ pattern: /^\/api\/files\// },
+	{ pattern: /^\/api\/company\/asset\// },
+	// ลิงก์แชร์ใบเสนอราคา
+	{ pattern: /^\/api\/quotations\/[^/]+\/share$/, methods: ['GET'] },
+	// หน้าช่างอัปโหลดรูปหน้างาน: อ่านใบเสนอราคา + จัดการรูป
+	{ pattern: /^\/api\/quotations\/[^/]+$/, methods: ['GET'] },
+	{ pattern: /^\/api\/quotations\/[^/]+\/photos$/, methods: ['GET', 'POST', 'DELETE'] }
+];
+
+export async function proxy(req: NextRequest) {
+	const { pathname } = req.nextUrl;
+
+	if (PUBLIC_API.some((r) => r.pattern.test(pathname) && (!r.methods || r.methods.includes(req.method)))) {
+		return NextResponse.next();
+	}
+
+	const secureCookie = req.nextUrl.protocol === 'https:' || req.headers.get('x-forwarded-proto') === 'https';
+	const token = await getToken({
+		req,
+		secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
+		secureCookie
+	});
+
+	if (!token?.userId) {
+		return NextResponse.json({ error: 'กรุณาเข้าสู่ระบบ' }, { status: 401 });
+	}
+
+	return NextResponse.next();
+}
+
+export const config = {
+	matcher: ['/api/:path*']
+};
