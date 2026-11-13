@@ -1,19 +1,5 @@
-import MainLayout from '../../components/MainLayout';
-
-function Layout(props: { children: React.ReactNode }) {
-	const { children } = props;
-
-	return (
-		<MainLayout
-			navbar={false}
-			toolbar={false}
-			leftSidePanel={false}
-			rightSidePanel={false}
-			footer={false}
-		>
-			{children}
-		</MainLayout>
-	);
+function Layout({ children }: { children: React.ReactNode }) {
+	return <div className="bg-canvas text-ink min-h-screen font-sans">{children}</div>;
 }
 
 export default Layout;

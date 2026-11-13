@@ -1,227 +1,206 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { recalcPOTotals } from '@/lib/po-totals';
 
 /** คัดลอกรายการจากใบเสนอราคา → PO (รวมราคา แก้ไขได้จนกว่าจะล็อค) */
 function mapQuotationItemsToPO(
-  purchaseOrderId: string,
-  quotationItems: Array<{
-    itemOrder: number;
-    itemType: string;
-    parentIndex: number | null;
-    description: string;
-    unit: string;
-    quantity: unknown;
-    materialPrice: unknown;
-    labourPrice: unknown;
-  }>
+	purchaseOrderId: string,
+	quotationItems: {
+		itemOrder: number;
+		itemType: string;
+		parentIndex: number | null;
+		description: string;
+		unit: string;
+		quantity: unknown;
+		materialPrice: unknown;
+		labourPrice: unknown;
+	}[]
 ) {
-  return quotationItems.map((qi) => {
-    const qty = Number(qi.quantity) || 0;
-    const matP = Number(qi.materialPrice) || 0;
-    const labP = Number(qi.labourPrice) || 0;
-    const totalMat = qty * matP;
-    const totalLab = qty * labP;
-    return {
-      purchaseOrderId,
-      itemOrder: qi.itemOrder,
-      itemType: qi.itemType,
-      parentIndex: qi.parentIndex,
-      description: qi.description,
-      unit: qi.unit,
-      quantity: qty,
-      materialPrice: matP,
-      labourPrice: labP,
-      totalMaterial: totalMat,
-      totalLabour: totalLab,
-      amount: totalMat + totalLab,
-      isLocked: false,
-      isAdjustment: false,
-    };
-  });
+	return quotationItems.map((qi) => {
+		const qty = Number(qi.quantity) || 0;
+		const matP = Number(qi.materialPrice) || 0;
+		const labP = Number(qi.labourPrice) || 0;
+		const totalMat = qty * matP;
+		const totalLab = qty * labP;
+		return {
+			purchaseOrderId,
+			itemOrder: qi.itemOrder,
+			itemType: qi.itemType,
+			parentIndex: qi.parentIndex,
+			description: qi.description,
+			unit: qi.unit,
+			quantity: qty,
+			materialPrice: matP,
+			labourPrice: labP,
+			totalMaterial: totalMat,
+			totalLabour: totalLab,
+			amount: totalMat + totalLab,
+			isLocked: false,
+			isAdjustment: false
+		};
+	});
 }
 
 // GET — ดึงรายการ items ของ PO + ข้อมูลใบเสนอราคาอ้างอิง
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  try {
-    const po = await prisma.purchaseOrder.findUnique({
-      where: { id },
-      include: {
-        items: { orderBy: { itemOrder: 'asc' } },
-        quotation: {
-          include: {
-            items: { orderBy: { itemOrder: 'asc' } },
-            customerGroup: true,
-            branch: true,
-          },
-        },
-        team: true,
-        workOrder: true,
-      },
-    });
-    if (!po) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    return NextResponse.json(po);
-  } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
-  }
+	const { id } = await params;
+	try {
+		const po = await prisma.purchaseOrder.findUnique({
+			where: { id },
+			include: {
+				items: { orderBy: { itemOrder: 'asc' } },
+				quotation: {
+					include: {
+						items: { orderBy: { itemOrder: 'asc' } },
+						customerGroup: true,
+						branch: true
+					}
+				},
+				team: true,
+				workOrder: true
+			}
+		});
+
+		if (!po) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+
+		return NextResponse.json(po);
+	} catch (e) {
+		return NextResponse.json({ error: String(e) }, { status: 500 });
+	}
 }
 
 // POST — เพิ่มรายการใหม่ (ทั้ง initial import จากใบเสนอราคา หรือเพิ่ม/ลดทีหลัง)
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  try {
-    const body = await req.json();
+	const { id } = await params;
+	try {
+		const body = await req.json();
 
-    // === Mode 1: Import items from quotation ===
-    if (body.action === 'import-from-quotation') {
-      const po = await prisma.purchaseOrder.findUnique({
-        where: { id },
-        include: {
-          quotation: {
-            include: { items: { orderBy: { itemOrder: 'asc' } } },
-          },
-        },
-      });
-      if (!po?.quotation) return NextResponse.json({ error: 'No quotation reference' }, { status: 400 });
+		// === Mode 1: Import items from quotation ===
+		if (body.action === 'import-from-quotation') {
+			const po = await prisma.purchaseOrder.findUnique({
+				where: { id },
+				include: {
+					quotation: {
+						include: { items: { orderBy: { itemOrder: 'asc' } } }
+					}
+				}
+			});
 
-      // Check if PO already has items
-      const existingCount = await prisma.purchaseOrderItem.count({ where: { purchaseOrderId: id } });
-      if (existingCount > 0 && !body.replace) {
-        return NextResponse.json({ error: 'Items already imported', alreadyImported: true }, { status: 400 });
-      }
+			if (!po?.quotation) return NextResponse.json({ error: 'No quotation reference' }, { status: 400 });
 
-      // If replace=true, delete existing unlocked items first
-      if (existingCount > 0 && body.replace) {
-        await prisma.purchaseOrderItem.deleteMany({
-          where: { purchaseOrderId: id, isLocked: false, isAdjustment: false },
-        });
-      }
+			// Check if PO already has items
+			const existingCount = await prisma.purchaseOrderItem.count({ where: { purchaseOrderId: id } });
 
-      const newItems = mapQuotationItemsToPO(id, po.quotation.items);
+			if (existingCount > 0 && !body.replace) {
+				return NextResponse.json({ error: 'Items already imported', alreadyImported: true }, { status: 400 });
+			}
 
-      await prisma.purchaseOrderItem.createMany({ data: newItems });
+			// If replace=true, delete existing unlocked items first
+			if (existingCount > 0 && body.replace) {
+				await prisma.purchaseOrderItem.deleteMany({
+					where: { purchaseOrderId: id, isLocked: false, isAdjustment: false }
+				});
+			}
 
-      // คัดลอกส่วนลด/VAT จากใบเสนอราคา แล้วคำนวณยอดรวม
-      await prisma.purchaseOrder.update({
-        where: { id },
-        data: {
-          discountPercent: Number(po.quotation.discountPercent) || 0,
-          vatPercent: Number(po.quotation.vatPercent) ?? 0,
-        },
-      });
-      await recalcPOTotals(id);
+			const newItems = mapQuotationItemsToPO(id, po.quotation.items);
 
-      const items = await prisma.purchaseOrderItem.findMany({
-        where: { purchaseOrderId: id },
-        orderBy: { itemOrder: 'asc' },
-      });
-      return NextResponse.json({ success: true, items });
-    }
+			await prisma.purchaseOrderItem.createMany({ data: newItems });
 
+			// คัดลอกส่วนลด/VAT จากใบเสนอราคา แล้วคำนวณยอดรวม
+			await prisma.purchaseOrder.update({
+				where: { id },
+				data: {
+					discountPercent: Number(po.quotation.discountPercent) || 0,
+					vatPercent: Number(po.quotation.vatPercent) || 0
+				}
+			});
+			await recalcPOTotals(id);
 
-    // === Mode 2: Save prices for unlocked items (lock them) ===
-    if (body.action === 'save-prices') {
-      const updates: Array<{ id: string; materialPrice: number; labourPrice: number }> = body.items || [];
+			const items = await prisma.purchaseOrderItem.findMany({
+				where: { purchaseOrderId: id },
+				orderBy: { itemOrder: 'asc' }
+			});
+			return NextResponse.json({ success: true, items });
+		}
 
-      for (const item of updates) {
-        const existing = await prisma.purchaseOrderItem.findUnique({ where: { id: item.id } });
-        if (!existing || existing.isLocked) continue; // skip locked items
+		// === Mode 2: Save prices for unlocked items (lock them) ===
+		if (body.action === 'save-prices') {
+			const updates: { id: string; materialPrice: number; labourPrice: number }[] = body.items || [];
 
-        const qty = Number(existing.quantity);
-        const matP = Number(item.materialPrice) || 0;
-        const labP = Number(item.labourPrice) || 0;
-        const totalMat = qty * matP;
-        const totalLab = qty * labP;
-        const amount = totalMat + totalLab;
+			for (const item of updates) {
+				const existing = await prisma.purchaseOrderItem.findUnique({ where: { id: item.id } });
 
-        await prisma.purchaseOrderItem.update({
-          where: { id: item.id },
-          data: {
-            materialPrice: matP,
-            labourPrice: labP,
-            totalMaterial: totalMat,
-            totalLabour: totalLab,
-            amount,
-            isLocked: true,
-          },
-        });
-      }
+				if (!existing || existing.isLocked) continue; // skip locked items
 
-      // Recalculate PO totals
-      await recalcPOTotals(id);
+				const qty = Number(existing.quantity);
+				const matP = Number(item.materialPrice) || 0;
+				const labP = Number(item.labourPrice) || 0;
+				const totalMat = qty * matP;
+				const totalLab = qty * labP;
+				const amount = totalMat + totalLab;
 
-      const items = await prisma.purchaseOrderItem.findMany({
-        where: { purchaseOrderId: id },
-        orderBy: [{ itemOrder: 'asc' }, { createdAt: 'asc' }],
-      });
-      return NextResponse.json({ success: true, items });
-    }
+				await prisma.purchaseOrderItem.update({
+					where: { id: item.id },
+					data: {
+						materialPrice: matP,
+						labourPrice: labP,
+						totalMaterial: totalMat,
+						totalLabour: totalLab,
+						amount,
+						isLocked: true
+					}
+				});
+			}
 
-    // === Mode 3: Add adjustment item (positive or negative) ===
-    if (body.action === 'add-adjustment') {
-      const lastItem = await prisma.purchaseOrderItem.findFirst({
-        where: { purchaseOrderId: id },
-        orderBy: { itemOrder: 'desc' },
-      });
+			// Recalculate PO totals
+			await recalcPOTotals(id);
 
-      const qty = Number(body.quantity) || 1;
-      const matP = Number(body.materialPrice) || 0;
-      const labP = Number(body.labourPrice) || 0;
-      const totalMat = qty * matP;
-      const totalLab = qty * labP;
-      const amount = totalMat + totalLab;
+			const items = await prisma.purchaseOrderItem.findMany({
+				where: { purchaseOrderId: id },
+				orderBy: [{ itemOrder: 'asc' }, { createdAt: 'asc' }]
+			});
+			return NextResponse.json({ success: true, items });
+		}
 
-      const newItem = await prisma.purchaseOrderItem.create({
-        data: {
-          purchaseOrderId: id,
-          itemOrder: (lastItem?.itemOrder || 0) + 1,
-          itemType: 'ITEM',
-          parentIndex: body.parentIndex ?? null,
-          description: body.description || 'รายการปรับแก้',
-          unit: body.unit || 'งาน',
-          quantity: qty,
-          materialPrice: matP,
-          labourPrice: labP,
-          totalMaterial: totalMat,
-          totalLabour: totalLab,
-          amount,
-          isLocked: true, // adjustment items are immediately locked
-          isAdjustment: true,
-        },
-      });
+		// === Mode 3: Add adjustment item (positive or negative) ===
+		if (body.action === 'add-adjustment') {
+			const lastItem = await prisma.purchaseOrderItem.findFirst({
+				where: { purchaseOrderId: id },
+				orderBy: { itemOrder: 'desc' }
+			});
 
-      await recalcPOTotals(id);
-      return NextResponse.json({ success: true, item: newItem });
-    }
+			const qty = Number(body.quantity) || 1;
+			const matP = Number(body.materialPrice) || 0;
+			const labP = Number(body.labourPrice) || 0;
+			const totalMat = qty * matP;
+			const totalLab = qty * labP;
+			const amount = totalMat + totalLab;
 
-    return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
-  } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
-  }
-}
+			const newItem = await prisma.purchaseOrderItem.create({
+				data: {
+					purchaseOrderId: id,
+					itemOrder: (lastItem?.itemOrder || 0) + 1,
+					itemType: 'ITEM',
+					parentIndex: body.parentIndex ?? null,
+					description: body.description || 'รายการปรับแก้',
+					unit: body.unit || 'งาน',
+					quantity: qty,
+					materialPrice: matP,
+					labourPrice: labP,
+					totalMaterial: totalMat,
+					totalLabour: totalLab,
+					amount,
+					isLocked: true, // adjustment items are immediately locked
+					isAdjustment: true
+				}
+			});
 
-// Recalculate PO subtotal → discount → vat → total
-async function recalcPOTotals(poId: string) {
-  const po = await prisma.purchaseOrder.findUnique({ where: { id: poId } });
-  if (!po) return;
+			await recalcPOTotals(id);
+			return NextResponse.json({ success: true, item: newItem });
+		}
 
-  const items = await prisma.purchaseOrderItem.findMany({ where: { purchaseOrderId: poId } });
-  const subtotal = items.reduce((sum, it) => sum + Number(it.amount), 0);
-  const discPct = Number(po.discountPercent) || 0;
-  const discAmt = subtotal * discPct / 100;
-  const afterDisc = subtotal - discAmt;
-  const vatPct = Number(po.vatPercent) || 0;
-  const vatAmt = afterDisc * vatPct / 100;
-  const total = afterDisc + vatAmt;
-
-  await prisma.purchaseOrder.update({
-    where: { id: poId },
-    data: {
-      subtotal,
-      discountAmount: discAmt,
-      afterDiscount: afterDisc,
-      vatAmount: vatAmt,
-      totalAmount: total,
-    },
-  });
+		return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+	} catch (e) {
+		return NextResponse.json({ error: String(e) }, { status: 500 });
+	}
 }

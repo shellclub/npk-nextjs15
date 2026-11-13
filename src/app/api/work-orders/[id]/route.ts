@@ -3,84 +3,106 @@ import prisma from '@/lib/prisma';
 
 // GET /api/work-orders/[id] — Get single work order
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    const { id } = await params;
-    const wo = await prisma.workOrder.findUnique({
-      where: { id },
-      include: {
-        quotation: {
-          select: {
-            quotationNumber: true,
-            projectName: true,
-            customerGroup: { select: { groupName: true } },
-          },
-        },
-        branch: true,
-        team: { select: { teamName: true, leaderName: true } },
-        createdBy: { select: { name: true } },
-        purchaseOrders: { select: { id: true, poNumber: true, totalAmount: true, status: true } },
-      },
-    });
-    if (!wo) return NextResponse.json({ error: 'Work order not found' }, { status: 404 });
-    return NextResponse.json(wo);
-  } catch (error) {
-    console.error('GET /api/work-orders/[id] error:', error);
-    return NextResponse.json({ error: 'Failed to fetch work order' }, { status: 500 });
-  }
+	try {
+		const { id } = await params;
+		const wo = await prisma.workOrder.findUnique({
+			where: { id },
+			include: {
+				quotation: {
+					select: {
+						quotationNumber: true,
+						projectName: true,
+						customerGroup: { select: { groupName: true } }
+					}
+				},
+				branch: true,
+				team: { select: { teamName: true, leaderName: true } },
+				createdBy: { select: { name: true } },
+				purchaseOrders: { select: { id: true, poNumber: true, totalAmount: true, status: true } }
+			}
+		});
+
+		if (!wo) return NextResponse.json({ error: 'Work order not found' }, { status: 404 });
+
+		return NextResponse.json(wo);
+	} catch (error) {
+		console.error('GET /api/work-orders/[id] error:', error);
+		return NextResponse.json({ error: 'Failed to fetch work order' }, { status: 500 });
+	}
 }
 
 // PATCH /api/work-orders/[id] — Update work order (status, description, etc.)
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    const { id } = await params;
-    const body = await req.json();
+	try {
+		const { id } = await params;
+		const body = await req.json();
 
-    const data: Record<string, unknown> = {};
-    if (body.status) data.status = body.status;
-    if (body.workflowType !== undefined) data.workflowType = body.workflowType;
-    if (body.quotationId !== undefined) data.quotationId = body.quotationId || null;
-    if (body.description !== undefined) data.description = body.description;
-    if (body.totalAmount !== undefined) data.totalAmount = body.totalAmount;
-    if (body.teamId !== undefined) data.teamId = body.teamId || null;
-    if (body.teamName !== undefined) data.teamName = body.teamName || null;
-    if (body.poNumber !== undefined) data.poNumber = body.poNumber || null;
-    if (body.poDate !== undefined) data.poDate = body.poDate ? new Date(body.poDate) : null;
-    if (body.startDate !== undefined) data.startDate = body.startDate ? new Date(body.startDate) : null;
-    if (body.endDate !== undefined) data.endDate = body.endDate ? new Date(body.endDate) : null;
-    if (body.warrantyStartDate !== undefined) data.warrantyStartDate = body.warrantyStartDate ? new Date(body.warrantyStartDate) : null;
-    if (body.warrantyEndDate !== undefined) data.warrantyEndDate = body.warrantyEndDate ? new Date(body.warrantyEndDate) : null;
-    if (body.notes !== undefined) data.notes = body.notes;
-    if (body.customerPO !== undefined) data.customerPO = body.customerPO || null;
+		const data: Record<string, unknown> = {};
 
-    console.log('PATCH body:', JSON.stringify(body));
-    console.log('PATCH data:', JSON.stringify(data));
+		if (body.status) data.status = body.status;
 
-    const updated = await prisma.workOrder.update({
-      where: { id },
-      data,
-      include: {
-        quotation: { select: { quotationNumber: true, customerGroup: { select: { groupName: true } } } },
-        branch: true,
-        team: { select: { teamName: true, leaderName: true } },
-      },
-    });
+		if (body.workflowType !== undefined) data.workflowType = body.workflowType;
 
-    return NextResponse.json(updated);
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    console.error('PATCH /api/work-orders/[id] error:', msg);
-    return NextResponse.json({ error: 'Failed to update work order', detail: msg }, { status: 500 });
-  }
+		if (body.quotationId !== undefined) data.quotationId = body.quotationId || null;
+
+		if (body.description !== undefined) data.description = body.description;
+
+		if (body.totalAmount !== undefined) data.totalAmount = body.totalAmount;
+
+		if (body.teamId !== undefined) data.teamId = body.teamId || null;
+
+		if (body.teamName !== undefined) data.teamName = body.teamName || null;
+
+		if (body.poNumber !== undefined) data.poNumber = body.poNumber || null;
+
+		if (body.poDate !== undefined) data.poDate = body.poDate ? new Date(body.poDate) : null;
+
+		if (body.startDate !== undefined) data.startDate = body.startDate ? new Date(body.startDate) : null;
+
+		if (body.endDate !== undefined) data.endDate = body.endDate ? new Date(body.endDate) : null;
+
+		if (body.warrantyStartDate !== undefined)
+			data.warrantyStartDate = body.warrantyStartDate ? new Date(body.warrantyStartDate) : null;
+
+		if (body.warrantyEndDate !== undefined)
+			data.warrantyEndDate = body.warrantyEndDate ? new Date(body.warrantyEndDate) : null;
+
+		if (body.warrantyMonths !== undefined)
+			data.warrantyMonths = body.warrantyMonths ? Number(body.warrantyMonths) : null;
+
+		if (body.retentionAmount !== undefined)
+			data.retentionAmount = body.retentionAmount ? Number(body.retentionAmount) : null;
+
+		if (body.notes !== undefined) data.notes = body.notes;
+
+		if (body.customerPO !== undefined) data.customerPO = body.customerPO || null;
+
+		const updated = await prisma.workOrder.update({
+			where: { id },
+			data,
+			include: {
+				quotation: { select: { quotationNumber: true, customerGroup: { select: { groupName: true } } } },
+				branch: true,
+				team: { select: { teamName: true, leaderName: true } }
+			}
+		});
+
+		return NextResponse.json(updated);
+	} catch (error) {
+		const msg = error instanceof Error ? error.message : String(error);
+		console.error('PATCH /api/work-orders/[id] error:', msg);
+		return NextResponse.json({ error: 'Failed to update work order', detail: msg }, { status: 500 });
+	}
 }
 
 // DELETE /api/work-orders/[id] — Delete work order
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    const { id } = await params;
-    await prisma.workOrder.delete({ where: { id } });
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error('DELETE /api/work-orders/[id] error:', error);
-    return NextResponse.json({ error: 'Failed to delete work order' }, { status: 500 });
-  }
+	try {
+		const { id } = await params;
+		await prisma.workOrder.delete({ where: { id } });
+		return NextResponse.json({ success: true });
+	} catch (error) {
+		console.error('DELETE /api/work-orders/[id] error:', error);
+		return NextResponse.json({ error: 'Failed to delete work order' }, { status: 500 });
+	}
 }

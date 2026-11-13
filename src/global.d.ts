@@ -30,8 +30,6 @@ interface HotModule {
 
 declare const module: HotModule;
 
-import type {} from '@mui/material/themeCssVarsAugmentation';
-
 // Raw import declarations
 declare global {
 	declare module '*?raw' {

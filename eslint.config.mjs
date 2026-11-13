@@ -14,9 +14,6 @@ import { fileURLToPath } from 'node:url';
 export default defineConfig({
         files: ['**/*.ts', '**/*.tsx'],
         ignores: [
-            '**/app/(public)/documentation/components/views/material-ui-components/**',
-            '**/app/(public)/documentation/components/ui/material-ui-components/**',
-            '**/utils/node-scripts/fuse-react-message.js',
             '**/components/tiptap/**',
             '**/.next/**',
         ],

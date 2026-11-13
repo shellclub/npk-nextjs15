@@ -70,3 +70,4 @@ amplifytools.xcconfig
 
 # user-uploaded runtime files
 /public/uploads/
+*.tsbuildinfo

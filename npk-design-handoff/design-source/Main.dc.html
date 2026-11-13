@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>เข้าสู่ระบบ NPK Service</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600&amp;family=Sarabun:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#f1f8ee}
+a{color:#2f6b1f}a:hover{color:#24561a}
+input:focus{outline:2px solid #1b2189;outline-offset:2px;border-color:#519638}
+a:focus-visible,button:focus-visible{outline:2px solid #1b2189;outline-offset:2px}
+.npk-btn:hover{background:#336b21 !important}
+@media (max-width: 920px){
+  .npk-login-form{margin-left:0 !important;margin-top:-40px !important;max-width:none !important;padding:32px 24px !important}
+  .npk-login-panel{padding:40px 24px 80px !important;min-height:0 !important}
+  .npk-login-main{padding:16px !important}
+}
+</style>
+</helmet>
+<main class="npk-login-main" style="min-height: 100vh; box-sizing: border-box; background: #f1f8ee; padding: 48px 32px; display: flex; align-items: center; justify-content: center; font-family: Sarabun, 'Noto Sans Thai', system-ui, sans-serif; color: #1d2a1a;">
+  <div style="width: 100%; max-width: 1200px; display: flex; flex-wrap: wrap; align-items: center;">
+
+    <section class="npk-login-panel" aria-label="เกี่ยวกับระบบ NPK Service" style="flex: 1 1 520px; min-width: 0; box-sizing: border-box; background: #519638; color: #0b1f05; border-radius: 32px; padding: 56px 120px 56px 56px; position: relative; overflow: hidden; min-height: 680px; display: flex; flex-direction: column; gap: 32px;">
+      <svg aria-hidden="true" width="360" height="360" viewBox="0 0 360 360" style="position: absolute; right: -80px; bottom: -80px;">
+        <circle cx="180" cy="180" r="180" fill="#8cc477"></circle>
+        <circle cx="180" cy="180" r="112" fill="#519638"></circle>
+        <circle cx="180" cy="180" r="48" fill="#ecd914"></circle>
+      </svg>
+      <svg aria-hidden="true" width="96" height="96" viewBox="0 0 96 96" style="position: absolute; right: 64px; top: 48px;">
+        <circle cx="48" cy="48" r="48" fill="#8cc477"></circle>
+      </svg>
+
+      <div style="display: flex; align-items: center; gap: 16px; position: relative;">
+        <div style="width: 88px; height: 88px; border-radius: 20px; background: #ffffff; display: flex; align-items: center; justify-content: center; flex: none;">
+          <img src="npk-logo.png" alt="โลโก้ NPK Service &amp; Supply" style="width: 64px; height: auto;">
+        </div>
+        <div>
+          <div style="font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 600; font-size: 28px; line-height: 36px;">NPK Service</div>
+          <div style="font-size: 16px; line-height: 24px;">NPK Service &amp; Supply Co., Ltd.</div>
+        </div>
+      </div>
+
+      <div style="position: relative; display: flex; flex-direction: column; gap: 12px; max-width: 460px;">
+        <h1 style="margin: 0; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 600; font-size: 36px; line-height: 50px;">งานบริการ เอกสาร การเงิน<br>ครบจบในระบบเดียว</h1>
+        <p style="margin: 0; font-size: 17px; line-height: 28px;">ระบบจัดการงานของบริษัท เอ็นพีเค เซอร์วิส แอนด์ ซัพพลาย จำกัด ตั้งแต่ใบเสนอราคา รับงาน สั่งงานช่าง จนถึงวางบิลและรับชำระเงิน</p>
+      </div>
+
+      <ul style="position: relative; list-style: none; margin: auto 0 0; padding: 0; display: flex; flex-direction: column; gap: 16px; max-width: 440px;">
+        <li style="display: flex; align-items: center; gap: 16px;">
+          <span style="width: 44px; height: 44px; border-radius: 999px; background: #ffffff; color: #2f6b1f; display: flex; align-items: center; justify-content: center; flex: none;"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6M8 13h8M8 17h5"></path></svg></span>
+          <span style="font-size: 16px; line-height: 24px;">ใบเสนอราคา → ตอบรับงาน WO/PO → ใบสั่งซื้อให้ช่าง</span>
+        </li>
+        <li style="display: flex; align-items: center; gap: 16px;">
+          <span style="width: 44px; height: 44px; border-radius: 999px; background: #ffffff; color: #2f6b1f; display: flex; align-items: center; justify-content: center; flex: none;"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z"></path></svg></span>
+          <span style="font-size: 16px; line-height: 24px;">ติดตามสถานะงานและงานเสร็จรอจ่ายช่าง</span>
+        </li>
+        <li style="display: flex; align-items: center; gap: 16px;">
+          <span style="width: 44px; height: 44px; border-radius: 999px; background: #ffffff; color: #2f6b1f; display: flex; align-items: center; justify-content: center; flex: none;"><svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"></rect><path d="M2 10h20M6 15h4"></path></svg></span>
+          <span style="font-size: 16px; line-height: 24px;">ใบแจ้งหนี้ ใบกำกับภาษี ใบสำคัญรับ-จ่าย และ 50 ทวิ</span>
+        </li>
+      </ul>
+    </section>
+
+    <section class="npk-login-form" aria-labelledby="login-title" style="flex: 1 1 400px; min-width: 0; max-width: 520px; box-sizing: border-box; background: #ffffff; border-radius: 32px; box-shadow: 0 8px 32px rgba(29,42,26,0.14); padding: 48px; margin-left: -64px; position: relative; display: flex; flex-direction: column; gap: 24px;">
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <h2 id="login-title" style="margin: 0; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 600; font-size: 28px; line-height: 40px; color: #1d2a1a;">เข้าสู่ระบบ</h2>
+        <p style="margin: 0; font-size: 16px; line-height: 26px; color: #57674f;">ระบบจัดการเอกสารธุรกิจ NPK Service &amp; Supply</p>
+      </div>
+
+      <form style="display: flex; flex-direction: column; gap: 20px;">
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <label for="email" style="font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 500; font-size: 14px; line-height: 20px;">อีเมล</label>
+          <div style="position: relative;">
+            <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#57674f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; left: 14px; top: 14px;"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M22 6l-10 7L2 6"></path></svg>
+            <input id="email" type="email" autocomplete="username" placeholder="name@npkservice.co.th" style="width: 100%; box-sizing: border-box; height: 48px; padding: 0 16px 0 44px; border: 1px solid #879a7f; border-radius: 10px; font-family: Sarabun, 'Noto Sans Thai', sans-serif; font-size: 16px; color: #1d2a1a; background: #ffffff;">
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px;">
+            <label for="password" style="font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 500; font-size: 14px; line-height: 20px;">รหัสผ่าน</label>
+            <a href="#forgot" style="font-family: Prompt, 'Noto Sans Thai', sans-serif; font-size: 14px; line-height: 20px; font-weight: 500; text-decoration: none;">ลืมรหัสผ่าน?</a>
+          </div>
+          <div style="position: relative;">
+            <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#57674f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; left: 14px; top: 14px;"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+            <input id="password" type="{{pwType}}" autocomplete="current-password" placeholder="กรอกรหัสผ่าน" style="width: 100%; box-sizing: border-box; height: 48px; padding: 0 52px 0 44px; border: 1px solid #879a7f; border-radius: 10px; font-family: Sarabun, 'Noto Sans Thai', sans-serif; font-size: 16px; color: #1d2a1a; background: #ffffff;">
+            <button type="button" onClick="{{togglePw}}" aria-label="{{pwLabel}}" style="position: absolute; right: 2px; top: 2px; width: 44px; height: 44px; border: 0; background: transparent; color: #57674f; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center;"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+          </div>
+        </div>
+
+        <label style="display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 16px; line-height: 24px; cursor: pointer;">
+          <input type="checkbox" style="width: 20px; height: 20px; accent-color: #519638; margin: 0;">
+          จดจำการเข้าสู่ระบบ
+        </label>
+
+        <a href="Dashboard.dc.html" class="npk-btn" style="height: 48px; border-radius: 10px; background: #3d7a28; color: #ffffff; display: flex; align-items: center; justify-content: center; gap: 8px; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 500; font-size: 16px; text-decoration: none;">เข้าสู่ระบบ</a>
+      </form>
+
+      <div style="border-top: 1px solid #d7e6d0; padding-top: 20px; display: flex; flex-direction: column; gap: 8px;">
+        <p style="margin: 0; font-size: 15px; line-height: 24px; color: #57674f;">ยังไม่มีบัญชี? <a href="#contact" style="font-weight: 600;">ติดต่อผู้ดูแลระบบ</a></p>
+        <p style="margin: 0; display: flex; gap: 8px; align-items: flex-start; font-size: 13px; line-height: 20px; color: #57674f;"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 2px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>บริษัท เอ็นพีเค เซอร์วิส แอนด์ ซัพพลาย จำกัด · สำหรับพนักงานที่ได้รับสิทธิ์เท่านั้น</p>
+      </div>
+    </section>
+
+  </div>
+</main>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var show = !!(this.state && this.state.showPw);
+    return {
+      pwType: show ? 'text' : 'password',
+      pwLabel: show ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน',
+      togglePw: () => this.setState({ showPw: !show })
+    };
+  }
+}
+</script>
+</body>
+</html>

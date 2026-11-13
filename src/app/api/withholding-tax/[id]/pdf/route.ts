@@ -3,22 +3,23 @@ import prisma from '@/lib/prisma';
 import { fmt, thaiAmountText, thaiDate } from '@/lib/pdf/npk-document-html';
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
-  try {
-    const wht = await prisma.withholdingTax.findUnique({
-      where: { id },
-      include: { paymentVoucher: true },
-    });
-    if (!wht) return NextResponse.json({ error: 'Not found' }, { status: 404 });
+	const { id } = await params;
+	try {
+		const wht = await prisma.withholdingTax.findUnique({
+			where: { id },
+			include: { paymentVoucher: true }
+		});
 
-    const origin = req.nextUrl.origin;
-    const logoUrl = `${origin}/assets/images/logo/npk-logo.png`;
-    const pv = wht.paymentVoucher;
-    const incomeAmount = Number(wht.incomeAmount);
-    const taxAmount = Number(wht.taxAmount);
-    const taxRate = Number(wht.taxRate);
+		if (!wht) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-    const html = `<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>50 ทวิ ${wht.whtNumber}</title>
+		const origin = req.nextUrl.origin;
+		const logoUrl = `${origin}/api/company/asset/logo`;
+		const pv = wht.paymentVoucher;
+		const incomeAmount = Number(wht.incomeAmount);
+		const taxAmount = Number(wht.taxAmount);
+		const taxRate = Number(wht.taxRate);
+
+		const html = `<!DOCTYPE html><html lang="th"><head><meta charset="UTF-8"><title>50 ทวิ ${wht.whtNumber}</title>
 <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600;700&display=swap" rel="stylesheet">
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
@@ -81,9 +82,9 @@ ${wht.notes ? `<div style="font-size:12px;margin-bottom:12px;"><strong>หมา
 </div>
 </div></body></html>`;
 
-    return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
-  } catch (e) {
-    console.error(e);
-    return NextResponse.json({ error: 'Failed' }, { status: 500 });
-  }
+		return new NextResponse(html, { headers: { 'Content-Type': 'text/html; charset=utf-8' } });
+	} catch (e) {
+		console.error(e);
+		return NextResponse.json({ error: 'Failed' }, { status: 500 });
+	}
 }

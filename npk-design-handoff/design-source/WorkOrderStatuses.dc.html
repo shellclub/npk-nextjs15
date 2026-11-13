@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>ตั้งค่าสถานะ WO NPK Service</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600&amp;family=Sarabun:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#519638}
+a{color:#2f6b1f}a:hover{color:#24561a}
+a:focus-visible,button:focus-visible{outline:2px solid #1b2189;outline-offset:2px}
+input:focus,select:focus,textarea:focus{outline:2px solid #1b2189;outline-offset:1px;border-color:#519638}
+.npk-nav a:focus-visible{outline-color:#0b1f05}
+.npk-nav a:hover{background:#6aab52}
+.npk-nav a[aria-current="page"]:hover{background:#ffffff}
+.npk-btn:hover{background:#336b21 !important}
+.npk-ic:hover{background:#e3f1dc !important;color:#2f6b1f !important}
+.npk-tbl th{font-family:Prompt,'Noto Sans Thai',sans-serif;font-weight:500;font-size:13px;line-height:20px;color:#57674f;text-align:left;padding:10px 12px;background:#f5faf3;white-space:nowrap}
+.npk-tbl td{font-size:14px;line-height:22px;padding:12px;border-top:1px solid #d7e6d0;vertical-align:middle}
+.npk-tbl tbody tr:hover td{background:#f8fcf6}
+.npk-in{width:100%;box-sizing:border-box;height:44px;padding:0 12px;border:1px solid #879a7f;border-radius:10px;font-family:Sarabun,'Noto Sans Thai',sans-serif;font-size:15px;color:#1d2a1a;background:#ffffff}
+.npk-lbl{font-family:Prompt,'Noto Sans Thai',sans-serif;font-weight:500;font-size:14px;line-height:20px}
+.npk-sm{font-family:Prompt,'Noto Sans Thai',sans-serif;font-weight:500;font-size:13px;line-height:18px;color:#57674f}
+@media (max-width: 820px){
+  .npk-side{flex-basis:100% !important;max-width:none !important}
+  .npk-content{border-radius:24px 24px 0 0 !important;padding:16px !important}
+}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; background: #519638; font-family: Sarabun, 'Noto Sans Thai', system-ui, sans-serif; color: #1d2a1a;">
+
+  <aside class="npk-side" style="flex: 1 1 248px; max-width: 280px; box-sizing: border-box; padding: 24px 16px; color: #0b1f05; display: flex; flex-direction: column; gap: 8px;">
+    <div style="display: flex; align-items: center; gap: 12px; padding: 0 8px 16px;">
+      <div style="width: 52px; height: 52px; border-radius: 14px; background: #ffffff; display: flex; align-items: center; justify-content: center; flex: none;">
+        <img src="npk-logo.png" alt="โลโก้ NPK Service &amp; Supply" style="width: 38px; height: auto;">
+      </div>
+      <div>
+        <div style="font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 600; font-size: 19px; line-height: 24px;">NPK Service</div>
+        <div style="font-size: 13px; line-height: 18px;">Service &amp; Supply</div>
+      </div>
+    </div>
+    <nav class="npk-nav" aria-label="เมนูหลัก" style="display: flex; flex-direction: column; gap: 2px;">
+      <a href="Dashboard.dc.html" style="display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 12px; border-radius: 10px; color: #0b1f05; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 500; font-size: 15px; text-decoration: none;"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"></rect><rect x="14" y="3" width="7" height="5" rx="1"></rect><rect x="14" y="12" width="7" height="9" rx="1"></rect><rect x="3" y="16" width="7" height="5" rx="1"></rect></svg>แดชบอร์ด</a>
+      <sc-for list="{{nav}}" as="g" hint-placeholder-count="5">
+        <div style="font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 500; font-size: 12px; line-height: 16px; letter-spacing: 0.08em; padding: 16px 12px 6px;">{{g.title}}</div>
+        <sc-for list="{{g.items}}" as="n" hint-placeholder-count="3">
+          <a href="{{n.href}}" aria-current="{{n.cur}}" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; background: {{n.bg}}; color: {{n.fg}}; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 500; font-size: 15px; text-decoration: none;"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none;"><path d="{{n.icon}}"></path></svg><span style="flex: 1;">{{n.label}}</span><sc-if value="{{n.count}}" hint-placeholder-val="{{false}}"><span style="min-width: 24px; height: 22px; padding: 0 6px; box-sizing: border-box; border-radius: 999px; background: #ecd914; color: #1d2a1a; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;">{{n.count}}</span></sc-if></a>
+        </sc-for>
+      </sc-for>
+      <div style="height: 1px; background: rgba(11,31,5,0.25); margin: 12px;"></div>
+      <a href="Main.dc.html" style="display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 12px; border-radius: 10px; color: #0b1f05; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 500; font-size: 15px; text-decoration: none;"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"></path></svg>ออกจากระบบ</a>
+    </nav>
+  </aside>
+
+  <main class="npk-content" style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; background: #f1f8ee; border-radius: 32px 0 0 0; padding: 24px 32px 48px; display: flex; flex-direction: column; gap: 24px;">
+
+    <header style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px rgba(29,42,26,0.06), 0 4px 16px rgba(29,42,26,0.05); padding: 12px 16px 12px 20px; display: flex; flex-wrap: wrap; align-items: center; gap: 16px;">
+      <nav aria-label="ตำแหน่งปัจจุบัน" style="flex: 1 1 320px; font-size: 15px; line-height: 22px; color: #57674f; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <a href="Dashboard.dc.html" style="text-decoration: none;">แดชบอร์ด</a>
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg>
+        <span>ข้อมูลหลัก</span>
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg>
+        <span aria-current="page" style="color: #1d2a1a; font-weight: 600;">ตั้งค่าสถานะ WO</span>
+      </nav>
+      <div style="margin-left: auto; display: flex; align-items: center; gap: 12px;">
+        <button type="button" aria-label="การแจ้งเตือน 3 รายการ" style="position: relative; width: 44px; height: 44px; border: 0; border-radius: 999px; background: #e3f1dc; color: #2f6b1f; display: flex; align-items: center; justify-content: center; cursor: pointer;"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"></path></svg><span style="position: absolute; top: 4px; right: 4px; min-width: 18px; height: 18px; border-radius: 999px; background: #c4161c; color: #ffffff; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center;">3</span></button>
+        <div aria-hidden="true" style="width: 44px; height: 44px; border-radius: 999px; background: #519638; color: #0b1f05; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 600; display: flex; align-items: center; justify-content: center;">AD</div>
+        <div>
+          <div style="font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 600; font-size: 15px; line-height: 22px;">[ชื่อผู้ใช้]</div>
+          <div style="font-size: 13px; line-height: 18px; color: #57674f;">ผู้ดูแลระบบ</div>
+        </div>
+      </div>
+    </header>
+
+    <div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px;">
+      <div>
+        <h1 style="margin: 0; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 600; font-size: 26px; line-height: 36px;">ตั้งค่าสถานะ WO</h1>
+        <p style="margin: 0; font-size: 15px; line-height: 24px; color: #57674f;">สถานะที่ใช้ในงาน WO ทั้งระบบ กำหนดชื่อ รหัส สี และลำดับการแสดงผลได้เอง</p>
+      </div>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap;"></div>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start;">
+      <section aria-labelledby="sl-title" style="flex: 2 1 560px; min-width: 0; background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px rgba(29,42,26,0.06), 0 4px 16px rgba(29,42,26,0.05); padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+        <h2 id="sl-title" style="margin: 0; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 600; font-size: 20px; line-height: 30px;">สถานะทั้งหมด <span style="font-size: 15px; font-weight: 500; color: #57674f;">{{count}} สถานะ</span></h2>
+        <div style="overflow-x: auto;">
+          <table class="npk-tbl" style="width: 100%; border-collapse: collapse; min-width: 600px;">
+            <thead><tr><th scope="col">ลำดับ</th><th scope="col">ตัวอย่าง</th><th scope="col">รหัส (Code)</th><th scope="col">สี</th><th scope="col">ค่าเริ่มต้น</th><th scope="col" style="text-align: right;">จัดการ</th></tr></thead>
+            <tbody>
+              <sc-for list="{{items}}" as="s" hint-placeholder-count="5">
+                <tr style="background: {{s.rowBg}};">
+                  <td style="color: #57674f;">{{s.order}}</td>
+                  <td><span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-size: 13px; font-weight: 500; background: {{s.bgColor}}; color: {{s.color}};"><span style="width: 7px; height: 7px; border-radius: 999px; background: {{s.color}};"></span>{{s.name}}</span></td>
+                  <td style="font-family: ui-monospace, Menlo, monospace; font-size: 13px;">{{s.code}}</td>
+                  <td><span style="display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #57674f;"><span style="width: 16px; height: 16px; border-radius: 4px; background: {{s.color}};"></span>{{s.color}}</span></td>
+                  <td><sc-if value="{{s.isDefault}}" hint-placeholder-val="{{false}}"><span style="padding: 2px 8px; border-radius: 6px; background: #ecd914; font-size: 12px; font-weight: 600;">ค่าเริ่มต้น</span></sc-if></td>
+                  <td style="text-align: right; white-space: nowrap;"><button type="button" onClick="{{s.edit}}" class="npk-ic" aria-label="แก้ไข {{s.name}}" style="width: 44px; height: 44px; border: 0; border-radius: 8px; background: transparent; color: #57674f; display: inline-flex; align-items: center; justify-content: center; cursor: pointer;"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg></button><button type="button" onClick="{{s.remove}}" class="npk-ic" aria-label="ลบ {{s.name}}" style="width: 44px; height: 44px; border: 0; border-radius: 8px; background: transparent; color: #57674f; display: inline-flex; align-items: center; justify-content: center; cursor: pointer;"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path></svg></button></td>
+                </tr>
+              </sc-for>
+            </tbody>
+          </table>
+        </div>
+        <p style="margin: 0; font-size: 13px; line-height: 20px; color: #57674f;">สถานะที่มีงาน WO ใช้อยู่จะลบไม่ได้ ให้เปลี่ยนเป็นปิดใช้งานแทน</p>
+      </section>
+      <section aria-labelledby="sf-title" style="flex: 1 1 340px; min-width: 0; background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px rgba(29,42,26,0.06), 0 4px 16px rgba(29,42,26,0.05); padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+        <h2 id="sf-title" style="margin: 0; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 600; font-size: 20px; line-height: 30px;">{{formTitle}}</h2>
+        <div style="display: flex; flex-direction: column; gap: 8px;"><label for="s-name" class="npk-lbl">ชื่อสถานะ *</label><input id="s-name" class="npk-in" type="text" value="{{form.name}}" onChange="{{setName}}" placeholder="เช่น รอตรวจรับงาน"></div>
+        <div style="display: flex; flex-direction: column; gap: 8px;"><label for="s-code" class="npk-lbl">รหัส (Code) *</label><input id="s-code" class="npk-in" type="text" value="{{form.code}}" onChange="{{setCode}}" placeholder="เช่น WAITING_INSPECTION" style="font-family: ui-monospace, Menlo, monospace; text-transform: uppercase;"></div>
+        <fieldset style="border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px;">
+          <legend class="npk-lbl" style="padding: 0; margin-bottom: 8px;">สี</legend>
+          <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;">
+            <sc-for list="{{swatches}}" as="c" hint-placeholder-count="8">
+              <button type="button" onClick="{{c.pick}}" aria-pressed="{{c.pressed}}" title="{{c.label}}" style="min-height: 44px; border-radius: 10px; border: 2px solid {{c.ring}}; background: {{c.bgColor}}; color: {{c.color}}; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 500; font-size: 13px; display: flex; align-items: center; justify-content: center; gap: 6px; cursor: pointer;"><span style="width: 10px; height: 10px; border-radius: 999px; background: {{c.color}};"></span>{{c.label}}</button>
+            </sc-for>
+          </div>
+        </fieldset>
+        <div style="padding: 16px; border-radius: 12px; background: #f5faf3; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;"><span style="font-size: 14px; color: #57674f;">ตัวอย่าง</span><span style="display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-size: 13px; font-weight: 500; background: {{form.bgColor}}; color: {{form.color}};"><span style="width: 7px; height: 7px; border-radius: 999px; background: {{form.color}};"></span>{{previewName}}</span></div>
+        <label style="display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 15px; cursor: pointer;"><input type="checkbox" checked="{{form.isDefault}}" onChange="{{toggleDefault}}" style="width: 20px; height: 20px; accent-color: #519638; margin: 0;">ค่าเริ่มต้น (สถานะแรกเมื่อเปิดงาน WO)</label>
+        <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+          <button type="button" onClick="{{save}}" class="npk-btn" style="height: 44px; padding: 0 20px; border: 0; border-radius: 10px; background: #3d7a28; color: #ffffff; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 500; font-size: 15px; cursor: pointer;">{{saveLabel}}</button>
+          <button type="button" onClick="{{reset}}" style="height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: transparent; color: #2f6b1f; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 500; font-size: 15px; cursor: pointer;">ล้างฟอร์ม</button>
+        </div>
+      </section>
+    </div>
+
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var self = this;
+    var st = this.state || {};
+    var ACTIVE = "ตั้งค่าสถานะ WO";
+
+    var P = {
+      doc: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6',
+      check: 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
+      cart: 'M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0',
+      done: 'M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4L12 14.01l-3-3',
+      clock: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2',
+      card: 'M2 5h20v14H2zM2 10h20',
+      receipt: 'M4 2v20l3-2 3 2 3-2 3 2 3-2 1 1V2l-1 1-3-2-3 2-3-2-3 2-3-2zM8 8h8M8 12h8',
+      in: 'M12 5v14M5 12l7 7 7-7',
+      out: 'M12 19V5M5 12l7-7 7 7',
+      tax: 'M9 14l6-6M9.5 8.5h.01M14.5 13.5h.01M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z',
+      chart: 'M18 20V10M12 20V4M6 20v-6',
+      users: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87',
+      tool: 'M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z',
+      building: 'M3 21h18M5 21V7l7-4 7 4v14M9 9h1M14 9h1M9 13h1M14 13h1',
+      gear: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM12 2v3M12 19v3M2 12h3M19 12h3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1'
+    };
+    var HREF = {"ใบเสนอราคา": "Quotations.dc.html", "ตอบรับทำงาน (WO/PO)": "WorkOrders.dc.html", "ใบสั่งซื้อให้ช่าง": "PurchaseOrders.dc.html", "งานเสร็จแล้วทั้งหมด": "CompletedWorks.dc.html", "งานเสร็จรอจ่ายช่าง": "PendingPayments.dc.html", "ใบแจ้งหนี้": "Invoices.dc.html", "ใบกำกับภาษี": "TaxInvoices.dc.html", "ใบสำคัญรับ": "ReceiptVouchers.dc.html", "ใบสำคัญจ่าย": "PaymentVouchers.dc.html", "ออก 50 ทวิ": "WithholdingTax.dc.html", "สรุปรายงานรายปี": "Reports.dc.html", "ข้อมูลลูกค้า": "Customers.dc.html", "ข้อมูลทีมช่าง": "Technicians.dc.html", "ข้อมูลบริษัท": "CompanySettings.dc.html", "ตั้งค่าสถานะ WO": "WorkOrderStatuses.dc.html"};
+    var navRaw = [
+      { title: 'เอกสาร', items: [{ label: 'ใบเสนอราคา', icon: P.doc }, { label: 'ตอบรับทำงาน (WO/PO)', icon: P.check, count: 5 }, { label: 'ใบสั่งซื้อให้ช่าง', icon: P.cart }] },
+      { title: 'จัดการงาน', items: [{ label: 'งานเสร็จแล้วทั้งหมด', icon: P.done }, { label: 'งานเสร็จรอจ่ายช่าง', icon: P.clock, count: 8 }] },
+      { title: 'การเงิน', items: [{ label: 'ใบแจ้งหนี้', icon: P.card }, { label: 'ใบกำกับภาษี', icon: P.receipt }, { label: 'ใบสำคัญรับ', icon: P.in }, { label: 'ใบสำคัญจ่าย', icon: P.out }, { label: 'ออก 50 ทวิ', icon: P.tax }] },
+      { title: 'รายงาน', items: [{ label: 'สรุปรายงานรายปี', icon: P.chart }] },
+      { title: 'ข้อมูลหลัก', items: [{ label: 'ข้อมูลลูกค้า', icon: P.users }, { label: 'ข้อมูลทีมช่าง', icon: P.tool }, { label: 'ข้อมูลบริษัท', icon: P.building }, { label: 'ตั้งค่าสถานะ WO', icon: P.gear }] }
+    ];
+    var nav = navRaw.map(function (g) {
+      return { title: g.title, items: g.items.map(function (n) {
+        var on = n.label === ACTIVE;
+        return Object.assign({}, n, { href: HREF[n.label] || '#menu', cur: on ? 'page' : 'false', bg: on ? '#ffffff' : 'transparent', fg: on ? '#2f6b1f' : '#0b1f05' });
+      }) };
+    });
+
+
+    var SW = [
+      { color: '#D97706', bgColor: '#FEF3C7', label: 'เหลือง' }, { color: '#2563EB', bgColor: '#DBEAFE', label: 'น้ำเงิน' },
+      { color: '#059669', bgColor: '#D1FAE5', label: 'เขียว' }, { color: '#4F46E5', bgColor: '#E0E7FF', label: 'ม่วง' },
+      { color: '#DC2626', bgColor: '#FEE2E2', label: 'แดง' }, { color: '#0891B2', bgColor: '#CFFAFE', label: 'ฟ้า' },
+      { color: '#EA580C', bgColor: '#FFF7ED', label: 'ส้ม' }, { color: '#64748B', bgColor: '#F1F5F9', label: 'เทา' }
+    ];
+    var list = st.list || [
+      { name: 'รอดำเนินการ', code: 'PENDING', color: '#D97706', bgColor: '#FEF3C7', isDefault: true },
+      { name: 'กำลังดำเนินการ', code: 'IN_PROGRESS', color: '#2563EB', bgColor: '#DBEAFE', isDefault: false },
+      { name: 'เสร็จสิ้น', code: 'COMPLETED', color: '#059669', bgColor: '#D1FAE5', isDefault: false },
+      { name: 'จ่ายแล้ว', code: 'PAID', color: '#4F46E5', bgColor: '#E0E7FF', isDefault: false },
+      { name: 'ยกเลิก', code: 'CANCELLED', color: '#DC2626', bgColor: '#FEE2E2', isDefault: false }
+    ];
+    var blank = { name: '', code: '', color: '#64748B', bgColor: '#F1F5F9', isDefault: false };
+    var form = st.form || blank;
+    var editing = st.editing == null ? -1 : st.editing;
+    var setForm = function (p) { self.setState({ form: Object.assign({}, form, p) }); };
+    return {
+      nav: nav, count: list.length, form: form,
+      formTitle: editing >= 0 ? 'แก้ไขสถานะ' : 'เพิ่มสถานะใหม่',
+      saveLabel: editing >= 0 ? 'บันทึกการแก้ไข' : 'เพิ่มสถานะ',
+      previewName: form.name || 'ชื่อสถานะ',
+      items: list.map(function (s, i) {
+        return Object.assign({}, s, { order: i + 1, rowBg: i === editing ? '#f5faf3' : 'transparent',
+          edit: function () { self.setState({ form: Object.assign({}, s), editing: i }); },
+          remove: function () { var nl = list.slice(); nl.splice(i, 1); self.setState({ list: nl, editing: -1, form: blank }); } });
+      }),
+      swatches: SW.map(function (c) {
+        var on = c.color === form.color;
+        return Object.assign({}, c, { pressed: on ? 'true' : 'false', ring: on ? '#1d2a1a' : 'transparent', pick: function () { setForm({ color: c.color, bgColor: c.bgColor }); } });
+      }),
+      setName: function (e) { setForm({ name: e.target.value }); },
+      setCode: function (e) { setForm({ code: e.target.value.toUpperCase().replace(/[^A-Z0-9_]/g, '_') }); },
+      toggleDefault: function (e) { setForm({ isDefault: e.target.checked }); },
+      reset: function () { self.setState({ form: blank, editing: -1 }); },
+      save: function () {
+        if (!form.name || !form.code) return;
+        var nl = list.map(function (s) { return form.isDefault ? Object.assign({}, s, { isDefault: false }) : s; });
+        if (editing >= 0) nl[editing] = Object.assign({}, form); else nl.push(Object.assign({}, form));
+        self.setState({ list: nl, form: blank, editing: -1 });
+      }
+    };
+
+  }
+}
+</script>
+</body>
+</html>

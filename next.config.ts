@@ -6,9 +6,13 @@ const isTurbopack = process.env.TURBOPACK === '1';
 const nextConfig: NextConfig = {
 	output: 'standalone',
 	reactStrictMode: false,
-	typescript: {
-		// Allow production builds to complete even with type errors
-		ignoreBuildErrors: true
+	async rewrites() {
+		// ไฟล์อัปโหลดหลัง build (รูปหน้างาน ฯลฯ) เสิร์ฟผ่าน API เพราะโหมด standalone ไม่เสิร์ฟไฟล์ใหม่ใน public
+		return {
+			beforeFiles: [{ source: '/uploads/:path*', destination: '/api/files/:path*' }],
+			afterFiles: [],
+			fallback: []
+		};
 	},
 	turbopack: {
 		root: __dirname,

@@ -1,16 +1,13 @@
-import { FuseSettingsConfigType } from '@fuse/core/FuseSettings/FuseSettings';
-import { PartialDeep } from 'type-fest';
-
 /**
- * The type definition for a user object.
+ * ผู้ใช้ที่อยู่ใน session (session.db) มาจากตาราง User ใน Prisma
  */
 export type User = {
 	id: string;
+	/** role แบบ lowercase เช่น 'admin' | 'manager' | 'staff' | 'accountant' */
 	role: string[] | string | null;
 	displayName: string;
 	photoURL?: string;
 	email?: string;
-	shortcuts?: string[];
-	settings?: PartialDeep<FuseSettingsConfigType>;
-	loginRedirectUrl?: string; // The URL to redirect to after login.
+	/** เมนูที่เข้าได้ (ว่างสำหรับ admin เพราะเข้าได้ทุกเมนู) */
+	menus: string[];
 };

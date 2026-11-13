@@ -27,10 +27,12 @@ services:
     container_name: npk-migrate
     environment:
       - DATABASE_URL=postgresql://npk_user:npk_secret_2024@postgres:5432/npk_db?schema=public
+      # รหัสผ่านผู้ดูแลเริ่มต้น (ใช้เฉพาะเมื่อ admin ยังไม่มีรหัสผ่านที่ใช้งานได้) ส่งผ่าน shell: ADMIN_PASSWORD=... docker compose up -d
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
     depends_on:
       postgres:
         condition: service_healthy
-    command: sh -c "npx prisma db push --schema=./prisma/schema.prisma && npx tsx prisma/seed.ts"
+    command: sh -c "npx prisma db execute --file prisma/pre-push.sql && npx prisma db push --schema=./prisma/schema.prisma && npx tsx prisma/seed.ts"
     restart: "no"
 
   # Next.js Application (Production)
@@ -43,6 +45,9 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    volumes:
+      # ไฟล์อัปโหลด (รูปหน้างาน โลโก้/ลายเซ็น ฯลฯ) ต้องอยู่นอกคอนเทนเนอร์ ไม่งั้นหายเมื่อ build ใหม่
+      - uploads_data:/app/public/uploads
     environment:
       - NODE_ENV=production
       - DATABASE_URL=postgresql://npk_user:npk_secret_2024@postgres:5432/npk_db?schema=public
@@ -57,5 +62,6 @@ services:
         condition: service_completed_successfully
 
 volumes:
+  uploads_data:
   postgres_data:
     driver: local
