@@ -32,6 +32,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 		const displayQN =
 			(q.revisionNumber || 0) > 0 ? `${q.quotationNumber} Rev. ${q.revisionNumber}` : q.quotationNumber;
 
+		// W/O: เลข WO ถ้าเปิดงานแล้ว ไม่เช่นนั้นแสดงสถานะใบเสนอราคา (เช่น "ส่งราคาแล้ว")
+		const wo = q.workOrders[0];
+		const statusCfg = wo
+			? null
+			: await prisma.workOrderStatusConfig.findFirst({ where: { code: q.status, appliesTo: 'QUOTATION' } });
+
 		const html = buildQuotationDocumentHtml({
 			pageTitle: `ใบเสนอราคา ${displayQN}`,
 			company,
@@ -59,6 +65,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 			vatAmount: Number(q.vatAmount),
 			totalAmount: Number(q.totalAmount),
 			signerName: q.createdBy?.name || 'มนต์เทียน เรืองเดชอังกูร',
+			woText: wo ? wo.woNumber : statusCfg?.name || '',
+			poText: wo?.poNumber || '',
 			photos: q.photos
 		});
 

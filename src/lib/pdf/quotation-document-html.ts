@@ -47,6 +47,10 @@ export interface QuotationDocumentConfig {
 	vatAmount: number;
 	totalAmount: number;
 	signerName: string;
+	/** ข้อความหลัง W/O (เลข WO หรือสถานะใบเสนอราคา) */
+	woText?: string;
+	/** เลข P/O ของลูกค้า */
+	poText?: string;
 	photos?: DocPhoto[];
 }
 
@@ -57,65 +61,67 @@ const esc = (s: unknown) =>
 		.replace(/>/g, '&gt;');
 const nl = (s: unknown) => esc(s).replace(/\n/g, '<br/>');
 
-// ความจุของแต่ละหน้า หน่วยเป็น "บรรทัด" (1 บรรทัด = 18px)
-const CAP_FIRST = 34;
-const CAP_NEXT = 44;
-const FOOT_LINES = 23; // พื้นที่ท้ายเอกสาร (สรุปยอด/เงื่อนไข/ลายเซ็น) บนหน้าสุดท้าย
-const CHARS_PER_LINE = 44;
+// ความจุของแต่ละหน้า หน่วยเป็น "บรรทัด" (1 บรรทัด = 23px)
+const CAP_FIRST = 33;
+const CAP_NEXT = 36;
+const FOOT_LINES = 9; // พื้นที่ท้ายเอกสาร (สรุปยอด/เงื่อนไข/ลายเซ็น) บนหน้าสุดท้าย
+const CHARS_PER_LINE = 46;
 const PHOTOS_PER_PAGE = 6;
 
 const STYLES = `
+  @font-face { font-family: 'THSarabunNew'; src: url('/fonts/THSarabunNew.ttf') format('truetype'); font-weight: 400; }
+  @font-face { font-family: 'THSarabunNew'; src: url('/fonts/THSarabunNew-Bold.ttf') format('truetype'); font-weight: 700; }
   @page { size: A4; margin: 0; }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
-  body { font-family: 'Sarabun', 'Tahoma', sans-serif; font-size: 13px; line-height: 20px; color: #111; background: #e5e7eb; }
-  .page { position: relative; width: 210mm; height: 297mm; padding: 9mm 13mm 14mm; margin: 0 auto 12px; background: #fff; overflow: hidden; page-break-after: always; break-after: page; }
+  body { font-family: 'THSarabunNew', 'Sarabun', 'Tahoma', sans-serif; font-size: 16px; line-height: 20px; color: #000; background: #e5e7eb; }
+  .page { position: relative; width: 210mm; height: 297mm; padding: 3mm 8.5mm 10mm; margin: 0 auto 12px; background: #fff; overflow: hidden; page-break-after: always; break-after: page; }
   .page:last-child { page-break-after: auto; break-after: auto; }
   @media print { body { background: #fff; } .page { margin: 0; } }
-  .hd { display: flex; align-items: center; gap: 16px; }
-  .hd img { width: 112px; height: auto; flex-shrink: 0; }
-  .hd .name-th { font-size: 22px; font-weight: 700; line-height: 30px; font-style: italic; }
-  .hd .name-en { font-size: 17px; line-height: 24px; font-style: italic; }
-  .hd .sm { font-size: 11.5px; line-height: 19px; font-style: italic; }
-  .title { text-align: center; font-size: 19px; font-weight: 700; margin: 8px 0 8px; }
+  .hd { position: relative; text-align: center; }
+  .hd img { position: absolute; left: 0; top: 16px; width: 125px; height: auto; }
+  .hd .name-th { font-size: 24px; font-weight: 700; line-height: 34px; }
+  .hd .name-en { font-size: 25px; line-height: 32px; }
+  .hd .sm { font-size: 16px; line-height: 24px; }
+  .hd .sm.th { font-weight: 700; line-height: 30px; margin-top: 0; }
+  .hd .sm.en { margin-top: 7px; }
+  .title { text-align: center; font-size: 26px; font-weight: 700; line-height: 24px; margin: 15px 0 9px; }
   .title.report { color: #c4161c; }
-  .info { width: 100%; border-collapse: collapse; margin-bottom: 8px; }
-  .info td { padding: 1px 0; vertical-align: top; font-size: 13px; }
-  .info .l { width: 122px; font-weight: 700; white-space: nowrap; }
-  .info .r { width: 78px; font-weight: 700; white-space: nowrap; padding-left: 10px; }
-  .info .rv { width: 160px; }
-  .v { color: #dc2626; }
-  .proj { color: #3a7d1e; font-size: 15px; }
-  .greet { margin: 6px 0 4px; font-size: 13px; }
-  table.items { width: 100%; border-collapse: collapse; border: 1.5px solid #000; table-layout: fixed; }
-  .items th { border: 1px solid #000; font-weight: 400; font-size: 11.5px; padding: 2px 3px; text-align: center; background: #fff; }
-  .items td { border-left: 1px solid #000; border-right: 1px solid #000; border-bottom: 1px solid #d9d9d9; padding: 0 4px; height: 18px; font-size: 12.5px; line-height: 17px; vertical-align: top; }
+  .info { width: 100%; border-collapse: collapse; margin-bottom: 0; }
+  .info td { padding: 0; vertical-align: top; font-size: 18px; line-height: 24.5px; }
+  .info .l { width: 506px; }
+  .info .r { width: 40px; white-space: nowrap; }
+  .info .rv { width: auto; }
+  .proj { font-size: 18px; }
+  table.items { width: 100%; border-collapse: collapse; border: 1px solid #000; table-layout: fixed; }
+  .items th { border: 1px solid #000; font-weight: 400; font-size: 16.5px; padding: 2px 3px; text-align: center; background: #fff; }
+  .items td { border-left: 1px solid #000; border-right: 1px solid #000; border-bottom: 1px solid #d9d9d9; padding: 0 5px; height: 23px; font-size: 17.5px; line-height: 23px; vertical-align: top; }
   .items td.center { text-align: center; }
   .items td.right { text-align: right; white-space: nowrap; }
   .items td.desc { text-align: left; word-break: break-word; }
-  .items tr.filler td { border-bottom: 1px solid #d9d9d9; }
+  .items tr.filler td { border-bottom: none; }
   .items tr.header-row td { font-weight: 700; }
-  .foot { width: 100%; border: 1.5px solid #000; border-top: none; border-collapse: collapse; }
-  .foot > tbody > tr > td { vertical-align: top; padding: 4px 6px; }
-  .foot .txt { font-size: 12.5px; }
-  .foot .txt b { font-weight: 700; }
-  .tot { width: 100%; border-collapse: collapse; }
-  .tot td { border: 1px solid #000; padding: 2px 6px; font-size: 12.5px; }
-  .tot td.k { text-align: right; width: 95px; font-style: italic; }
-  .tot td.n { text-align: right; width: 100px; }
-  .tot tr.g td { font-weight: 700; }
-  .words { text-align: right; font-weight: 700; margin-top: 3px; font-size: 12.5px; }
-  .close { margin-top: 8px; font-size: 13px; }
-  .sign { display: flex; justify-content: space-between; gap: 20px; margin-top: 8px; font-size: 13px; }
-  .sign .box { width: 48%; position: relative; min-height: 120px; }
-  .sign .stamp { position: absolute; left: 0; top: 18px; width: 120px; height: auto; opacity: .9; }
-  .sign .sig { position: absolute; left: 70px; top: 6px; width: 120px; height: auto; }
-  .sign .right-lines { position: absolute; left: 0; right: 0; bottom: 0; text-align: right; }
-  .pageno { position: absolute; right: 13mm; bottom: 5mm; font-size: 11.5px; font-style: italic; }
+  .foot { display: flex; justify-content: space-between; align-items: flex-start; }
+  .foot .words { flex: 1; padding: 0 0 0 21px; font-size: 17.5px; font-weight: 700; line-height: 23px; }
+
+
+
+  .tot { border-collapse: collapse; flex: none; margin-right: 0; }
+  .tot td { border: 1px solid #000; border-top: none; padding: 0 4px; font-size: 16.5px; font-weight: 700; line-height: 22px; height: 23px; white-space: nowrap; }
+  .tot td.k { text-align: left; width: 78px; }
+  .tot td.n { text-align: right; width: 78px; }
+
+  .tot tr.g td { border-bottom: 3px double #000; }
+  .close { position: relative; margin: 30px 4px 0 auto; width: 340px; text-align: right; font-size: 18px; line-height: 22px; }
+  .close .sigbox { position: relative; height: 32px; }
+  .close .sig { position: absolute; right: 60px; top: -8px; width: 110px; height: auto; }
+  .close .stamp { position: absolute; right: 150px; top: 8px; width: 100px; height: auto; opacity: .85; }
+  .close .line { margin-top: 0; }
+  .pageno { position: absolute; right: 10mm; bottom: 5mm; font-size: 13px; }
   .photos { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
   .photo { border: 1px solid #bbb; border-radius: 4px; overflow: hidden; }
   .photo img { width: 100%; height: 235px; object-fit: cover; display: block; background: #f3f3f3; }
-  .photo .cap { display: flex; justify-content: space-between; gap: 8px; padding: 3px 8px; font-size: 11.5px; background: #f8f8f8; border-top: 1px solid #eee; }
+  .photo .cap { display: flex; justify-content: space-between; gap: 8px; padding: 3px 8px; font-size: 14px; background: #f8f8f8; border-top: 1px solid #eee; }
   .photo .cap span:last-child { color: #0b5cad; white-space: nowrap; }
 `;
 
@@ -126,24 +132,28 @@ function header(c: DocCompany, logoUrl: string): string {
 			? c.addressEn
 			: `Head Office : ${c.addressEn}`
 		: '';
+	const contact = [
+		c.phones.length ? `Call : ${esc(c.phones.join(' , '))}` : '',
+		c.email ? `E-mail : ${esc(c.email)}` : ''
+	]
+		.filter(Boolean)
+		.join(' &nbsp; ');
 
 	return `
     <div class="hd">
       <img src="${esc(logoUrl)}" alt="" onerror="this.style.display='none'" />
-      <div>
-        <div class="name-th">${esc(c.nameTh)}</div>
-        <div class="name-en">${esc(c.nameEn)}</div>
-        <div class="sm">${esc(addrTh)}</div>
-        ${addrEn ? `<div class="sm">${esc(addrEn)}</div>` : ''}
-        <div class="sm">เลขผู้เสียภาษี ${esc(c.taxId)}${c.phones.length ? ` &nbsp;&nbsp; Tel: ${esc(c.phones.join(' , '))}` : ''}${c.email ? ` &nbsp;&nbsp; E-mail : ${esc(c.email)}` : ''}</div>
-      </div>
+      <div class="name-th">${esc(c.nameTh)}</div>
+      <div class="name-en">${esc(c.nameEn)}</div>
+      <div class="sm th">${esc(addrTh)}</div>
+      ${addrEn ? `<div class="sm en">${esc(addrEn)}</div>` : ''}
+      ${contact ? `<div class="sm">${contact}</div>` : ''}
     </div>`;
 }
 
 const THEAD = `
   <colgroup>
-    <col style="width:30px"/><col/><col style="width:34px"/><col style="width:38px"/>
-    <col style="width:64px"/><col style="width:64px"/><col style="width:64px"/><col style="width:64px"/><col style="width:74px"/>
+    <col style="width:31px"/><col/><col style="width:38px"/><col style="width:48px"/>
+    <col style="width:62px"/><col style="width:60px"/><col style="width:69px"/><col style="width:71px"/><col style="width:79px"/>
   </colgroup>
   <thead>
     <tr>
@@ -195,54 +205,41 @@ function paginate(rows: { html: string; lines: number }[]): { rows: typeof rows;
 function footer(c: QuotationDocumentConfig): string {
 	const hasDiscount = c.discountAmount > 0;
 	const afterDiscount = c.subtotal - c.discountAmount;
+	const extra = [
+		c.conditions ? `<div><b>เงื่อนไขการชำระเงิน :</b> ${nl(c.conditions)}</div>` : '',
+		c.bankLines.length ? `<div><b>ชำระเงิน :</b> ${c.bankLines.map(esc).join('<br/>')}</div>` : '',
+		c.notes ? `<div><b>หมายเหตุ :</b> ${nl(c.notes)}</div>` : ''
+	].join('');
 
 	return `
-    <table class="foot"><tbody><tr>
-      <td class="txt">
-        <div><b>เงื่อนไขการชำระเงิน :</b> ${nl(c.conditions)}</div>
-        ${c.bankLines.length ? `<div style="margin-top:8px;"><b>ชำระเงิน :</b> ${c.bankLines.map(esc).join('<br/>')}</div>` : ''}
-        <div style="margin-top:8px;"><b>หมายเหตุ :</b> ${nl(c.notes)}</div>
-      </td>
-      <td style="width:195px; padding:0;">
-        <table class="tot">
-          <tr><td class="k">Sub Total</td><td class="n">${fmt(c.subtotal)}</td></tr>
-          <tr><td class="k">Discount</td><td class="n">${hasDiscount ? fmt(c.discountAmount) : ''}</td></tr>
-          <tr><td class="k">After Discount</td><td class="n">${fmt(afterDiscount)}</td></tr>
-          <tr><td class="k">Vat ${esc(c.vatPercent)}%</td><td class="n">${fmt(c.vatAmount)}</td></tr>
-          <tr class="g"><td class="k">Grand Total</td><td class="n">${fmt(c.totalAmount)}</td></tr>
-        </table>
-      </td>
-    </tr></tbody></table>
-    <div class="words">${thaiAmountText(c.totalAmount)}</div>
-    <div class="close">จึงเรียนมาเพื่อพิจารณา บริษัทฯ หวังเป็นอย่างยิ่งว่าจะมีโอกาสให้บริการแก่ท่าน และขอขอบพระคุณมา ณ โอกาสนี้</div>
-    <div class="sign">
-      <div class="box">
-        <div>กรุณาลงชื่อเพื่ออนุมัติและส่งกลับ กรณีต้องการใช้บริการ</div>
-        <div style="margin-top:6px;">ในนาม <b class="v">${esc(c.customerName)}</b></div>
-        <div style="margin-top:34px;">ผู้อนุมัติสั่งซื้อ/สั่งจ้าง</div>
-        <div style="margin-left:40px; margin-top:6px;">............................................................</div>
-        <div style="margin-left:80px;">วันที่......../......../........</div>
-      </div>
-      <div class="box">
-        <div style="text-align:right;">ในนาม ${esc(c.company.nameTh)}</div>
-        <img class="stamp" src="${esc(c.stampUrl)}" alt="" onerror="this.style.display='none'" />
-        <img class="sig" src="${esc(c.signatureUrl)}" alt="" onerror="this.style.display='none'" />
-        <div class="right-lines">ผู้อนุมัติ<br/>${esc(c.signerName)}<br/>กรรมการผู้จัดการ</div>
-      </div>
+    <div class="foot">
+      <div class="words">( ${thaiAmountText(c.totalAmount)} )</div>
+      <table class="tot">
+        <tr><td class="k">Sub Total</td><td class="n">${fmt(c.subtotal)}</td></tr>
+        ${hasDiscount ? `<tr><td class="k">Discount</td><td class="n">${fmt(c.discountAmount)}</td></tr><tr><td class="k">After Discount</td><td class="n">${fmt(afterDiscount)}</td></tr>` : ''}
+        <tr><td class="k">Vat ${esc(c.vatPercent)}%</td><td class="n">${fmt(c.vatAmount)}</td></tr>
+        <tr class="g"><td class="k">Grand Total</td><td class="n">${fmt(c.totalAmount)}</td></tr>
+      </table>
+    </div>
+    ${extra ? `<div style="font-size:16px; line-height:21px; margin-top:6px;">${extra}</div>` : ''}
+    <div class="close">
+      <img class="stamp" src="${esc(c.stampUrl)}" alt="" onerror="this.style.display='none'" />
+      <div>จึงเรียนมาเพื่อพิจารณาและขอบพระคุณที่ท่านเลือกใช้บริการของ NPK</div>
+      <div><b>${esc(c.signerName)}</b></div>
+      <div class="sigbox"><img class="sig" src="${esc(c.signatureUrl)}" alt="" onerror="this.style.display='none'" /></div>
+      <div class="line">ผู้เสนอราคา.......................................................</div>
     </div>`;
 }
 
 function infoBlock(c: QuotationDocumentConfig): string {
 	return `
-    <div class="title">ใบเสนอราคา / Quotation</div>
+    <div class="title">ใบเสนอราคา(Quotation)</div>
     <table class="info">
-      <tr><td class="l">ชื่อลูกค้า :</td><td class="v"><b>${esc(c.customerName)}</b></td><td class="r">เลขที่</td><td class="rv v">${esc(c.displayQN)}</td></tr>
-      <tr><td class="l">รหัสสาขา/สาขา :</td><td class="v">${esc(c.branchDisplay)}</td><td class="r">วันที่</td><td class="rv v">${esc(c.dateText)}</td></tr>
-      <tr><td class="l">ที่อยู่ :</td><td class="v">${nl(c.address)}</td><td class="r">ผู้ติดต่อ :</td><td class="rv v">${esc(c.contactPerson)}</td></tr>
-      <tr><td class="l">ยืนยันราคา :</td><td class="v">${esc(c.validDays)} วันนับจากวันที่เสนอราคา</td><td class="r">เบอร์โทร :</td><td class="rv v">${esc(c.contactPhone)}</td></tr>
-      <tr><td class="l">ชื่อโครงการ :</td><td class="proj" colspan="3">${esc(c.projectName)}</td></tr>
-    </table>
-    <div class="greet">บริษัทฯ มีความยินดีขอเสนอราคางานบริการ โดยมีทีมงานคุณภาพให้กับท่าน มีรายละเอียด ดังนี้</div>`;
+      <tr><td class="l">ชื่อลูกค้า : ${esc(c.customerName)}</td><td class="r">เลขที่</td><td class="rv">${esc(c.displayQN)}</td></tr>
+      <tr><td class="l">อ้างถึง : ${esc(c.projectName)}</td><td class="r">วันที่</td><td class="rv">${esc(c.dateText)}</td></tr>
+      <tr><td class="l">สาขา : ${esc(c.branchDisplay)}</td><td class="r">W/O</td><td class="rv">${esc(c.woText ?? '')}</td></tr>
+      <tr><td class="l"><b>บริษัทฯ มีความยินดีขอเสนอราคา</b></td><td class="r">P/O</td><td class="rv">${esc(c.poText ?? '')}</td></tr>
+    </table>`;
 }
 
 export function buildQuotationDocumentHtml(config: QuotationDocumentConfig): string {
@@ -272,7 +269,7 @@ export function buildQuotationDocumentHtml(config: QuotationDocumentConfig): str
       <tbody>${p.rows.map((r) => r.html).join('')}${FILLER.repeat(filler)}</tbody>
     </table>
     ${isLast ? footer(config) : ''}
-    <div class="pageno">หน้า ${idx + 1}/${total}</div>
+    ${total > 1 ? `<div class="pageno">หน้า ${idx + 1}/${total}</div>` : ''}
   </div>`;
 		})
 		.join('');
