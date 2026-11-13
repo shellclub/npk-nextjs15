@@ -32,7 +32,7 @@ function SignInPageView() {
 		formState: { errors, isSubmitting }
 	} = useForm<FormType>({
 		resolver: zodResolver(schema),
-		defaultValues: { email: '', password: '', remember: true }
+		defaultValues: { email: '', password: '', remember: false }
 	});
 
 	async function onSubmit({ email, password }: FormType) {
@@ -42,70 +42,121 @@ function SignInPageView() {
 	}
 
 	return (
-		<main className="bg-canvas flex min-h-screen flex-col md:flex-row">
-			<section className="bg-brand text-on-brand relative flex flex-1 flex-col justify-center gap-8 overflow-hidden px-8 py-12 md:px-16 md:pr-32">
-				<span
-					aria-hidden="true"
-					className="bg-brand-soft/40 absolute -top-24 -right-24 size-72 rounded-full"
-				/>
-				<span
-					aria-hidden="true"
-					className="bg-brand-soft/30 absolute -bottom-32 left-10 size-96 rounded-full"
-				/>
-				<div className="relative flex items-center gap-4">
-					<div className="bg-surface flex size-[60px] items-center justify-center rounded-xl">
-						<Image
-							src="/api/company/asset/logo"
-							unoptimized
-							alt="โลโก้ NPK Service & Supply"
-							width={44}
-							height={44}
-							className="h-auto w-11"
-							priority
+		<main className="bg-canvas text-ink flex min-h-screen items-center justify-center p-4 md:px-8 md:py-12">
+			<div className="flex w-full max-w-[1200px] flex-wrap items-center">
+				<section
+					aria-label="เกี่ยวกับระบบ NPK Service"
+					className="bg-brand text-on-brand relative flex min-h-0 min-w-0 flex-[1_1_520px] flex-col gap-8 overflow-hidden rounded-3xl px-6 pt-10 pb-20 md:min-h-[680px] md:py-14 md:pr-[120px] md:pl-14"
+				>
+					<svg
+						aria-hidden="true"
+						width="360"
+						height="360"
+						viewBox="0 0 360 360"
+						className="absolute -right-20 -bottom-20"
+					>
+						<circle
+							cx="180"
+							cy="180"
+							r="180"
+							className="fill-brand-soft"
 						/>
-					</div>
-					<div>
-						<div className="font-display text-2xl font-semibold">NPK Service</div>
-						<div className="text-[15px]">NPK Service &amp; Supply Co., Ltd.</div>
-					</div>
-				</div>
-				<div className="relative flex max-w-xl flex-col gap-4">
-					<h1 className="font-display text-4xl leading-tight font-semibold">
-						งานบริการ เอกสาร การเงิน
-						<br />
-						ครบจบในระบบเดียว
-					</h1>
-					<p className="text-[17px] leading-7">
-						ระบบจัดการงานของบริษัท เอ็นพีเค เซอร์วิส แอนด์ ซัพพลาย จำกัด ตั้งแต่ใบเสนอราคา รับงาน
-						สั่งงานช่าง จนถึงวางบิลและรับชำระเงิน
-					</p>
-				</div>
-				<ul className="relative flex max-w-xl flex-col gap-3">
-					{FEATURES.map(({ Icon, text }) => (
-						<li
-							key={text}
-							className="flex items-center gap-3 text-[15px]"
-						>
-							<span
-								aria-hidden="true"
-								className="bg-surface/30 flex size-10 shrink-0 items-center justify-center rounded-lg"
-							>
-								<Icon size={20} />
-							</span>
-							{text}
-						</li>
-					))}
-				</ul>
-			</section>
+						<circle
+							cx="180"
+							cy="180"
+							r="112"
+							className="fill-brand"
+						/>
+						<circle
+							cx="180"
+							cy="180"
+							r="48"
+							className="fill-accent"
+						/>
+					</svg>
+					<svg
+						aria-hidden="true"
+						width="96"
+						height="96"
+						viewBox="0 0 96 96"
+						className="absolute top-12 right-16"
+					>
+						<circle
+							cx="48"
+							cy="48"
+							r="48"
+							className="fill-brand-soft"
+						/>
+					</svg>
 
-			<section className="relative z-10 flex items-center justify-center px-4 py-10 md:-ml-16 md:w-[520px] md:shrink-0 md:px-0 md:pr-12">
-				<div className="bg-surface shadow-float w-full max-w-md rounded-3xl p-8 sm:p-10">
-					<h2 className="font-display text-[26px] leading-9 font-semibold">เข้าสู่ระบบ</h2>
-					<p className="text-ink-muted mb-6">ระบบจัดการเอกสารธุรกิจ NPK Service &amp; Supply</p>
+					<div className="relative flex items-center gap-4">
+						<div className="bg-surface flex size-[88px] flex-none items-center justify-center rounded-[20px]">
+							<Image
+								src="/api/company/asset/logo"
+								unoptimized
+								alt="โลโก้ NPK Service & Supply"
+								width={64}
+								height={64}
+								className="h-auto w-16"
+								priority
+							/>
+						</div>
+						<div>
+							<div className="font-display text-[28px] leading-9 font-semibold">NPK Service</div>
+							<div className="text-base leading-6">NPK Service &amp; Supply Co., Ltd.</div>
+						</div>
+					</div>
+
+					<div className="relative flex max-w-[460px] flex-col gap-3">
+						<h1 className="font-display text-4xl leading-[50px] font-semibold">
+							งานบริการ เอกสาร การเงิน
+							<br />
+							ครบจบในระบบเดียว
+						</h1>
+						<p className="text-[17px] leading-7">
+							ระบบจัดการงานของบริษัท เอ็นพีเค เซอร์วิส แอนด์ ซัพพลาย จำกัด ตั้งแต่ใบเสนอราคา รับงาน
+							สั่งงานช่าง จนถึงวางบิลและรับชำระเงิน
+						</p>
+					</div>
+
+					<ul className="relative mt-auto flex max-w-[440px] flex-col gap-4">
+						{FEATURES.map(({ Icon, text }) => (
+							<li
+								key={text}
+								className="flex items-center gap-4"
+							>
+								<span
+									aria-hidden="true"
+									className="bg-surface text-primary-ink flex size-11 flex-none items-center justify-center rounded-full"
+								>
+									<Icon size={22} />
+								</span>
+								<span className="text-base leading-6">{text}</span>
+							</li>
+						))}
+					</ul>
+				</section>
+
+				<section
+					aria-labelledby="login-title"
+					className="bg-surface shadow-float relative -mt-10 flex max-w-none min-w-0 flex-[1_1_400px] flex-col gap-6 rounded-3xl p-6 md:mt-0 md:-ml-16 md:max-w-[520px] md:p-12"
+				>
+					<div className="flex flex-col gap-2">
+						<h2
+							id="login-title"
+							className="font-display text-[28px] leading-10 font-semibold"
+						>
+							เข้าสู่ระบบ
+						</h2>
+						<p className="text-ink-muted text-base leading-[26px]">
+							ระบบจัดการเอกสารธุรกิจ NPK Service &amp; Supply
+						</p>
+					</div>
+
 					<form
 						noValidate
 						onSubmit={handleSubmit(onSubmit)}
-						className="flex flex-col gap-4"
+						className="flex flex-col gap-5"
 					>
 						{errors.root && (
 							<p
@@ -123,15 +174,16 @@ function SignInPageView() {
 								<div className="relative">
 									<Mail
 										aria-hidden="true"
-										size={18}
-										className="text-ink-muted pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2"
+										size={20}
+										className="text-ink-muted pointer-events-none absolute top-3.5 left-3.5"
 									/>
 									<Input
 										id={id}
 										type="email"
 										autoComplete="username"
+										placeholder="name@npkservice.co.th"
 										aria-invalid={bad}
-										className="pl-11"
+										className="h-12 rounded-lg pr-4 pl-11 text-base"
 										{...register('email')}
 									/>
 								</div>
@@ -140,66 +192,73 @@ function SignInPageView() {
 						<Field
 							label="รหัสผ่าน"
 							error={errors.password?.message}
+							action={
+								<a
+									href="mailto:?subject=ขอรีเซ็ตรหัสผ่านระบบ NPK"
+									className="font-display text-sm font-medium no-underline"
+								>
+									ลืมรหัสผ่าน?
+								</a>
+							}
 						>
 							{(id, bad) => (
 								<div className="relative">
 									<Lock
 										aria-hidden="true"
-										size={18}
-										className="text-ink-muted pointer-events-none absolute top-1/2 left-3.5 -translate-y-1/2"
+										size={20}
+										className="text-ink-muted pointer-events-none absolute top-3.5 left-3.5"
 									/>
 									<Input
 										id={id}
 										type={show ? 'text' : 'password'}
 										autoComplete="current-password"
+										placeholder="กรอกรหัสผ่าน"
 										aria-invalid={bad}
-										className="pr-12 pl-11"
+										className="h-12 rounded-lg pr-[52px] pl-11 text-base"
 										{...register('password')}
 									/>
 									<IconButton
 										aria-label={show ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
-										className="absolute top-0 right-0"
+										className="absolute top-0.5 right-0.5"
 										onClick={() => setShow((s) => !s)}
 									>
-										{show ? <EyeOff size={18} /> : <Eye size={18} />}
+										{show ? <EyeOff size={20} /> : <Eye size={20} />}
 									</IconButton>
 								</div>
 							)}
 						</Field>
-						<div className="flex flex-wrap items-center justify-between gap-2">
-							<label className="flex min-h-11 cursor-pointer items-center gap-2">
-								<input
-									type="checkbox"
-									className="accent-primary size-5"
-									{...register('remember')}
-								/>
-								จดจำการเข้าสู่ระบบ
-							</label>
-							<a
-								href="mailto:?subject=ขอรีเซ็ตรหัสผ่านระบบ NPK"
-								className="text-sm"
-							>
-								ลืมรหัสผ่าน?
-							</a>
-						</div>
+						<label className="flex min-h-11 cursor-pointer items-center gap-2.5 text-base">
+							<input
+								type="checkbox"
+								className="accent-brand m-0 size-5"
+								{...register('remember')}
+							/>
+							จดจำการเข้าสู่ระบบ
+						</label>
 						<Button
 							type="submit"
 							disabled={isSubmitting}
-							className="w-full"
+							className="h-12 w-full rounded-lg"
 						>
 							{isSubmitting ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}
 						</Button>
 					</form>
-					<p className="text-ink-muted mt-6 text-center text-sm">ยังไม่มีบัญชี? ติดต่อผู้ดูแลระบบ</p>
-					<p className="text-ink-muted mt-3 flex items-center justify-center gap-2 text-center text-[13px]">
-						<ShieldCheck
-							size={16}
-							aria-hidden="true"
-						/>
-						บริษัท เอ็นพีเค เซอร์วิส แอนด์ ซัพพลาย จำกัด · สำหรับพนักงานที่ได้รับสิทธิ์เท่านั้น
-					</p>
-				</div>
-			</section>
+
+					<div className="border-line flex flex-col gap-2 border-t pt-5">
+						<p className="text-ink-muted text-[15px] leading-6">
+							ยังไม่มีบัญชี? <span className="font-semibold">ติดต่อผู้ดูแลระบบ</span>
+						</p>
+						<p className="text-ink-muted flex items-start gap-2 text-[13px] leading-5">
+							<ShieldCheck
+								size={16}
+								aria-hidden="true"
+								className="mt-0.5 flex-none"
+							/>
+							บริษัท เอ็นพีเค เซอร์วิส แอนด์ ซัพพลาย จำกัด · สำหรับพนักงานที่ได้รับสิทธิ์เท่านั้น
+						</p>
+					</div>
+				</section>
+			</div>
 		</main>
 	);
 }
