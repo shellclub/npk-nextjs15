@@ -98,7 +98,7 @@ function SignInPageView() {
 				</ul>
 			</section>
 
-			<section className="flex items-center justify-center px-4 py-10 md:-ml-16 md:w-[520px] md:shrink-0 md:px-0 md:pr-12">
+			<section className="relative z-10 flex items-center justify-center px-4 py-10 md:-ml-16 md:w-[520px] md:shrink-0 md:px-0 md:pr-12">
 				<div className="bg-surface shadow-float w-full max-w-md rounded-3xl p-8 sm:p-10">
 					<h2 className="font-display text-[26px] leading-9 font-semibold">เข้าสู่ระบบ</h2>
 					<p className="text-ink-muted mb-6">ระบบจัดการเอกสารธุรกิจ NPK Service &amp; Supply</p>
