@@ -1,6 +1,6 @@
 'use client';
 
-import { Bell, ChevronRight, Search } from 'lucide-react';
+import { Bell, ChevronRight, Menu, Search } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState } from 'react';
@@ -15,7 +15,7 @@ const ROLE_LABEL: Record<string, string> = {
 	accountant: 'ฝ่ายบัญชี'
 };
 
-export function AppTopbar() {
+export function AppTopbar({ onMenu }: { onMenu: () => void }) {
 	const pathname = usePathname();
 	const router = useRouter();
 	const { data: user } = useUser();
@@ -28,11 +28,23 @@ export function AppTopbar() {
 	const alerts = counts?.overdueInvoices ?? 0;
 
 	return (
-		<header className="bg-surface shadow-depth flex flex-wrap items-center gap-4 rounded-3xl py-3 pr-4 pl-5 ring-1 ring-black/[0.04]">
+		<header className="bg-surface shadow-depth flex flex-wrap items-center gap-3 rounded-2xl p-3 ring-1 ring-black/[0.04] lg:gap-4 lg:rounded-3xl lg:py-3 lg:pr-4 lg:pl-5">
+			<button
+				type="button"
+				onClick={onMenu}
+				aria-label="เปิดเมนู"
+				aria-controls="app-sidebar"
+				className="bg-tint text-primary-ink hover:bg-line focus-visible:outline-focus flex size-11 shrink-0 items-center justify-center rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 lg:hidden"
+			>
+				<Menu
+					aria-hidden="true"
+					size={22}
+				/>
+			</button>
 			{isDashboard ? (
 				<form
 					role="search"
-					className="relative min-w-[260px] flex-1 basis-80"
+					className="relative min-w-0 flex-1 basis-40 sm:basis-80"
 					onSubmit={(e) => {
 						e.preventDefault();
 
@@ -62,7 +74,7 @@ export function AppTopbar() {
 			) : (
 				<nav
 					aria-label="ตำแหน่งปัจจุบัน"
-					className="text-ink-muted flex flex-[1_1_320px] flex-wrap items-center gap-2 text-[15px] leading-[22px]"
+					className="text-ink-muted flex min-w-0 flex-[1_1_0] flex-wrap items-center gap-2 text-[15px] leading-[22px]"
 				>
 					<Link
 						href="/dashboards/project"
@@ -123,7 +135,7 @@ export function AppTopbar() {
 					>
 						{name.slice(0, 2).toUpperCase()}
 					</div>
-					<div>
+					<div className="hidden sm:block">
 						<div className="font-display text-[15px] leading-[22px] font-semibold">{name}</div>
 						<div className="text-ink-muted text-[13px] leading-[18px]">
 							{(role && ROLE_LABEL[role]) || role || ''}

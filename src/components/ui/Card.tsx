@@ -5,7 +5,7 @@ export function Card({ className, ...rest }: HTMLAttributes<HTMLElement>) {
 	return (
 		<section
 			className={clsx(
-				'bg-surface shadow-depth flex flex-col gap-4 rounded-3xl p-6 ring-1 ring-black/[0.04]',
+				'bg-surface shadow-depth flex min-w-0 flex-col gap-4 rounded-3xl p-4 ring-1 ring-black/[0.04] sm:p-6',
 				className
 			)}
 			{...rest}

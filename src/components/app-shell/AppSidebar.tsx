@@ -1,7 +1,7 @@
 'use client';
 
 import clsx from 'clsx';
-import { LogOut } from 'lucide-react';
+import { LogOut, X } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -41,7 +41,7 @@ function NavLink({ item, active, count }: { item: NavItem; active: boolean; coun
 	);
 }
 
-export function AppSidebar() {
+export function AppSidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
 	const pathname = usePathname();
 	const { signOut, data: user } = useUser();
 	const role = Array.isArray(user?.role) ? user.role[0] : user?.role;
@@ -50,7 +50,26 @@ export function AppSidebar() {
 	const activeId = findActive(pathname).item?.id;
 
 	return (
-		<aside className="text-on-brand flex max-w-[280px] flex-[1_1_248px] flex-col gap-2 px-4 py-6 max-[820px]:max-w-none max-[820px]:basis-full">
+		<aside
+			id="app-sidebar"
+			aria-label="เมนูนำทาง"
+			className={clsx(
+				'text-on-brand bg-brand flex w-[280px] max-w-[85vw] flex-col gap-2 overflow-y-auto px-4 py-6 transition-transform duration-200',
+				'fixed inset-y-0 left-0 z-50 lg:static lg:z-auto lg:max-w-none lg:basis-[248px] lg:translate-x-0 lg:overflow-visible',
+				open ? 'translate-x-0' : '-translate-x-full'
+			)}
+		>
+			<button
+				type="button"
+				onClick={onClose}
+				aria-label="ปิดเมนู"
+				className="hover:bg-brand-hover focus-visible:outline-on-brand absolute top-4 right-3 flex size-11 items-center justify-center rounded-lg focus-visible:outline-2 lg:hidden"
+			>
+				<X
+					aria-hidden="true"
+					size={22}
+				/>
+			</button>
 			<div className="flex items-center gap-3 px-2 pb-4">
 				<div className="bg-surface flex size-[52px] flex-none items-center justify-center rounded-xl">
 					<Image

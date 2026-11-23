@@ -39,8 +39,13 @@ export function DataTable<T>({
 	const alignCls = (c: Column<T>) =>
 		c.align === 'right' || c.money ? 'text-right' : c.align === 'center' ? 'text-center' : 'text-left';
 	return (
-		<div className="overflow-x-auto">
-			<table className="w-full border-collapse">
+		<div
+			tabIndex={0}
+			role="region"
+			aria-label="ตารางข้อมูล เลื่อนซ้าย-ขวาเพื่อดูคอลัมน์ทั้งหมด"
+			className="focus-visible:outline-focus max-w-full overflow-x-auto overscroll-x-contain pb-2 [-webkit-overflow-scrolling:touch] focus-visible:outline-2 [&::-webkit-scrollbar]:h-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[var(--color-line-strong)] [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-[var(--color-surface-2)]"
+		>
+			<table className="w-full min-w-max border-collapse">
 				<thead>
 					<tr>
 						{columns.map((c) => (
