@@ -2,108 +2,100 @@
 
 import { headerHasOwnLineValues, isOverheadItem } from '@/lib/quotation-line-items';
 
+import { bahtText } from '@/lib/baht-text';
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function fmt(n: any) {
-  return Number(n).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+	return Number(n).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export function thaiDate(d: Date | string | null | undefined) {
-  if (!d) return '-';
-  const date = new Date(d);
-  const months = ['มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
-    'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
-  return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear() + 543}`;
+	if (!d) return '-';
+
+	const date = new Date(d);
+	const months = [
+		'มกราคม',
+		'กุมภาพันธ์',
+		'มีนาคม',
+		'เมษายน',
+		'พฤษภาคม',
+		'มิถุนายน',
+		'กรกฎาคม',
+		'สิงหาคม',
+		'กันยายน',
+		'ตุลาคม',
+		'พฤศจิกายน',
+		'ธันวาคม'
+	];
+	return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear() + 543}`;
 }
 
 export function shortDate(d: Date | string | null | undefined) {
-  if (!d) return '-';
-  const date = new Date(d);
-  const dd = String(date.getDate()).padStart(2, '0');
-  const mm = String(date.getMonth() + 1).padStart(2, '0');
-  const yy = String(date.getFullYear() + 543);
-  return `${dd}/${mm}/${yy}`;
+	if (!d) return '-';
+
+	const date = new Date(d);
+	const dd = String(date.getDate()).padStart(2, '0');
+	const mm = String(date.getMonth() + 1).padStart(2, '0');
+	const yy = String(date.getFullYear() + 543);
+	return `${dd}/${mm}/${yy}`;
 }
 
+/** ยอดเงินเป็นตัวอักษรไทย เช่น 124,800 → หนึ่งแสนสองหมื่นสี่พันแปดร้อยบาทถ้วน (ใช้ bahtText ที่มี unit test) */
 export function thaiAmountText(num: number): string {
-  const txt = ['', 'หนึ่ง', 'สอง', 'สาม', 'สี่', 'ห้า', 'หก', 'เจ็ด', 'แปด', 'เก้า'];
-  const unit = ['', 'สิบ', 'ร้อย', 'พัน', 'หมื่น', 'แสน', 'ล้าน'];
-  const n = Number(num);
-  if (n === 0) return 'ศูนย์ถ้วน';
-  const [intPart, decPart] = n.toFixed(2).split('.');
-  let result = '';
-  const intStr = intPart.replace(/,/g, '');
-  const len = intStr.length;
-  for (let i = 0; i < len; i++) {
-    const d = parseInt(intStr[i]);
-    const pos = len - i - 1;
-    if (d === 0) continue;
-    if (pos === 1 && d === 1) { result += 'สิบ'; continue; }
-    if (pos === 1 && d === 2) { result += 'ยี่สิบ'; continue; }
-    if (pos === 0 && d === 1 && len > 1) { result += 'เอ็ด'; continue; }
-    result += txt[d] + unit[pos];
-  }
-  const dec = parseInt(decPart);
-  if (dec === 0) { result += 'ถ้วน'; }
-  else {
-    const d1 = Math.floor(dec / 10);
-    const d2 = dec % 10;
-    if (d1 === 1) result += 'สิบ';
-    else if (d1 === 2) result += 'ยี่สิบ';
-    else if (d1 > 0) result += txt[d1] + 'สิบ';
-    if (d2 === 1 && d1 > 0) result += 'เอ็ด';
-    else if (d2 > 0) result += txt[d2];
-    result += 'สตางค์';
-  }
-  return result;
+	return bahtText(Number(num) || 0);
 }
 
 export interface DocumentLineItem {
-  itemType?: string | null;
-  parentIndex?: number | null;
-  description?: string | null;
-  quantity?: unknown;
-  unit?: string | null;
-  materialPrice?: unknown;
-  labourPrice?: unknown;
-  amount?: unknown;
-  totalMaterial?: unknown;
-  totalLabour?: unknown;
-  isAdjustment?: boolean;
+	itemType?: string | null;
+	parentIndex?: number | null;
+	description?: string | null;
+	quantity?: unknown;
+	unit?: string | null;
+	materialPrice?: unknown;
+	labourPrice?: unknown;
+	amount?: unknown;
+	totalMaterial?: unknown;
+	totalLabour?: unknown;
+	isAdjustment?: boolean;
 }
 
 export interface NpkDocumentHtmlConfig {
-  pageTitle: string;
-  documentTitle: string;
-  logoUrl: string;
-  infoTableHtml: string;
-  greetingHtml: string;
-  items: DocumentLineItem[];
-  fillerRowCount?: number;
-  conditions: string;
-  warranty: string;
-  notes: string;
-  subtotal: number;
-  discountAmount: number;
-  vatPercent: number;
-  vatAmount: number;
-  totalAmount: number;
-  closingParagraphHtml: string;
-  footerLeftHtml: string;
-  footerRightHtml: string;
-  footerInNameHtml: string;
-  signatureLeftTitle: string;
-  signatureRightName: string;
-  signatureRightDate: string;
-  extraPagesHtml?: string;
+	pageTitle: string;
+	documentTitle: string;
+	logoUrl: string;
+	infoTableHtml: string;
+	greetingHtml: string;
+	items: DocumentLineItem[];
+	fillerRowCount?: number;
+	conditions: string;
+	warranty: string;
+	notes: string;
+	subtotal: number;
+	discountAmount: number;
+	vatPercent: number;
+	vatAmount: number;
+	/** หัก ณ ที่จ่าย (ใบสั่งซื้อให้ช่าง) — แสดงเป็นรายการหักก่อน Grand Total */
+	whtPercent?: number;
+	whtAmount?: number;
+	totalAmount: number;
+	closingParagraphHtml: string;
+	footerLeftHtml: string;
+	footerRightHtml: string;
+	footerInNameHtml: string;
+	signatureLeftTitle: string;
+	signatureRightName: string;
+	signatureRightDate: string;
+	extraPagesHtml?: string;
 }
 
 /** แถวชื่อโครงการ — ถ้าระบุ wo/po จะแสดงฝั่งขวา (ใช้ในใบตอบรับงาน) */
 export function buildProjectInfoRows(
-  projectName: string,
-  woPo?: { woNumber?: string; poNumber?: string }
+	projectName: string,
+	woPo?: { woNumber?: string; poNumber?: string },
+	workPeriodText?: string
 ): string {
-  if (woPo) {
-    return `
+	if (woPo) {
+		return `
       <tr>
         <td class="label col-left-label">ชื่อโครงการ :</td>
         <td class="value-green col-left-value">${projectName || '-'}</td>
@@ -111,13 +103,14 @@ export function buildProjectInfoRows(
         <td class="value-blue col-right-value">${woPo.woNumber || ''}</td>
       </tr>
       <tr>
-        <td class="col-left-label"></td>
-        <td class="col-left-value"></td>
+        <td class="label col-left-label">${workPeriodText ? 'ระยะเวลาปฏิบัติงาน :' : ''}</td>
+        <td class="value col-left-value">${workPeriodText || ''}</td>
         <td class="label col-right-label">P/O :</td>
         <td class="value-blue col-right-value">${woPo.poNumber || ''}</td>
       </tr>`;
-  }
-  return `
+	}
+
+	return `
       <tr>
         <td class="label col-left-label">ชื่อโครงการ :</td>
         <td class="value-green col-left-value" colspan="3">${projectName || '-'}</td>
@@ -125,18 +118,20 @@ export function buildProjectInfoRows(
 }
 
 export function buildQuotationInfoTableHtml(params: {
-  customerName: string;
-  displayQN: string;
-  branchDisplay: string;
-  dateText: string;
-  address: string;
-  contactPerson: string;
-  validDaysText: string;
-  contactPhone: string;
-  projectName: string;
-  woPo?: { woNumber?: string; poNumber?: string };
+	customerName: string;
+	displayQN: string;
+	branchDisplay: string;
+	dateText: string;
+	address: string;
+	contactPerson: string;
+	validDaysText: string;
+	contactPhone: string;
+	projectName: string;
+	woPo?: { woNumber?: string; poNumber?: string };
+	/** ระยะเวลาปฏิบัติงาน เช่น 'เริ่ม 24 กันยายน 2569 สิ้นสุด 30 กันยายน 2569' (ใบตอบรับงาน) */
+	workPeriodText?: string;
 }): string {
-  return `
+	return `
       <tr>
         <td class="label col-left-label">ชื่อลูกค้า :</td>
         <td class="value col-left-value" style="font-weight:600;">${params.customerName}</td>
@@ -161,31 +156,32 @@ export function buildQuotationInfoTableHtml(params: {
         <td class="label col-right-label">โทร :</td>
         <td class="value col-right-value">${params.contactPhone}</td>
       </tr>
-      ${buildProjectInfoRows(params.projectName, params.woPo)}`;
+      ${buildProjectInfoRows(params.projectName, params.woPo, params.workPeriodText)}`;
 }
 
 export function buildItemsTableHtml(items: DocumentLineItem[]): string {
-  let headerCount = 0;
-  const subCountMap: Record<number, number> = {};
+	let headerCount = 0;
+	const subCountMap: Record<number, number> = {};
 
-  const headersWithChildren = new Set<number>();
-  items.forEach((item, i) => {
-    if (item.itemType === 'ITEM' && item.parentIndex != null && item.parentIndex >= 0) {
-      headersWithChildren.add(item.parentIndex);
-    }
-  });
+	const headersWithChildren = new Set<number>();
+	items.forEach((item, i) => {
+		if (item.itemType === 'ITEM' && item.parentIndex != null && item.parentIndex >= 0) {
+			headersWithChildren.add(item.parentIndex);
+		}
+	});
 
-  return items.map((item, i) => {
-    if (isOverheadItem(item)) {
-      headerCount++;
-      const qty = Number(item.quantity);
-      const matPrice = Number(item.materialPrice || 0);
-      const labPrice = Number(item.labourPrice || 0);
-      const matTotal = Number(item.totalMaterial) || qty * matPrice;
-      const labTotal = Number(item.totalLabour) || qty * labPrice;
-      const amount = Number(item.amount) || matTotal + labTotal;
+	return items
+		.map((item, i) => {
+			if (isOverheadItem(item)) {
+				headerCount++;
+				const qty = Number(item.quantity);
+				const matPrice = Number(item.materialPrice || 0);
+				const labPrice = Number(item.labourPrice || 0);
+				const matTotal = Number(item.totalMaterial) || qty * matPrice;
+				const labTotal = Number(item.totalLabour) || qty * labPrice;
+				const amount = Number(item.amount) || matTotal + labTotal;
 
-      return `
+				return `
           <tr class="header-row">
             <td class="center" style="font-weight:700; color:#333;">${headerCount}</td>
             <td class="desc" style="font-weight:700;">${(item.description || '').replace(/\n/g, '<br/>')}</td>
@@ -197,31 +193,31 @@ export function buildItemsTableHtml(items: DocumentLineItem[]): string {
             <td class="right">${labTotal > 0 ? fmt(labTotal) : ''}</td>
             <td class="right" style="font-weight:700;">${amount ? fmt(amount) : ''}</td>
           </tr>`;
-    }
+			}
 
-    const isHeader = (item.itemType || 'ITEM') === 'HEADER';
+			const isHeader = (item.itemType || 'ITEM') === 'HEADER';
 
-    if (isHeader) {
-      headerCount++;
-      subCountMap[i] = 0;
+			if (isHeader) {
+				headerCount++;
+				subCountMap[i] = 0;
 
-      if (headersWithChildren.has(i) && !headerHasOwnLineValues(item)) {
-        // Header WITH sub-items, no own prices: description-only row
-        return `
+				if (headersWithChildren.has(i) && !headerHasOwnLineValues(item)) {
+					// Header WITH sub-items, no own prices: description-only row
+					return `
           <tr class="header-row">
             <td class="center" style="font-weight:700; color:#333;">${headerCount}</td>
             <td colspan="8" style="font-weight:700; color:#333;">${(item.description || '').replace(/\n/g, '<br/>')}</td>
           </tr>`;
-      }
+				}
 
-      const qty = Number(item.quantity);
-      const matPrice = Number(item.materialPrice || 0);
-      const labPrice = Number(item.labourPrice || 0);
-      const matTotal = Number(item.totalMaterial) || qty * matPrice;
-      const labTotal = Number(item.totalLabour) || qty * labPrice;
-      const amount = Number(item.amount) || matTotal + labTotal;
+				const qty = Number(item.quantity);
+				const matPrice = Number(item.materialPrice || 0);
+				const labPrice = Number(item.labourPrice || 0);
+				const matTotal = Number(item.totalMaterial) || qty * matPrice;
+				const labTotal = Number(item.totalLabour) || qty * labPrice;
+				const amount = Number(item.amount) || matTotal + labTotal;
 
-      return `
+				return `
           <tr class="header-row">
             <td class="center" style="font-weight:700; color:#333;">${headerCount}</td>
             <td class="desc" style="font-weight:700;">${(item.description || '').replace(/\n/g, '<br/>')}</td>
@@ -233,31 +229,32 @@ export function buildItemsTableHtml(items: DocumentLineItem[]): string {
             <td class="right">${labTotal > 0 ? fmt(labTotal) : ''}</td>
             <td class="right" style="font-weight:700;">${amount ? fmt(amount) : ''}</td>
           </tr>`;
-    }
+			}
 
-    const parentIdx = item.parentIndex ?? -1;
-    let displayNum = '';
-    if (parentIdx >= 0 && subCountMap[parentIdx] !== undefined) {
-      subCountMap[parentIdx]++;
-      let hNum = 0;
-      for (let j = 0; j <= parentIdx; j++) {
-        if ((items[j].itemType || 'ITEM') === 'HEADER') hNum++;
-      }
-      displayNum = `${hNum}.${subCountMap[parentIdx]}`;
-    } else {
-      displayNum = `${i + 1}`;
-    }
+			const parentIdx = item.parentIndex ?? -1;
+			let displayNum = '';
 
-    const qty = Number(item.quantity);
-    const matPrice = Number(item.materialPrice || 0);
-    const labPrice = Number(item.labourPrice || 0);
-    const matTotal = Number(item.totalMaterial) || qty * matPrice;
-    const labTotal = Number(item.totalLabour) || qty * labPrice;
-    const amount = Number(item.amount) || matTotal + labTotal;
-    const isNeg = qty < 0;
-    const isAdj = item.isAdjustment;
+			if (parentIdx >= 0 && subCountMap[parentIdx] !== undefined) {
+				subCountMap[parentIdx]++;
+				let hNum = 0;
+				for (let j = 0; j <= parentIdx; j++) {
+					if ((items[j].itemType || 'ITEM') === 'HEADER') hNum++;
+				}
+				displayNum = `${hNum}.${subCountMap[parentIdx]}`;
+			} else {
+				displayNum = `${i + 1}`;
+			}
 
-    return `
+			const qty = Number(item.quantity);
+			const matPrice = Number(item.materialPrice || 0);
+			const labPrice = Number(item.labourPrice || 0);
+			const matTotal = Number(item.totalMaterial) || qty * matPrice;
+			const labTotal = Number(item.totalLabour) || qty * labPrice;
+			const amount = Number(item.amount) || matTotal + labTotal;
+			const isNeg = qty < 0;
+			const isAdj = item.isAdjustment;
+
+			return `
         <tr style="${isAdj ? (isNeg ? 'background:#FFF5F5;' : 'background:#F0FFF4;') : ''}">
           <td class="center">${isAdj ? (isNeg ? '(-)' : '(+)') : displayNum}</td>
           <td class="desc">${(item.description || '').replace(/\n/g, '<br/>')}${isAdj ? ' *' : ''}</td>
@@ -269,7 +266,8 @@ export function buildItemsTableHtml(items: DocumentLineItem[]): string {
           <td class="right">${labTotal > 0 ? fmt(labTotal) : ''}</td>
           <td class="right" style="${isNeg ? 'color:#DC2626;' : ''}">${amount ? fmt(amount) : ''}</td>
         </tr>`;
-  }).join('');
+		})
+		.join('');
 }
 
 const DOCUMENT_STYLES = `
@@ -451,7 +449,7 @@ const DOCUMENT_STYLES = `
 `;
 
 function buildCompanyHeader(logoUrl: string): string {
-  return `
+	return `
     <div class="header">
       <img src="${logoUrl}" alt="NPK Logo" class="header-logo" onerror="this.style.display='none'" />
       <div class="header-info">
@@ -467,14 +465,16 @@ function buildCompanyHeader(logoUrl: string): string {
 }
 
 export function buildNpkDocumentHtml(config: NpkDocumentHtmlConfig): string {
-  const itemsHtml = buildItemsTableHtml(config.items);
-  const fillerCount = config.fillerRowCount ?? 20;
-  const fillerRows = Array(fillerCount)
-    .fill('<tr class="filler-row"><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>')
-    .join('\n        ');
-  const afterDiscount = config.subtotal - config.discountAmount;
+	const itemsHtml = buildItemsTableHtml(config.items);
+	const fillerCount = config.fillerRowCount ?? 20;
+	const fillerRows = Array(fillerCount)
+		.fill(
+			'<tr class="filler-row"><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>'
+		)
+		.join('\n        ');
+	const afterDiscount = config.subtotal - config.discountAmount;
 
-  return `<!DOCTYPE html>
+	return `<!DOCTYPE html>
 <html lang="th">
 <head>
   <meta charset="UTF-8">
@@ -541,7 +541,9 @@ export function buildNpkDocumentHtml(config: NpkDocumentHtmlConfig): string {
           <td class="label-cell">Sub Total</td>
           <td class="amount-cell">${fmt(config.subtotal)}</td>
         </tr>
-        ${config.discountAmount > 0 ? `
+        ${
+			config.discountAmount > 0
+				? `
         <tr>
           <td class="label-cell">Discount</td>
           <td class="amount-cell" style="color:#dc2626;">-${fmt(config.discountAmount)}</td>
@@ -549,11 +551,22 @@ export function buildNpkDocumentHtml(config: NpkDocumentHtmlConfig): string {
         <tr>
           <td class="label-cell">After Discount</td>
           <td class="amount-cell">${fmt(afterDiscount)}</td>
-        </tr>` : ''}
+        </tr>`
+				: ''
+		}
         <tr>
           <td class="label-cell">Vat ${config.vatPercent}%</td>
           <td class="amount-cell">${fmt(config.vatAmount)}</td>
         </tr>
+        ${
+			config.whtAmount && config.whtAmount > 0
+				? `
+        <tr>
+          <td class="label-cell">หัก ณ ที่จ่าย ${config.whtPercent ?? 0}%</td>
+          <td class="amount-cell" style="color:#dc2626;">-${fmt(config.whtAmount)}</td>
+        </tr>`
+				: ''
+		}
         <tr class="grand-total">
           <td class="label-cell">Grand Total</td>
           <td class="amount-cell">${fmt(config.totalAmount)}</td>
@@ -602,23 +615,23 @@ export function buildNpkDocumentHtml(config: NpkDocumentHtmlConfig): string {
 }
 
 export interface VoucherDocumentConfig {
-  pageTitle: string;
-  documentTitle: string;
-  documentSubtitle?: string;
-  logoUrl: string;
-  accentColor: string;
-  docNumber: string;
-  docDate: string;
-  bodyHtml: string;
-  amountHtml: string;
-  extraHtml?: string;
-  signatureHtml: string;
+	pageTitle: string;
+	documentTitle: string;
+	documentSubtitle?: string;
+	logoUrl: string;
+	accentColor: string;
+	docNumber: string;
+	docDate: string;
+	bodyHtml: string;
+	amountHtml: string;
+	extraHtml?: string;
+	signatureHtml: string;
 }
 
 /** Template สำหรับใบสำคัญรับ/จ่าย */
 export function buildVoucherDocumentHtml(config: VoucherDocumentConfig): string {
-  const accent = config.accentColor;
-  return `<!DOCTYPE html>
+	const accent = config.accentColor;
+	return `<!DOCTYPE html>
 <html lang="th">
 <head>
   <meta charset="UTF-8">

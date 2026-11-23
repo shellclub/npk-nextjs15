@@ -1,896 +1,761 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import Typography from '@mui/material/Typography';
-import Paper from '@mui/material/Paper';
-import Button from '@mui/material/Button';
-import TextField from '@mui/material/TextField';
-import IconButton from '@mui/material/IconButton';
-import Box from '@mui/material/Box';
-import Divider from '@mui/material/Divider';
-import Autocomplete from '@mui/material/Autocomplete';
-import CircularProgress from '@mui/material/CircularProgress';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import Chip from '@mui/material/Chip';
-import Checkbox from '@mui/material/Checkbox';
-import Alert from '@mui/material/Alert';
-import Tooltip from '@mui/material/Tooltip';
-import Dialog from '@mui/material/Dialog';
-import Fade from '@mui/material/Fade';
-import FuseSvgIcon from '@fuse/core/FuseSvgIcon';
-import FusePageCarded from '@fuse/core/FusePageCarded';
-import { styled } from '@mui/material/styles';
-import { motion } from 'motion/react';
-import DatePickerField from '@/components/shared/DatePickerField';
+import { Plus, Trash2 } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useRef, useState } from 'react';
+import { useAlert } from '@/components/shared/AlertProvider';
+import {
+	DateInput,
+	Button,
+	Card,
+	CardHeader,
+	Field,
+	FileDrop,
+	FormPageHeader,
+	IconButton,
+	Input,
+	InfoCard,
+	RefPicker,
+	Select,
+	Textarea
+} from '@/components/ui';
+import {
+	InstallmentEditor,
+	toInstallmentPayload,
+	type InstallmentRow
+} from '@/components/purchase-orders/InstallmentEditor';
+import { computePOTotals, validateInstallments } from '@/components/purchase-orders/po-math';
+import { addMonthsISO } from '@/lib/add-months';
+import { formatMoney } from '@/lib/format';
+import { sendJson, useApi } from '@/lib/use-api';
 
-const Root = styled(FusePageCarded)(() => ({
-	'& .container': { maxWidth: '100%!important' },
-}));
-
-const fieldSx = { '& .MuiOutlinedInput-root': { borderRadius: '10px' } };
-
-function fmt(n: number | string) {
-	return Number(n).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type RefResult = any;
-type TeamOption = { id: string; teamName: string; leaderName: string; leaderPhone?: string; leaderAddress?: string };
-
-type POLineItem = {
-	tempId: number;
+type RefResult = {
+	quotationId?: string | null;
+	workOrderId?: string | null;
+	quotationNumber: string;
+	customerName?: string;
+	branchName?: string;
+	projectName?: string;
+	woNumber?: string;
+	items?: {
+		itemType: string;
+		description: string;
+		unit?: string;
+		quantity: number;
+		unitPrice?: number;
+		materialPrice?: number;
+		labourPrice?: number;
+	}[];
+};
+type Team = { id: string; teamName: string };
+type Line = {
+	id: number;
 	itemType: 'HEADER' | 'ITEM';
 	description: string;
 	unit: string;
 	quantity: number;
 	materialPrice: number;
 	labourPrice: number;
-	amount: number; // computed (0 for HEADERs)
-	fromQuotation: boolean;
 };
-
-type POGroup = {
+type Group = {
 	id: number;
-	team: TeamOption | null;
-	selectedItems: Set<number>; // tempId ของรายการที่เลือก
+	teamId: string;
+	selected: Set<number>;
 	notes: string;
 	startDate: string;
 	endDate: string;
 	warrantyStart: string;
 	warrantyEnd: string;
+	warrantyMonths: string;
+	costType: 'LABOUR' | 'MATERIAL' | 'OTHER';
+	costCategory: string;
+	payeeName: string;
+	vatPercent: string;
+	whtPercent: string;
+	installments: InstallmentRow[];
 };
 
-let lineCounter = 0;
-const nextId = () => ++lineCounter;
+const COST_TYPES = [
+	{ value: 'LABOUR', label: 'ค่าแรง (จ้างช่าง)' },
+	{ value: 'MATERIAL', label: 'ค่าของ (บริษัทสั่งซื้อเอง)' },
+	{ value: 'OTHER', label: 'ค่าใช้จ่ายอื่นๆ' }
+] as const;
 
-function computeAmount(item: Omit<POLineItem, 'amount'>): number {
-	if (item.itemType === 'HEADER') return 0;
-	const unit = item.materialPrice + item.labourPrice;
-	return unit * item.quantity;
-}
+const amountOf = (l: Line) => (l.itemType === 'HEADER' ? 0 : (l.materialPrice + l.labourPrice) * l.quantity);
+const numCls =
+	'h-11 w-full rounded-lg border border-line-strong bg-surface px-2 text-right text-[15px] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus';
 
-function NewPurchaseOrderPage() {
+function NewPurchaseOrder() {
 	const router = useRouter();
-	const [saving, setSaving] = useState(false);
-	const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'warning' }>({ open: false, message: '', severity: 'success' });
-	const showMsg = (message: string, severity: 'success' | 'error' | 'warning' = 'success') => {
-		setSnackbar({ open: true, message, severity });
-		if (severity !== 'error') {
-			setTimeout(() => setSnackbar(p => ({ ...p, open: false })), 3000);
-		}
-	};
-
-	// Reference search
-	const [refSearch, setRefSearch] = useState('');
-	const [refResults, setRefResults] = useState<RefResult[]>([]);
-	const [refLoading, setRefLoading] = useState(false);
-	const [selectedRef, setSelectedRef] = useState<RefResult | null>(null);
-	const debounceRef = useRef<NodeJS.Timeout | null>(null);
-
-	// Team list
-	const [teams, setTeams] = useState<TeamOption[]>([]);
-
-	// Line items (editable table from quotation)
-	const [lineItems, setLineItems] = useState<POLineItem[]>([]);
-
-	// PO groups (each group = one team with selected items)
-	const [poGroups, setPoGroups] = useState<POGroup[]>([
-		{ id: 1, team: null, selectedItems: new Set(), notes: '', startDate: '', endDate: '', warrantyStart: '', warrantyEnd: '' },
-	]);
-
-	// Upload
-	const [quoteFile, setQuoteFile] = useState<File | null>(null);
-
-	// Notes
-	const [globalNotes, setGlobalNotes] = useState('');
-
-	// Fetch teams
-	useEffect(() => {
-		fetch('/api/technician-teams').then(r => r.json()).then(d => {
-			if (Array.isArray(d)) setTeams(d);
-		}).catch(() => {});
-	}, []);
-
-	// Search ref debounced
-	const searchRef = useCallback(async (q: string) => {
-		if (q.length < 2) { setRefResults([]); return; }
-		setRefLoading(true);
-		try {
-			const res = await fetch(`/api/purchase-orders/search-ref?q=${encodeURIComponent(q)}`);
-			const data = await res.json();
-			setRefResults(Array.isArray(data) ? data : []);
-		} catch { setRefResults([]); } finally { setRefLoading(false); }
-	}, []);
-
-	useEffect(() => {
-		if (debounceRef.current) clearTimeout(debounceRef.current);
-		debounceRef.current = setTimeout(() => searchRef(refSearch), 300);
-		return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-	}, [refSearch, searchRef]);
-
-	// When a quotation is selected → populate line items (include HEADERs)
-	const handleSelectRef = (val: RefResult | null) => {
-		setSelectedRef(val);
-		if (!val || !val.items?.length) {
-			setLineItems([]);
-			return;
-		}
-		const newItems: POLineItem[] = val.items.map((it: RefResult) => {
-			const isHeader = it.itemType === 'HEADER';
-			const matP = isHeader ? 0 : Number(it.materialPrice || it.unitPrice || 0);
-			const labP = isHeader ? 0 : Number(it.labourPrice || 0);
-			const qty = isHeader ? 0 : Number(it.quantity || 1);
-			const item = {
-				tempId: nextId(),
-				itemType: (isHeader ? 'HEADER' : 'ITEM') as 'HEADER' | 'ITEM',
-				description: it.description || '',
-				unit: isHeader ? '' : (it.unit || ''),
-				quantity: qty,
-				materialPrice: matP,
-				labourPrice: labP,
-				fromQuotation: true,
-			};
-			return { ...item, amount: computeAmount(item) };
-		});
-		setLineItems(newItems);
-		// Auto-select all ITEM (not HEADER) for group 1
-		const itemIds = new Set(newItems.filter(it => it.itemType === 'ITEM').map(it => it.tempId));
-		setPoGroups(prev => prev.map((g, i) =>
-			i === 0 ? { ...g, selectedItems: itemIds } : g
-		));
-	};
-
-	// --- Line item CRUD ---
-	const updateLineItem = (tempId: number, field: keyof POLineItem, value: string | number) => {
-		setLineItems(prev => prev.map(it => {
-			if (it.tempId !== tempId) return it;
-			const updated = { ...it, [field]: value };
-			updated.amount = computeAmount(updated);
-			return updated;
-		}));
-	};
-
-	const addLineItem = () => {
-		const newItem: POLineItem = {
-			tempId: nextId(),
-			itemType: 'ITEM',
-			description: '',
-			unit: '',
-			quantity: 1,
-			materialPrice: 0,
-			labourPrice: 0,
-			amount: 0,
-			fromQuotation: false,
-		};
-		setLineItems(prev => [...prev, newItem]);
-		// Add to all groups by default
-		setPoGroups(prev => prev.map(g => ({
-			...g,
-			selectedItems: new Set([...g.selectedItems, newItem.tempId]),
-		})));
-	};
-
-	const removeLineItem = (tempId: number) => {
-		setLineItems(prev => prev.filter(it => it.tempId !== tempId));
-		setPoGroups(prev => prev.map(g => {
-			const s = new Set(g.selectedItems);
-			s.delete(tempId);
-			return { ...g, selectedItems: s };
-		}));
-	};
-
-	// --- PO Group management ---
-	const addPoGroup = () => {
-		const allIds = new Set(lineItems.map(it => it.tempId));
-		setPoGroups(prev => [...prev, {
-			id: Date.now(),
-			team: null,
-			selectedItems: allIds, // default: all items
+	const alert = useAlert();
+	const sp = useSearchParams();
+	const { data: teamData } = useApi<Team[]>('/api/technician-teams');
+	const teams = Array.isArray(teamData) ? teamData : [];
+	const counter = useRef(1);
+	const nid = () => counter.current++;
+	const [ref, setRef] = useState<RefResult | null>(null);
+	const [lines, setLines] = useState<Line[]>([]);
+	const [groups, setGroups] = useState<Group[]>([
+		{
+			id: nid(),
+			teamId: '',
+			selected: new Set(),
 			notes: '',
 			startDate: '',
 			endDate: '',
 			warrantyStart: '',
 			warrantyEnd: '',
-		}]);
+			warrantyMonths: '',
+			costType: 'LABOUR',
+			costCategory: '',
+			payeeName: '',
+			vatPercent: '0',
+			whtPercent: '0',
+			installments: []
+		}
+	]);
+	const [file, setFile] = useState<File | null>(null);
+	const [saving, setSaving] = useState(false);
+	const presetWo = sp.get('workOrderId');
+
+	function pickRef(r: RefResult | null) {
+		setRef(r);
+		const next: Line[] = (r?.items ?? []).map((it) => {
+			const header = it.itemType === 'HEADER';
+
+			return {
+				id: nid(),
+				itemType: header ? 'HEADER' : 'ITEM',
+				description: it.description || '',
+				unit: header ? '' : it.unit || '',
+				quantity: header ? 0 : Number(it.quantity || 1),
+				materialPrice: header ? 0 : Number(it.materialPrice || it.unitPrice || 0),
+				labourPrice: header ? 0 : Number(it.labourPrice || 0)
+			};
+		});
+		setLines(next);
+		const all = new Set(next.filter((l) => l.itemType === 'ITEM').map((l) => l.id));
+		setGroups((g) => g.map((x, i) => (i === 0 ? { ...x, selected: all } : { ...x, selected: new Set() })));
+	}
+
+	useEffect(() => {
+		if (!presetWo) return;
+
+		(async () => {
+			try {
+				const wo = await (await fetch(`/api/work-orders/${presetWo}`)).json();
+				const res: RefResult[] = await (
+					await fetch(`/api/purchase-orders/search-ref?q=${encodeURIComponent(wo.woNumber)}`)
+				).json();
+				const hit = res.find((x) => x.workOrderId === presetWo);
+
+				if (hit) pickRef(hit);
+			} catch {
+				/* เลือกเองได้ */
+			}
+		})();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [presetWo]);
+
+	const setLine = (id: number, patch: Partial<Line>) =>
+		setLines((p) => p.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+	const setGroup = (id: number, patch: Partial<Group>) =>
+		setGroups((p) => p.map((g) => (g.id === id ? { ...g, ...patch } : g)));
+	const items = lines.filter((l) => l.itemType === 'ITEM');
+	const groupSub = (g: Group) => items.filter((l) => g.selected.has(l.id)).reduce((s, l) => s + amountOf(l), 0);
+	const groupCalc = (g: Group) =>
+		computePOTotals(groupSub(g), 0, Number(g.vatPercent) || 0, Number(g.whtPercent) || 0);
+	const groupTotal = (g: Group) => groupCalc(g).totalAmount;
+	const setWarranty = (g: Group, patch: Partial<Pick<Group, 'warrantyStart' | 'warrantyMonths'>>) => {
+		const n = { ...g, ...patch };
+		const end = addMonthsISO(n.warrantyStart, Number(n.warrantyMonths));
+
+		setGroup(g.id, end ? { ...patch, warrantyEnd: end } : patch);
 	};
 
-	const removePoGroup = (id: number) => {
-		setPoGroups(prev => prev.filter(g => g.id !== id));
-	};
+	function toggle(g: Group, id: number) {
+		const s = new Set(g.selected);
 
-	const updateGroup = (id: number, field: keyof POGroup, value: unknown) => {
-		setPoGroups(prev => prev.map(g => g.id === id ? { ...g, [field]: value } : g));
-	};
+		if (s.has(id)) s.delete(id);
+		else s.add(id);
 
-	const toggleGroupItem = (groupId: number, tempId: number) => {
-		setPoGroups(prev => prev.map(g => {
-			if (g.id !== groupId) return g;
-			const s = new Set(g.selectedItems);
-			if (s.has(tempId)) s.delete(tempId); else s.add(tempId);
-			return { ...g, selectedItems: s };
-		}));
-	};
+		setGroup(g.id, { selected: s });
+	}
 
-	const selectAllForGroup = (groupId: number) => {
-		const all = new Set(lineItems.filter(it => it.itemType === 'ITEM').map(it => it.tempId));
-		setPoGroups(prev => prev.map(g => g.id === groupId ? { ...g, selectedItems: all } : g));
-	};
+	function addLine() {
+		const l: Line = {
+			id: nid(),
+			itemType: 'ITEM',
+			description: '',
+			unit: '',
+			quantity: 1,
+			materialPrice: 0,
+			labourPrice: 0
+		};
+		setLines((p) => [...p, l]);
+		setGroups((p) => p.map((g) => ({ ...g, selected: new Set([...g.selected, l.id]) })));
+	}
 
-	const clearAllForGroup = (groupId: number) => {
-		setPoGroups(prev => prev.map(g => g.id === groupId ? { ...g, selectedItems: new Set() } : g));
-	};
+	function removeLine(id: number) {
+		setLines((p) => p.filter((l) => l.id !== id));
+		setGroups((p) =>
+			p.map((g) => {
+				const s = new Set(g.selected);
+				s.delete(id);
+				return { ...g, selected: s };
+			})
+		);
+	}
 
-	// Compute total for a group (ITEM only)
-	const groupTotal = (g: POGroup) =>
-		lineItems.filter(it => it.itemType === 'ITEM' && g.selectedItems.has(it.tempId)).reduce((s, it) => s + it.amount, 0);
+	async function save() {
+		if (!items.length) return alert.showWarning('กรุณาเพิ่มรายการงานอย่างน้อย 1 รายการ');
 
-	// Count selectable (non-HEADER) items
-	const selectableItems = lineItems.filter(it => it.itemType === 'ITEM');
+		if (groups.some((g) => g.selected.size === 0))
+			return alert.showWarning('ทุกใบสั่งซื้อต้องมีรายการงานอย่างน้อย 1 รายการ');
 
-	// --- Save: creates one PO per group ---
-	const handleSave = async () => {
-		if (selectableItems.length === 0) { showMsg('กรุณาเพิ่มรายการงานอย่างน้อย 1 รายการ', 'warning'); return; }
-		if (poGroups.some(g => g.selectedItems.size === 0)) { showMsg('ทีมช่างทุกกลุ่มต้องมีรายการงานอย่างน้อย 1 รายการ', 'warning'); return; }
+		const bad = groups.findIndex(
+			(g) => !validateInstallments(groupTotal(g), toInstallmentPayload(g.installments)).ok
+		);
+
+		if (bad >= 0) return alert.showWarning(`ใบสั่งซื้อที่ ${bad + 1}: ยอดรวมทุกงวดเกินยอดสุทธิ`);
 
 		setSaving(true);
+
 		try {
-			for (const group of poGroups) {
-				// Collect selected ITEM tempIds
-				const selectedSet = group.selectedItems;
+			for (const g of groups) {
+				const picked: Line[] = [];
 
-				// Build items for this group:
-				// Include all HEADERs that have at least one selected ITEM after them,
-				// and only selected ITEMs
-				const groupItemIds = new Set(lineItems
-					.filter(it => it.itemType === 'ITEM' && selectedSet.has(it.tempId))
-					.map(it => it.tempId));
-
-				// Walk lineItems: include HEADER if any following item (until next HEADER) is selected
-				const filteredItems: typeof lineItems = [];
-				for (let i = 0; i < lineItems.length; i++) {
-					const it = lineItems[i];
-					if (it.itemType === 'HEADER') {
-						// Check if any ITEM between this header and the next header is selected
-						let hasSelected = false;
-						for (let j = i + 1; j < lineItems.length; j++) {
-							if (lineItems[j].itemType === 'HEADER') break;
-							if (groupItemIds.has(lineItems[j].tempId)) { hasSelected = true; break; }
+				lines.forEach((l, i) => {
+					if (l.itemType === 'HEADER') {
+						for (let j = i + 1; j < lines.length && lines[j].itemType !== 'HEADER'; j++) {
+							if (g.selected.has(lines[j].id)) {
+								picked.push(l);
+								break;
+							}
 						}
-						if (hasSelected) filteredItems.push(it);
-					} else if (groupItemIds.has(it.tempId)) {
-						filteredItems.push(it);
-					}
-				}
-
-				const total = filteredItems.filter(it => it.itemType === 'ITEM').reduce((s, it) => s + it.amount, 0);
-
-				const body = {
-					quotationId: selectedRef?.quotationId || null,
-					workOrderId: selectedRef?.workOrderId || null,
-					teamId: group.team?.id || null,
-					date: new Date().toISOString(),
-					startDate: group.startDate || null,
-					endDate: group.endDate || null,
-					warrantyStartDate: group.warrantyStart || null,
-					warrantyEndDate: group.warrantyEnd || null,
-					subtotal: total,
-					totalAmount: total,
-					notes: group.notes || globalNotes || null,
-					// Send real items (HEADER + ITEM rows) — saved as PurchaseOrderItem
-					items: filteredItems.map((it, idx) => ({
-						itemOrder: idx,
-						itemType: it.itemType,
-						description: it.description,
-						unit: it.unit,
-						quantity: it.itemType === 'HEADER' ? 0 : it.quantity,
-						materialPrice: it.itemType === 'HEADER' ? 0 : it.materialPrice,
-						labourPrice: it.itemType === 'HEADER' ? 0 : it.labourPrice,
-					})),
-				};
-
-				const res = await fetch('/api/purchase-orders', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify(body),
+					} else if (g.selected.has(l.id)) picked.push(l);
 				});
-				if (!res.ok) throw new Error('Failed');
+
+				const po = await sendJson('/api/purchase-orders', 'POST', {
+					quotationId: ref?.quotationId || null,
+					workOrderId: ref?.workOrderId || null,
+					teamId: g.teamId || null,
+					date: new Date().toISOString(),
+					startDate: g.startDate || null,
+					endDate: g.endDate || null,
+					warrantyStartDate: g.warrantyStart || null,
+					warrantyEndDate: g.warrantyEnd || null,
+					costType: g.costType,
+					costCategory: g.costCategory || null,
+					payeeName: g.payeeName || null,
+					warrantyMonths: g.warrantyMonths ? Number(g.warrantyMonths) : null,
+					vatPercent: Number(g.vatPercent) || 0,
+					whtPercent: Number(g.whtPercent) || 0,
+					installments: g.installments.length ? toInstallmentPayload(g.installments) : undefined,
+					notes: g.notes || null,
+					items: picked.map((l, idx) => ({
+						itemOrder: idx,
+						itemType: l.itemType,
+						description: l.description,
+						unit: l.unit,
+						quantity: l.itemType === 'HEADER' ? 0 : l.quantity,
+						materialPrice: l.itemType === 'HEADER' ? 0 : l.materialPrice,
+						labourPrice: l.itemType === 'HEADER' ? 0 : l.labourPrice
+					}))
+				});
+
+				if (file) {
+					const fd = new FormData();
+					fd.append('file', file);
+					await fetch(`/api/purchase-orders/${po.id}/upload`, { method: 'POST', body: fd }).catch(() => null);
+				}
 			}
 
-			showMsg(`สร้าง ${poGroups.length} ใบสั่งซื้อเรียบร้อยแล้ว`, 'success');
-			setTimeout(() => router.push('/apps/purchase-orders'), 1500);
+			alert.showSuccess('สร้างเรียบร้อย', `${groups.length} ใบสั่งซื้อ`);
+			router.push('/apps/purchase-orders');
 		} catch {
-			showMsg('ไม่สามารถสร้าง PO ได้ กรุณาลองใหม่', 'error');
-		} finally { setSaving(false); }
-	};
-
-
-	// Generate preview PO number
-	const now = new Date();
-	const yy = String(now.getFullYear()).slice(-2);
-	const mm = String(now.getMonth() + 1).padStart(2, '0');
-	const dd = String(now.getDate()).padStart(2, '0');
-	const previewPO = `PO${yy}${mm}${dd}/Npk-XXX`;
-
-	const header = (
-		<div className="flex flex-auto flex-col py-4">
-			<Typography sx={{ fontSize: '14px', color: '#94A3B8', mb: 0.5 }}>
-				เอกสาร {'>'} ใบสั่งซื้อให้ช่าง {'>'} สร้างใหม่
-			</Typography>
-			<div className="flex flex-auto items-center justify-between">
-				<div className="flex items-center gap-8">
-					<IconButton onClick={() => router.back()}>
-						<FuseSvgIcon>lucide:arrow-left</FuseSvgIcon>
-					</IconButton>
-					<motion.span initial={{ x: -20 }} animate={{ x: 0, transition: { delay: 0.2 } }}>
-						<Typography sx={{ fontSize: '28px', fontWeight: 800, color: '#DC2626', letterSpacing: '-0.02em' }}>
-							สร้าง ใบสั่งซื้อให้ช่าง ใหม่
-						</Typography>
-					</motion.span>
-				</div>
-				<Paper sx={{ px: 2, py: 1, borderRadius: '10px', border: '1px solid #E2E8F0', bgcolor: '#F8FAFC' }} elevation={0}>
-					<Typography sx={{ fontSize: '12px', color: '#94A3B8' }}>เลขที่ (ตัวอย่าง)</Typography>
-					<Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#0284C7' }}>{previewPO}</Typography>
-					<Typography sx={{ fontSize: '11px', color: '#94A3B8' }}>สร้างอัตโนมัติเมื่อบันทึก</Typography>
-				</Paper>
-			</div>
-		</div>
-	);
-
-	const content = (
-		<Paper className="flex h-full w-full flex-auto flex-col overflow-auto rounded-b-none" elevation={0}>
-			<Box sx={{ px: { xs: 2, md: 3 }, py: 2, maxWidth: 1100, mx: 'auto', width: '100%' }}>
-				<motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>
-
-					{/* ══ 1. อ้างอิงใบเสนอราคา ══ */}
-					<Box sx={{ mb: 3, p: 2.5, borderRadius: '14px', border: '1px solid #E2E8F0', bgcolor: '#FAFBFC' }}>
-						<Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-							<Box sx={{ width: 28, height: 28, borderRadius: '8px', background: 'linear-gradient(135deg,#0EA5E9,#0284C7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-								<FuseSvgIcon sx={{ color: '#fff' }} size={16}>lucide:search</FuseSvgIcon>
-							</Box>
-							<Typography sx={{ fontSize: '15px', fontWeight: 700, color: '#0284C7' }}>อ้างอิงใบเสนอราคา</Typography>
-						</Box>
-						<Autocomplete
-							options={refResults}
-							getOptionLabel={(op: RefResult) => op?.label || ''}
-							loading={refLoading}
-							onInputChange={(_, val) => setRefSearch(val)}
-							onChange={(_, val) => handleSelectRef(val)}
-							renderInput={(params) => (
-								<TextField {...params} placeholder="ค้นหาด้วย เลขใบเสนอราคา, WO, PO หรือ ชื่อลูกค้า..."
-									sx={fieldSx}
-									InputProps={{
-										...params.InputProps,
-										endAdornment: (
-											<>
-												{refLoading ? <CircularProgress color="inherit" size={20} /> : null}
-												{params.InputProps.endAdornment}
-											</>
-										),
-									}}
-								/>
-							)}
-							renderOption={(props, option) => (
-								<li {...props} key={option.quotationId || option.workOrderId}>
-									<Box>
-										<Typography sx={{ fontSize: '14px', fontWeight: 600 }}>{option.quotationNumber}</Typography>
-										<Typography sx={{ fontSize: '12px', color: '#64748B' }}>
-											{option.customerName} {option.branchName && `(${option.branchName})`}
-											{option.woNumber && ` • WO: ${option.woNumber}`}
-										</Typography>
-										{option.projectName && (
-											<Typography sx={{ fontSize: '12px', color: '#059669', fontWeight: 500 }}>{option.projectName}</Typography>
-										)}
-									</Box>
-								</li>
-							)}
-							noOptionsText="ไม่พบข้อมูล"
-						/>
-						{selectedRef && (
-							<Paper sx={{ mt: 2, p: 2, borderRadius: '10px', border: '1px solid #D1FAE5', bgcolor: '#F0FDF4' }} elevation={0}>
-								<Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 1 }}>
-									<Box>
-										<Typography sx={{ fontSize: '11px', color: '#6B7280' }}>ใบเสนอราคา</Typography>
-										<Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#0284C7' }}>{selectedRef.quotationNumber}</Typography>
-									</Box>
-									<Box>
-										<Typography sx={{ fontSize: '11px', color: '#6B7280' }}>ลูกค้า</Typography>
-										<Typography sx={{ fontSize: '13px', fontWeight: 600 }}>{selectedRef.customerName}</Typography>
-									</Box>
-									{selectedRef.projectName && (
-										<Box>
-											<Typography sx={{ fontSize: '11px', color: '#6B7280' }}>โครงการ</Typography>
-											<Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#059669' }}>{selectedRef.projectName}</Typography>
-										</Box>
-									)}
-									{selectedRef.woNumber && (
-										<Box>
-											<Typography sx={{ fontSize: '11px', color: '#6B7280' }}>เลข WO</Typography>
-											<Chip label={selectedRef.woNumber} size="small" sx={{ bgcolor: '#D1FAE5', color: '#166534', fontWeight: 700, fontSize: '12px' }} />
-										</Box>
-									)}
-									<Box>
-										<Typography sx={{ fontSize: '11px', color: '#6B7280' }}>ยอดใบเสนอ</Typography>
-										<Typography sx={{ fontSize: '15px', fontWeight: 700 }}>{fmt(selectedRef.subtotal)} บาท</Typography>
-									</Box>
-								</Box>
-							</Paper>
-						)}
-					</Box>
-
-					{/* ══ 2. รายการงาน (editable table) ══ */}
-					<Box sx={{ mb: 3, p: 2.5, borderRadius: '14px', border: '1px solid #E2E8F0' }}>
-						<Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-							<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-								<Box sx={{ width: 28, height: 28, borderRadius: '8px', background: 'linear-gradient(135deg,#8B5CF6,#7C3AED)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-									<FuseSvgIcon sx={{ color: '#fff' }} size={16}>lucide:list</FuseSvgIcon>
-								</Box>
-								<Typography sx={{ fontSize: '15px', fontWeight: 700, color: '#7C3AED' }}>รายการงาน</Typography>
-								<Chip label={`${selectableItems.length} รายการ`} size="small" sx={{ bgcolor: '#EDE9FE', color: '#6D28D9', fontWeight: 600, fontSize: '11px' }} />
-							</Box>
-							<Button variant="outlined" size="small" startIcon={<FuseSvgIcon size={16}>lucide:plus</FuseSvgIcon>}
-								onClick={addLineItem}
-								sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600, borderColor: '#7C3AED', color: '#7C3AED', '&:hover': { bgcolor: '#EDE9FE' } }}>
-								เพิ่มรายการ
-							</Button>
-						</Box>
-
-						{lineItems.length === 0 ? (
-							<Box sx={{ py: 4, textAlign: 'center', color: '#94A3B8' }}>
-								<FuseSvgIcon size={40} sx={{ mb: 1, color: '#CBD5E1' }}>lucide:clipboard-list</FuseSvgIcon>
-								<Typography sx={{ fontSize: '14px' }}>ยังไม่มีรายการ — เลือกใบเสนอราคาด้านบน หรือกด "+ เพิ่มรายการ"</Typography>
-							</Box>
-						) : (
-							<Box sx={{ overflowX: 'auto' }}>
-								<Table size="small" sx={{ '& td, & th': { fontSize: '13px', py: 0.8 }, minWidth: 750 }}>
-									<TableHead>
-										<TableRow sx={{ '& th': { fontWeight: 700, color: '#475569', bgcolor: '#F8FAFC', borderBottom: '2px solid #E2E8F0', whiteSpace: 'nowrap' } }}>
-											<TableCell sx={{ width: 36, textAlign: 'center' }}>#</TableCell>
-											<TableCell>รายละเอียด</TableCell>
-											<TableCell sx={{ width: 70 }}>หน่วย</TableCell>
-											<TableCell sx={{ width: 80 }} align="right">จำนวน</TableCell>
-											<TableCell sx={{ width: 110 }} align="right">ราคาวัสดุ</TableCell>
-											<TableCell sx={{ width: 110 }} align="right">ค่าแรง</TableCell>
-											<TableCell sx={{ width: 120 }} align="right">รวม</TableCell>
-											<TableCell sx={{ width: 44 }}></TableCell>
-										</TableRow>
-									</TableHead>
-									<TableBody>
-									{lineItems.map((item, idx) => {
-										const isHeader = item.itemType === 'HEADER';
-										if (isHeader) {
-											// HEADER row — yellow background, spans all columns
-											return (
-												<TableRow key={item.tempId} sx={{ bgcolor: '#FFF8E1', '& td': { borderBottom: '1px solid #FDE68A' } }}>
-													<TableCell sx={{ textAlign: 'center', color: '#D97706', fontWeight: 800, fontSize: '12px !important' }}>
-														{idx + 1}
-													</TableCell>
-													<TableCell colSpan={5}>
-														<TextField
-															value={item.description} size="small" fullWidth
-															onChange={(e) => updateLineItem(item.tempId, 'description', e.target.value)}
-															placeholder="ชื่อหัวข้อ"
-															sx={{
-																'& .MuiOutlinedInput-root': { borderRadius: '6px', fontSize: '13px', fontWeight: 700, color: '#92400E' },
-																'& fieldset': { border: '1px solid transparent' },
-																'&:hover fieldset': { border: '1px solid #FDE68A' },
-															}}
-														/>
-													</TableCell>
-													<TableCell align="right" sx={{ color: '#D97706', fontWeight: 700 }}>—</TableCell>
-													<TableCell align="center">
-														<Tooltip title="ลบหัวข้อ">
-															<IconButton size="small" onClick={() => removeLineItem(item.tempId)}
-																sx={{ color: '#94A3B8', '&:hover': { color: '#EF4444', bgcolor: '#FEF2F2' } }}>
-																<FuseSvgIcon size={16}>lucide:trash-2</FuseSvgIcon>
-															</IconButton>
-														</Tooltip>
-													</TableCell>
-												</TableRow>
-											);
-										}
-										// ITEM row — normal editable
-										return (
-											<TableRow key={item.tempId}
-												sx={{
-													'& td': { borderBottom: '1px solid #F1F5F9' },
-													bgcolor: item.fromQuotation ? 'transparent' : '#FFFBEB',
-												}}>
-												<TableCell sx={{ textAlign: 'center', color: '#94A3B8', fontWeight: 600 }}>{idx + 1}</TableCell>
-												<TableCell>
-													<TextField
-														value={item.description} size="small" fullWidth
-														onChange={(e) => updateLineItem(item.tempId, 'description', e.target.value)}
-														sx={{ '& .MuiOutlinedInput-root': { borderRadius: '6px', fontSize: '13px' }, '& fieldset': { border: '1px solid transparent' }, '&:hover fieldset': { border: '1px solid #E2E8F0' }, '& .Mui-focused fieldset': { border: '1px solid #7C3AED !important' } }}
-														placeholder="รายละเอียดงาน"
-													/>
-												</TableCell>
-												<TableCell>
-													<TextField
-														value={item.unit} size="small"
-														onChange={(e) => updateLineItem(item.tempId, 'unit', e.target.value)}
-														sx={{ width: 60, '& .MuiOutlinedInput-root': { borderRadius: '6px', fontSize: '13px' }, '& fieldset': { border: '1px solid transparent' }, '&:hover fieldset': { border: '1px solid #E2E8F0' } }}
-														placeholder="หน่วย"
-													/>
-												</TableCell>
-												<TableCell align="right">
-													<TextField
-														value={item.quantity} size="small" type="number"
-														onChange={(e) => updateLineItem(item.tempId, 'quantity', Number(e.target.value))}
-														inputProps={{ style: { textAlign: 'right' }, min: 0 }}
-														sx={{ width: 70, '& .MuiOutlinedInput-root': { borderRadius: '6px', fontSize: '13px' }, '& fieldset': { border: '1px solid transparent' }, '&:hover fieldset': { border: '1px solid #E2E8F0' } }}
-													/>
-												</TableCell>
-												<TableCell align="right">
-													<TextField
-														value={item.materialPrice} size="small" type="number"
-														onChange={(e) => updateLineItem(item.tempId, 'materialPrice', Number(e.target.value))}
-														inputProps={{ style: { textAlign: 'right' }, min: 0 }}
-														sx={{ width: 100, '& .MuiOutlinedInput-root': { borderRadius: '6px', fontSize: '13px' }, '& fieldset': { border: '1px solid transparent' }, '&:hover fieldset': { border: '1px solid #E2E8F0' } }}
-													/>
-												</TableCell>
-												<TableCell align="right">
-													<TextField
-														value={item.labourPrice} size="small" type="number"
-														onChange={(e) => updateLineItem(item.tempId, 'labourPrice', Number(e.target.value))}
-														inputProps={{ style: { textAlign: 'right' }, min: 0 }}
-														sx={{ width: 100, '& .MuiOutlinedInput-root': { borderRadius: '6px', fontSize: '13px' }, '& fieldset': { border: '1px solid transparent' }, '&:hover fieldset': { border: '1px solid #E2E8F0' } }}
-													/>
-												</TableCell>
-												<TableCell align="right" sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#1E293B', whiteSpace: 'nowrap' }}>
-													{fmt(item.amount)}
-												</TableCell>
-												<TableCell align="center">
-													<Tooltip title="ลบรายการ">
-														<IconButton size="small" onClick={() => removeLineItem(item.tempId)}
-															sx={{ color: '#94A3B8', '&:hover': { color: '#EF4444', bgcolor: '#FEF2F2' } }}>
-															<FuseSvgIcon size={16}>lucide:trash-2</FuseSvgIcon>
-														</IconButton>
-													</Tooltip>
-												</TableCell>
-											</TableRow>
-										);
-									})}
-									</TableBody>
-								</Table>
-								<Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1, px: 1 }}>
-									<Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#1E293B' }}>
-										ยอดรวมทั้งหมด: <Box component="span" sx={{ color: '#7C3AED', fontSize: '16px' }}>{fmt(lineItems.filter(it => it.itemType === 'ITEM').reduce((s, it) => s + it.amount, 0))}</Box> บาท
-									</Typography>
-								</Box>
-							</Box>
-						)}
-					</Box>
-
-					{/* ══ 3. กลุ่มทีมช่าง (หลายทีมได้) ══ */}
-					<Box sx={{ mb: 3 }}>
-						<Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-							<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-								<Box sx={{ width: 28, height: 28, borderRadius: '8px', background: 'linear-gradient(135deg,#F59E0B,#D97706)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-									<FuseSvgIcon sx={{ color: '#fff' }} size={16}>lucide:users</FuseSvgIcon>
-								</Box>
-								<Typography sx={{ fontSize: '15px', fontWeight: 700, color: '#D97706' }}>ทีมช่าง & การแบ่งงาน</Typography>
-								<Chip label={`${poGroups.length} ทีม`} size="small" sx={{ bgcolor: '#FEF3C7', color: '#92400E', fontWeight: 600, fontSize: '11px' }} />
-							</Box>
-							<Button variant="outlined" size="small" startIcon={<FuseSvgIcon size={16}>lucide:plus</FuseSvgIcon>}
-								onClick={addPoGroup}
-								sx={{ borderRadius: '8px', textTransform: 'none', fontWeight: 600, borderColor: '#F59E0B', color: '#D97706', '&:hover': { bgcolor: '#FEF3C7' } }}>
-								+ เพิ่มทีม
-							</Button>
-						</Box>
-						<Alert severity="info" sx={{ mb: 2, borderRadius: '10px', fontSize: '13px' }}>
-							แต่ละทีมจะสร้าง <strong>ใบสั่งซื้อแยก</strong> — เลือกรายการงานที่ต้องการให้แต่ละทีมรับผิดชอบ
-						</Alert>
-
-						{poGroups.map((group, gIdx) => {
-							const groupLineItems = lineItems.filter(it => group.selectedItems.has(it.tempId));
-							const total = groupLineItems.reduce((s, it) => s + it.amount, 0);
-							return (
-								<Paper key={group.id} elevation={0} sx={{
-									mb: 2, borderRadius: '14px',
-									border: `2px solid ${gIdx === 0 ? '#F59E0B' : '#E2E8F0'}`,
-									overflow: 'hidden',
-								}}>
-									{/* Group header */}
-									<Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2.5, py: 1.5, bgcolor: gIdx === 0 ? '#FFFBEB' : '#FAFBFC', borderBottom: '1px solid #E2E8F0' }}>
-										<Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-											<Box sx={{ width: 24, height: 24, borderRadius: '50%', bgcolor: '#F59E0B', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-												<Typography sx={{ fontSize: '12px', fontWeight: 800, color: '#fff' }}>{gIdx + 1}</Typography>
-											</Box>
-											<Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#92400E' }}>
-												ใบสั่งซื้อที่ {gIdx + 1}
-											</Typography>
-											<Chip label={`ยอด ${fmt(total)} บาท`} size="small"
-												sx={{ bgcolor: total > 0 ? '#D1FAE5' : '#F1F5F9', color: total > 0 ? '#166534' : '#64748B', fontWeight: 700, fontSize: '12px' }} />
-										</Box>
-										{poGroups.length > 1 && (
-											<IconButton size="small" onClick={() => removePoGroup(group.id)}
-												sx={{ color: '#94A3B8', '&:hover': { color: '#EF4444', bgcolor: '#FEF2F2' } }}>
-												<FuseSvgIcon size={18}>lucide:x</FuseSvgIcon>
-											</IconButton>
-										)}
-									</Box>
-
-									<Box sx={{ p: 2.5 }}>
-										{/* Team selector */}
-										<Autocomplete
-											options={teams}
-											getOptionLabel={(op) => `${op.leaderName} (${op.teamName})`}
-											value={group.team}
-											onChange={(_, val) => updateGroup(group.id, 'team', val)}
-											renderInput={(params) => (
-												<TextField {...params} label="เลือกทีมช่าง" placeholder="เลือกทีมช่าง" sx={fieldSx}
-													InputProps={{ ...params.InputProps, startAdornment: <FuseSvgIcon size={18} sx={{ color: '#F59E0B', mr: 0.5 }}>lucide:user-check</FuseSvgIcon> }}
-												/>
-											)}
-											sx={{ mb: 2 }}
-										/>
-										{group.team?.leaderAddress && (
-											<TextField label="ที่อยู่ทีมช่าง" fullWidth value={group.team.leaderAddress} InputProps={{ readOnly: true }}
-												sx={{ mb: 2, ...fieldSx, '& .MuiOutlinedInput-root': { borderRadius: '10px', bgcolor: '#F8FAFC' } }} />
-										)}
-
-										{/* Item selection for this group */}
-										{lineItems.length > 0 && (
-											<Box sx={{ mb: 2 }}>
-												<Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-													<Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#475569' }}>
-														เลือกรายการงาน ({group.selectedItems.size}/{selectableItems.length})
-													</Typography>
-													<Box sx={{ display: 'flex', gap: 1 }}>
-														<Button size="small" onClick={() => selectAllForGroup(group.id)}
-															sx={{ fontSize: '11px', textTransform: 'none', color: '#0284C7', minWidth: 0 }}>เลือกทั้งหมด</Button>
-														<Button size="small" onClick={() => clearAllForGroup(group.id)}
-															sx={{ fontSize: '11px', textTransform: 'none', color: '#94A3B8', minWidth: 0 }}>ยกเลิกทั้งหมด</Button>
-													</Box>
-												</Box>
-												<Box sx={{ border: '1px solid #E2E8F0', borderRadius: '10px', overflow: 'hidden' }}>
-													{lineItems.map((item, idx) => {
-														const isHeader = item.itemType === 'HEADER';
-														if (isHeader) {
-															// HEADER: show as a non-selectable section label
-															return (
-																<Box key={item.tempId}
-																	sx={{
-																		display: 'flex', alignItems: 'center', gap: 1.5, px: 1.5, py: 0.7,
-																		bgcolor: '#FFF8E1',
-																		borderBottom: idx < lineItems.length - 1 ? '1px solid #FDE68A' : 'none',
-																	}}>
-																	<FuseSvgIcon size={14} sx={{ color: '#D97706', flexShrink: 0 }}>lucide:chevron-right</FuseSvgIcon>
-																	<Typography sx={{ fontSize: '12px', fontWeight: 800, color: '#92400E', flex: 1 }}>
-																		{item.description || '(หัวข้อ)'}
-																	</Typography>
-																</Box>
-															);
-														}
-														// ITEM: show with checkbox
-														const checked = group.selectedItems.has(item.tempId);
-														return (
-															<Box key={item.tempId}
-																onClick={() => toggleGroupItem(group.id, item.tempId)}
-																sx={{
-																	display: 'flex', alignItems: 'center', gap: 1.5, px: 1.5, py: 0.8,
-																	cursor: 'pointer', transition: 'all 0.15s',
-																	bgcolor: checked ? '#EFF6FF' : 'transparent',
-																	borderBottom: idx < lineItems.length - 1 ? '1px solid #F1F5F9' : 'none',
-																	'&:hover': { bgcolor: checked ? '#DBEAFE' : '#F8FAFC' },
-																}}>
-																<Checkbox checked={checked} size="small" sx={{ p: 0, color: '#CBD5E1', '&.Mui-checked': { color: '#2563EB' } }} />
-																<Typography sx={{ fontSize: '13px', flex: 1, color: checked ? '#1E293B' : '#94A3B8' }}>
-																	{idx + 1}. {item.description || '(ไม่มีชื่อ)'}
-																	{item.unit && <Box component="span" sx={{ color: '#94A3B8', ml: 0.5 }}>({item.quantity} {item.unit})</Box>}
-																</Typography>
-																<Typography sx={{ fontSize: '12px', fontWeight: 600, fontVariantNumeric: 'tabular-nums', color: checked ? '#2563EB' : '#CBD5E1', whiteSpace: 'nowrap' }}>
-																	{fmt(item.amount)} ฿
-																</Typography>
-															</Box>
-														);
-													})}
-												</Box>
-											</Box>
-										)}
-
-										{/* Dates */}
-										<Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mb: 2 }}>
-											<DatePickerField label="วันเริ่มงาน" value={group.startDate}
-												onChange={(v) => updateGroup(group.id, 'startDate', v)} />
-											<DatePickerField label="วันสิ้นสุด" value={group.endDate}
-												onChange={(v) => updateGroup(group.id, 'endDate', v)} />
-											<DatePickerField label="เริ่มประกัน" value={group.warrantyStart}
-												onChange={(v) => updateGroup(group.id, 'warrantyStart', v)} />
-											<DatePickerField label="สิ้นสุดประกัน" value={group.warrantyEnd}
-												onChange={(v) => updateGroup(group.id, 'warrantyEnd', v)} />
-										</Box>
-
-										<TextField label="หมายเหตุ (สำหรับทีมนี้)" fullWidth multiline rows={2}
-											value={group.notes}
-											onChange={(e) => updateGroup(group.id, 'notes', e.target.value)}
-											sx={fieldSx} />
-
-										{/* Group total summary */}
-										<Box sx={{ mt: 2, p: 1.5, borderRadius: '10px', bgcolor: '#F0FDF4', border: '1px solid #BBF7D0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-											<Typography sx={{ fontSize: '13px', color: '#059669', fontWeight: 600 }}>
-												ยอดรวมใบสั่งซื้อนี้ ({group.selectedItems.size} รายการ)
-											</Typography>
-											<Typography sx={{ fontSize: '16px', fontWeight: 800, color: '#166534', fontVariantNumeric: 'tabular-nums' }}>
-												{fmt(groupTotal(group))} บาท
-											</Typography>
-										</Box>
-									</Box>
-								</Paper>
-							);
-						})}
-					</Box>
-
-					{/* ══ 4. อัพโหลดใบเสนอราคาช่าง ══ */}
-					<Box sx={{ mb: 3, p: 2.5, borderRadius: '14px', border: '1px solid #E2E8F0' }}>
-						<Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-							<Box sx={{ width: 28, height: 28, borderRadius: '8px', background: 'linear-gradient(135deg,#0284C7,#0369A1)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-								<FuseSvgIcon sx={{ color: '#fff' }} size={16}>lucide:upload</FuseSvgIcon>
-							</Box>
-							<Typography sx={{ fontSize: '15px', fontWeight: 700, color: '#0284C7' }}>อัพโหลดใบเสนอราคาช่าง (ถ้ามี)</Typography>
-						</Box>
-						<Box sx={{ border: '2px dashed #CBD5E1', borderRadius: '10px', p: 3, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, bgcolor: '#FAFBFC', cursor: 'pointer', '&:hover': { borderColor: '#0284C7', bgcolor: '#F0F9FF' }, transition: 'all 0.2s' }}
-							onClick={() => document.getElementById('quote-file-input')?.click()}>
-							<input id="quote-file-input" type="file" accept="image/*,.pdf" style={{ display: 'none' }} onChange={(e) => setQuoteFile(e.target.files?.[0] || null)} />
-							{quoteFile ? (
-								<>
-									<FuseSvgIcon sx={{ color: '#22C55E' }} size={32}>lucide:check-circle</FuseSvgIcon>
-									<Typography sx={{ fontSize: '14px', fontWeight: 600, color: '#22C55E' }}>{quoteFile.name}</Typography>
-								</>
-							) : (
-								<>
-									<FuseSvgIcon sx={{ color: '#94A3B8' }} size={40}>lucide:camera</FuseSvgIcon>
-									<Typography sx={{ fontSize: '14px', color: '#94A3B8' }}>ถ่ายรูป หรือ เลือกไฟล์ (รูปภาพ, PDF)</Typography>
-								</>
-							)}
-						</Box>
-					</Box>
-
-					{/* ══ หมายเหตุทั่วไป ══ */}
-					<TextField label="หมายเหตุทั่วไป" fullWidth multiline rows={2}
-						value={globalNotes} onChange={(e) => setGlobalNotes(e.target.value)}
-						sx={{ mb: 3, ...fieldSx }} />
-
-					{/* ══ Summary ══ */}
-					<Box sx={{ mb: 3, p: 2, borderRadius: '14px', border: '2px solid #0284C7', bgcolor: '#F0F9FF' }}>
-						<Typography sx={{ fontSize: '14px', fontWeight: 700, color: '#0284C7', mb: 1 }}>สรุปการสร้างใบสั่งซื้อ</Typography>
-						{poGroups.map((g, i) => (
-							<Box key={g.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 0.5 }}>
-								<Typography sx={{ fontSize: '13px', color: '#475569' }}>
-									ใบที่ {i + 1}: {g.team ? `${g.team.leaderName} (${g.team.teamName})` : <Box component="span" sx={{ color: '#F59E0B' }}>ยังไม่ได้เลือกทีม</Box>}
-									{' '}— {g.selectedItems.size} รายการ
-								</Typography>
-								<Typography sx={{ fontSize: '14px', fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: '#0284C7' }}>
-									{fmt(groupTotal(g))} บาท
-								</Typography>
-							</Box>
-						))}
-						<Divider sx={{ my: 1 }} />
-						<Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-							<Typography sx={{ fontSize: '15px', fontWeight: 700, color: '#0284C7' }}>ยอดรวมทั้งหมด</Typography>
-							<Typography sx={{ fontSize: '22px', fontWeight: 800, color: '#1E293B', fontVariantNumeric: 'tabular-nums' }}>
-								{fmt(poGroups.reduce((s, g) => s + groupTotal(g), 0))} บาท
-							</Typography>
-						</Box>
-					</Box>
-
-					{/* ══ Buttons ══ */}
-					<Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1.5, pb: 3 }}>
-						<Button variant="outlined" size="large" onClick={() => router.back()}
-							sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, fontSize: '15px', px: 4, color: '#64748B', borderColor: '#E2E8F0' }}>
-							ยกเลิก
-						</Button>
-						<Button variant="contained" size="large" onClick={handleSave} disabled={saving}
-							sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700, fontSize: '15px', px: 4, background: 'linear-gradient(135deg, #22C55E 0%, #16A34A 100%)', '&:hover': { background: 'linear-gradient(135deg, #16A34A 0%, #15803D 100%)' } }}>
-							{saving ? 'กำลังบันทึก...' : `บันทึก ${poGroups.length > 1 ? `(${poGroups.length} ใบ)` : ''}`}
-						</Button>
-					</Box>
-
-				</motion.div>
-			</Box>
-		</Paper>
-	);
+			alert.showError('ไม่สามารถสร้างใบสั่งซื้อได้ กรุณาลองใหม่');
+			setSaving(false);
+		}
+	}
 
 	return (
 		<>
-			<Root header={header} content={content} scroll="content" />
+			<FormPageHeader
+				title="สร้างใบสั่งซื้อให้ช่าง"
+				subtitle="เลือกใบเสนอราคา/WO อ้างอิง แล้วแบ่งงานให้ทีมช่างได้หลายทีม (1 ทีม = 1 ใบสั่งซื้อ)"
+				backHref="/apps/purchase-orders"
+			/>
+			<div className="flex flex-col gap-6">
+				<Card>
+					<CardHeader title="อ้างอิงใบเสนอราคา" />
+					<RefPicker<RefResult>
+						label="ค้นหาใบเสนอราคา หรือ WO"
+						url="/api/purchase-orders/search-ref"
+						searchParam="q"
+						minChars={2}
+						getId={(r) => r.quotationId || r.workOrderId || r.quotationNumber}
+						getLabel={(r) =>
+							`${r.quotationNumber} — ${r.customerName ?? ''}${r.projectName ? ` (${r.projectName})` : ''}${r.woNumber ? ` • WO ${r.woNumber}` : ''}`
+						}
+						value={ref}
+						onChange={pickRef}
+						placeholder="พิมพ์อย่างน้อย 2 ตัวอักษร"
+						emptyText="พิมพ์เพื่อค้นหา"
+					/>
+					{ref && (
+						<InfoCard
+							title="ข้อมูลอ้างอิง"
+							rows={[
+								['ใบเสนอราคา', ref.quotationNumber],
+								['ลูกค้า', ref.customerName],
+								['สาขา', ref.branchName],
+								['โครงการ', ref.projectName],
+								['WO', ref.woNumber]
+							]}
+						/>
+					)}
+				</Card>
 
-			{/* SweetAlert-style modal — renders above all layout layers */}
-			<Dialog
-				open={snackbar.open}
-				onClose={() => setSnackbar(p => ({ ...p, open: false }))}
-				TransitionComponent={Fade}
-				PaperProps={{
-					sx: {
-						borderRadius: '20px',
-						px: 4, py: 4,
-						minWidth: 320,
-						maxWidth: 420,
-						textAlign: 'center',
-						boxShadow: '0 25px 60px rgba(0,0,0,0.18)',
-					},
-				}}
-				slotProps={{ backdrop: { sx: { backdropFilter: 'blur(4px)', bgcolor: 'rgba(0,0,0,0.35)' } } }}
-			>
-				{/* Icon */}
-				<Box sx={{
-					width: 72, height: 72, borderRadius: '50%', mx: 'auto', mb: 2,
-					display: 'flex', alignItems: 'center', justifyContent: 'center',
-					bgcolor:
-						snackbar.severity === 'success' ? '#D1FAE5' :
-						snackbar.severity === 'error' ? '#FEE2E2' : '#FEF3C7',
-				}}>
-					<FuseSvgIcon size={36} sx={{
-						color:
-							snackbar.severity === 'success' ? '#059669' :
-							snackbar.severity === 'error' ? '#DC2626' : '#D97706',
-					}}>
-						{snackbar.severity === 'success' ? 'lucide:check-circle' :
-							snackbar.severity === 'error' ? 'lucide:x-circle' : 'lucide:alert-triangle'}
-					</FuseSvgIcon>
-				</Box>
+				<Card>
+					<CardHeader
+						title="รายการงาน"
+						action={
+							<Button
+								variant="dashed"
+								icon={<Plus size={18} />}
+								onClick={addLine}
+							>
+								เพิ่มรายการ
+							</Button>
+						}
+					/>
+					<div className="overflow-x-auto">
+						<table className="w-full min-w-[820px] border-collapse">
+							<thead>
+								<tr>
+									{['รายละเอียด', 'จำนวน', 'หน่วย', 'ค่าของ/หน่วย', 'ค่าแรง/หน่วย', 'จำนวนเงิน'].map(
+										(h, i) => (
+											<th
+												key={h}
+												scope="col"
+												className={`bg-surface-2 font-display text-ink-muted px-2 py-2.5 text-[13px] font-medium whitespace-nowrap ${i > 2 ? 'text-right' : 'text-left'}`}
+											>
+												{h}
+											</th>
+										)
+									)}
+									<th className="bg-surface-2">
+										<span className="sr-only">ลบ</span>
+									</th>
+								</tr>
+							</thead>
+							<tbody>
+								{lines.length === 0 && (
+									<tr>
+										<td
+											colSpan={7}
+											className="text-ink-muted px-3 py-8 text-center"
+										>
+											เลือกใบเสนอราคาเพื่อดึงรายการ หรือเพิ่มรายการเอง
+										</td>
+									</tr>
+								)}
+								{lines.map((l) =>
+									l.itemType === 'HEADER' ? (
+										<tr
+											key={l.id}
+											className="border-line bg-tint/60 border-t"
+										>
+											<td
+												colSpan={7}
+												className="text-primary-ink px-2 py-2 font-semibold"
+											>
+												{l.description}
+											</td>
+										</tr>
+									) : (
+										<tr
+											key={l.id}
+											className="border-line border-t"
+										>
+											<td className="min-w-56 px-2 py-2">
+												<Input
+													aria-label="รายละเอียดรายการ"
+													value={l.description}
+													onChange={(e) => setLine(l.id, { description: e.target.value })}
+												/>
+											</td>
+											<td className="w-24 px-2 py-2">
+												<input
+													aria-label="จำนวน"
+													type="number"
+													className={numCls}
+													value={l.quantity}
+													onChange={(e) =>
+														setLine(l.id, { quantity: Number(e.target.value) })
+													}
+												/>
+											</td>
+											<td className="w-28 px-2 py-2">
+												<Input
+													aria-label="หน่วย"
+													value={l.unit}
+													onChange={(e) => setLine(l.id, { unit: e.target.value })}
+												/>
+											</td>
+											<td className="w-36 px-2 py-2">
+												<input
+													aria-label="ค่าของต่อหน่วย"
+													type="number"
+													className={numCls}
+													value={l.materialPrice}
+													onChange={(e) =>
+														setLine(l.id, { materialPrice: Number(e.target.value) })
+													}
+												/>
+											</td>
+											<td className="w-36 px-2 py-2">
+												<input
+													aria-label="ค่าแรงต่อหน่วย"
+													type="number"
+													className={numCls}
+													value={l.labourPrice}
+													onChange={(e) =>
+														setLine(l.id, { labourPrice: Number(e.target.value) })
+													}
+												/>
+											</td>
+											<td className="px-2 py-2 text-right font-semibold whitespace-nowrap tabular-nums">
+												{formatMoney(amountOf(l))}
+											</td>
+											<td className="px-2">
+												<IconButton
+													aria-label="ลบรายการ"
+													onClick={() => removeLine(l.id)}
+												>
+													<Trash2 size={18} />
+												</IconButton>
+											</td>
+										</tr>
+									)
+								)}
+							</tbody>
+						</table>
+					</div>
+				</Card>
 
-				{/* Title */}
-				<Typography sx={{
-					fontSize: '18px', fontWeight: 800, mb: 1,
-					color:
-						snackbar.severity === 'success' ? '#059669' :
-						snackbar.severity === 'error' ? '#DC2626' : '#D97706',
-				}}>
-					{snackbar.severity === 'success' ? 'สำเร็จ' :
-						snackbar.severity === 'error' ? 'เกิดข้อผิดพลาด' : 'แจ้งเตือน'}
-				</Typography>
+				{groups.map((g, gi) => (
+					<Card key={g.id}>
+						<CardHeader
+							title={`ใบสั่งซื้อที่ ${gi + 1}`}
+							action={
+								groups.length > 1 && (
+									<Button
+										variant="ghost"
+										icon={<Trash2 size={18} />}
+										onClick={() => setGroups((p) => p.filter((x) => x.id !== g.id))}
+									>
+										ลบกลุ่มนี้
+									</Button>
+								)
+							}
+						/>
+						<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+							<Field label="ประเภทต้นทุน">
+								{(id) => (
+									<Select
+										id={id}
+										value={g.costType}
+										onChange={(e) =>
+											setGroup(g.id, { costType: e.target.value as Group['costType'] })
+										}
+									>
+										{COST_TYPES.map((c) => (
+											<option
+												key={c.value}
+												value={c.value}
+											>
+												{c.label}
+											</option>
+										))}
+									</Select>
+								)}
+							</Field>
+							<Field
+								label="หมวดใบสำคัญจ่าย"
+								hint="ใช้จัดกลุ่มตอนออกใบสำคัญจ่าย"
+							>
+								{(id) => (
+									<Input
+										id={id}
+										value={g.costCategory}
+										onChange={(e) => setGroup(g.id, { costCategory: e.target.value })}
+									/>
+								)}
+							</Field>
+							<Field
+								label="ทีมช่าง"
+								className={g.costType === 'LABOUR' ? 'sm:col-span-2' : undefined}
+							>
+								{(id) => (
+									<Select
+										id={id}
+										value={g.teamId}
+										onChange={(e) => setGroup(g.id, { teamId: e.target.value })}
+									>
+										<option value="">เลือกทีมช่าง</option>
+										{teams.map((t) => (
+											<option
+												key={t.id}
+												value={t.id}
+											>
+												{t.teamName}
+											</option>
+										))}
+									</Select>
+								)}
+							</Field>
+							{g.costType !== 'LABOUR' && (
+								<Field
+									label="ผู้รับเงิน / ร้านค้า"
+									hint="กรณีไม่ใช่ทีมช่าง"
+								>
+									{(id) => (
+										<Input
+											id={id}
+											value={g.payeeName}
+											onChange={(e) => setGroup(g.id, { payeeName: e.target.value })}
+										/>
+									)}
+								</Field>
+							)}
+							<Field label="วันเริ่มงาน">
+								{(id) => (
+									<DateInput
+										id={id}
+										value={g.startDate}
+										onChange={(e) => setGroup(g.id, { startDate: e.target.value })}
+									/>
+								)}
+							</Field>
+							<Field label="กำหนดเสร็จ">
+								{(id) => (
+									<DateInput
+										id={id}
+										value={g.endDate}
+										onChange={(e) => setGroup(g.id, { endDate: e.target.value })}
+									/>
+								)}
+							</Field>
+							<Field label="วันเริ่มประกัน">
+								{(id) => (
+									<DateInput
+										id={id}
+										value={g.warrantyStart}
+										onChange={(e) => setWarranty(g, { warrantyStart: e.target.value })}
+									/>
+								)}
+							</Field>
+							<Field
+								label="ระยะเวลาประกัน"
+								hint="เลือกแล้วคำนวณวันสิ้นสุดให้"
+							>
+								{(id) => (
+									<Select
+										id={id}
+										value={g.warrantyMonths}
+										onChange={(e) => setWarranty(g, { warrantyMonths: e.target.value })}
+									>
+										<option value="">ไม่ระบุ</option>
+										{[3, 6, 12, 24].map((m) => (
+											<option
+												key={m}
+												value={m}
+											>
+												{m % 12 === 0 ? `${m / 12} ปี` : `${m} เดือน`}
+											</option>
+										))}
+									</Select>
+								)}
+							</Field>
+							<Field label="วันสิ้นสุดประกัน">
+								{(id) => (
+									<DateInput
+										id={id}
+										value={g.warrantyEnd}
+										onChange={(e) => setGroup(g.id, { warrantyEnd: e.target.value })}
+									/>
+								)}
+							</Field>
+						</div>
+						<fieldset>
+							<legend className="font-display mb-2 flex w-full items-center justify-between text-sm font-medium">
+								<span>
+									รายการงานที่มอบหมาย ({g.selected.size}/{items.length})
+								</span>
+								<span className="flex gap-2">
+									<button
+										type="button"
+										className="text-primary-ink cursor-pointer underline"
+										onClick={() => setGroup(g.id, { selected: new Set(items.map((l) => l.id)) })}
+									>
+										เลือกทั้งหมด
+									</button>
+									<button
+										type="button"
+										className="text-primary-ink cursor-pointer underline"
+										onClick={() => setGroup(g.id, { selected: new Set() })}
+									>
+										ล้าง
+									</button>
+								</span>
+							</legend>
+							<ul className="border-line flex max-h-60 flex-col overflow-y-auto rounded-xl border">
+								{items.map((l) => (
+									<li
+										key={l.id}
+										className="border-line border-b last:border-0"
+									>
+										<label className="flex min-h-11 cursor-pointer items-center gap-3 px-4 py-1.5">
+											<input
+												type="checkbox"
+												className="accent-primary size-5"
+												checked={g.selected.has(l.id)}
+												onChange={() => toggle(g, l.id)}
+											/>
+											<span className="flex-1">{l.description || '(ไม่มีรายละเอียด)'}</span>
+											<span className="text-ink-muted tabular-nums">
+												{formatMoney(amountOf(l))}
+											</span>
+										</label>
+									</li>
+								))}
+							</ul>
+						</fieldset>
+						<Field label="หมายเหตุ">
+							{(id) => (
+								<Textarea
+									id={id}
+									rows={2}
+									value={g.notes}
+									onChange={(e) => setGroup(g.id, { notes: e.target.value })}
+								/>
+							)}
+						</Field>
+						<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+							<Field label="VAT (%)">
+								{(id) => (
+									<Input
+										id={id}
+										type="number"
+										min={0}
+										value={g.vatPercent}
+										onChange={(e) => setGroup(g.id, { vatPercent: e.target.value })}
+									/>
+								)}
+							</Field>
+							<Field
+								label="หัก ณ ที่จ่าย (%)"
+								hint="เช่น 3 — คิดจากยอดก่อน VAT แล้วหักออกจากยอดจ่าย"
+							>
+								{(id) => (
+									<Input
+										id={id}
+										type="number"
+										min={0}
+										value={g.whtPercent}
+										onChange={(e) => setGroup(g.id, { whtPercent: e.target.value })}
+									/>
+								)}
+							</Field>
+						</div>
+						<div className="flex flex-col gap-1.5">
+							<h3 className="font-display text-[16px] font-medium">
+								กำหนดการจ่ายเป็นงวด (ไม่จำกัดจำนวนงวด)
+							</h3>
+							<InstallmentEditor
+								rows={g.installments}
+								onChange={(rows) => setGroup(g.id, { installments: rows })}
+								total={groupTotal(g)}
+							/>
+						</div>
+						<dl className="ml-auto grid w-full max-w-sm grid-cols-[1fr_auto] gap-x-6 gap-y-1 text-right">
+							<dt className="text-ink-muted">ยอดรวมรายการ</dt>
+							<dd className="tabular-nums">{formatMoney(groupCalc(g).subtotal)}</dd>
+							<dt className="text-ink-muted">VAT {Number(g.vatPercent) || 0}%</dt>
+							<dd className="tabular-nums">{formatMoney(groupCalc(g).vatAmount)}</dd>
+							<dt className="text-ink-muted">หัก ณ ที่จ่าย {Number(g.whtPercent) || 0}%</dt>
+							<dd className="tabular-nums">-{formatMoney(groupCalc(g).whtAmount)}</dd>
+							<dt className="font-display text-lg font-semibold">ยอดสุทธิใบสั่งซื้อนี้</dt>
+							<dd className="font-display text-primary-ink text-lg font-semibold tabular-nums">
+								{formatMoney(groupTotal(g))}
+							</dd>
+						</dl>
+					</Card>
+				))}
+				<div>
+					<Button
+						variant="dashed"
+						icon={<Plus size={18} />}
+						onClick={() =>
+							setGroups((p) => [
+								...p,
+								{
+									id: nid(),
+									teamId: '',
+									selected: new Set(),
+									notes: '',
+									startDate: '',
+									endDate: '',
+									warrantyStart: '',
+									warrantyEnd: '',
+									warrantyMonths: '',
+									costType: 'LABOUR',
+									costCategory: '',
+									payeeName: '',
+									vatPercent: '0',
+									whtPercent: '0',
+									installments: []
+								}
+							])
+						}
+					>
+						เพิ่มทีมช่าง (ใบสั่งซื้อใบใหม่)
+					</Button>
+				</div>
 
-				{/* Message */}
-				<Typography sx={{ fontSize: '15px', color: '#475569', mb: 3, lineHeight: 1.6 }}>
-					{snackbar.message}
-				</Typography>
+				<Card>
+					<CardHeader title="เอกสารแนบ: ใบเสนอราคาจากช่าง" />
+					<FileDrop
+						label={file ? `เลือกแล้ว: ${file.name}` : 'ลากไฟล์มาวาง หรือคลิกเพื่อเลือก'}
+						onFiles={(f) => setFile(f[0] ?? null)}
+					/>
+				</Card>
 
-				{/* OK Button */}
-				<Button
-					variant="contained"
-					fullWidth
-					onClick={() => setSnackbar(p => ({ ...p, open: false }))}
-					sx={{
-						borderRadius: '12px', textTransform: 'none', fontWeight: 700,
-						fontSize: '15px', py: 1.2,
-						background:
-							snackbar.severity === 'success' ? 'linear-gradient(135deg,#22C55E,#16A34A)' :
-							snackbar.severity === 'error' ? 'linear-gradient(135deg,#EF4444,#DC2626)' :
-							'linear-gradient(135deg,#F59E0B,#D97706)',
-						'&:hover': { opacity: 0.9 },
-					}}
-				>
-					ตกลง
-				</Button>
-			</Dialog>
+				<div className="flex justify-end gap-3">
+					<Button
+						variant="ghost"
+						href="/apps/purchase-orders"
+					>
+						ยกเลิก
+					</Button>
+					<Button
+						disabled={saving}
+						onClick={save}
+					>
+						{saving ? 'กำลังบันทึก...' : `สร้าง ${groups.length} ใบสั่งซื้อ`}
+					</Button>
+				</div>
+			</div>
 		</>
 	);
 }
 
-export default NewPurchaseOrderPage;
+export default function NewPurchaseOrderPage() {
+	return (
+		<Suspense fallback={<p className="text-ink-muted py-20 text-center">กำลังโหลด...</p>}>
+			<NewPurchaseOrder />
+		</Suspense>
+	);
+}

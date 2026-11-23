@@ -1,11 +1,13 @@
-import { User } from '@auth/user';
+import type { User } from '@auth/user';
 
 declare module 'next-auth' {
 	interface Session {
-		accessToken?: string;
 		db: User;
 	}
+}
+
+declare module 'next-auth/jwt' {
 	interface JWT {
-		accessToken?: string;
+		userId?: string;
 	}
 }

@@ -1,189 +1,243 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter, useParams } from 'next/navigation';
-import Typography from '@mui/material/Typography';
-import Paper from '@mui/material/Paper';
-import Button from '@mui/material/Button';
-import IconButton from '@mui/material/IconButton';
-import Box from '@mui/material/Box';
-import Chip from '@mui/material/Chip';
-import CircularProgress from '@mui/material/CircularProgress';
-import Dialog from '@mui/material/Dialog';
-import FuseSvgIcon from '@fuse/core/FuseSvgIcon';
-import FusePageCarded from '@fuse/core/FusePageCarded';
-import { styled } from '@mui/material/styles';
+import { ArrowLeft, Banknote, Printer, Truck } from 'lucide-react';
+import Link from 'next/link';
+import { useParams, useRouter } from 'next/navigation';
+import { useState } from 'react';
+import {
+	Button,
+	Card,
+	CardHeader,
+	ConfirmDialog,
+	DataTable,
+	IconButton,
+	MoneyText,
+	PageHeader,
+	PrintPreviewDialog,
+	StatusBadge
+} from '@/components/ui';
+import { useAlert } from '@/components/shared/AlertProvider';
+import { WORKFLOW_BADGE, type StatusConfig, type WorkOrder } from '@/components/work-orders/types';
+import { formatDateShort, formatMoney } from '@/lib/format';
+import { PO_STATUS, FALLBACK } from '@/lib/status';
+import { sendJson, useApi } from '@/lib/use-api';
 
-const Root = styled(FusePageCarded)(() => ({ '& .container': { maxWidth: '100%!important' } }));
-
-type WO = {
-  id: string; woNumber: string; date: string; status: string;
-  poNumber?: string | null; description?: string | null;
-  totalAmount: number; teamName?: string | null;
-  quotation?: { quotationNumber: string; projectName?: string | null; customerGroup: { groupName: string } } | null;
-  team?: { teamName: string; leaderName: string } | null;
-  purchaseOrders?: { id: string; poNumber: string; totalAmount: number; status: string }[];
-};
-
-const statusStyle: Record<string, { label: string; bg: string; color: string }> = {
-  PENDING: { label: 'รอดำเนินการ', bg: '#FEF3C7', color: '#D97706' },
-  IN_PROGRESS: { label: 'กำลังดำเนินการ', bg: '#DBEAFE', color: '#2563EB' },
-  COMPLETED: { label: 'เสร็จสิ้น', bg: '#D1FAE5', color: '#059669' },
-  PAID: { label: 'จ่ายแล้ว', bg: '#E0E7FF', color: '#4F46E5' },
-  CANCELLED: { label: 'ยกเลิก', bg: '#FEE2E2', color: '#DC2626' },
-};
-
-function fmt(n: number | string) {
-  return Number(n).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-function fmtDate(d: string) {
-  return new Date(d).toLocaleDateString('th-TH', { day: '2-digit', month: 'short', year: 'numeric' });
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+	return (
+		<div className="border-line flex flex-wrap justify-between gap-x-4 border-b py-2 last:border-0">
+			<dt className="text-ink-muted">{label}</dt>
+			<dd className="text-right font-medium">{children}</dd>
+		</div>
+	);
 }
 
-function WorkOrderDetailPage() {
-  const router = useRouter();
-  const params = useParams();
-  const id = params?.id as string;
-  const [wo, setWo] = useState<WO | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [printOpen, setPrintOpen] = useState(false);
-  const [paying, setPaying] = useState(false);
+export default function WorkOrderDetailPage() {
+	const router = useRouter();
+	const alert = useAlert();
+	const { id } = useParams<{ id: string }>();
+	const { data: wo, isLoading, isError } = useApi<WorkOrder>(`/api/work-orders/${id}`);
+	const { data: statusData } = useApi<StatusConfig[]>('/api/work-order-statuses');
+	const [print, setPrint] = useState(false);
+	const [confirm, setConfirm] = useState(false);
+	const [busy, setBusy] = useState(false);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/work-orders/${id}`);
-      if (!res.ok) throw new Error('Not found');
-      setWo(await res.json());
-    } catch { setWo(null); } finally { setLoading(false); }
-  }, [id]);
+	if (isLoading) return <p className="text-ink-muted py-20 text-center">กำลังโหลด...</p>;
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+	if (isError || !wo?.id) {
+		return (
+			<div className="flex flex-col items-center gap-4 py-20">
+				<p role="alert">ไม่พบ Work Order</p>
+				<Button href="/apps/work-orders">กลับรายการ WO</Button>
+			</div>
+		);
+	}
 
-  const poTotal = wo?.purchaseOrders
-    ?.filter(p => p.status !== 'CANCELLED')
-    .reduce((s, p) => s + Number(p.totalAmount), 0) ?? 0;
+	const st = (Array.isArray(statusData) ? statusData : []).find((s) => s.code === wo.status);
+	const pos = wo.purchaseOrders ?? [];
+	const poTotal = pos.filter((p) => p.status !== 'CANCELLED').reduce((s, p) => s + Number(p.totalAmount), 0);
+	const wf = wo.workflowType ? WORKFLOW_BADGE[wo.workflowType] : null;
 
-  const handlePayContractor = async () => {
-    if (!wo || !confirm(`ออกใบสำคัญจ่ายและบันทึก ${wo.woNumber} เป็นจ่ายแล้ว?`)) return;
-    setPaying(true);
-    try {
-      const res = await fetch(`/api/work-orders/${id}/pay-contractor`, { method: 'POST' });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed');
-      router.push(`/apps/payment-vouchers/${data.paymentVoucher.id}`);
-    } catch (e) {
-      alert(e instanceof Error ? e.message : 'เกิดข้อผิดพลาด');
-    } finally { setPaying(false); }
-  };
+	async function payContractor() {
+		setBusy(true);
 
-  if (loading) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress sx={{ color: '#0284C7' }} /></Box>;
-  if (!wo) return (
-    <Box sx={{ textAlign: 'center', py: 10 }}>
-      <Typography sx={{ mb: 2 }}>ไม่พบ Work Order</Typography>
-      <Button onClick={() => router.push('/apps/work-orders')} sx={{ textTransform: 'none' }}>กลับรายการ WO</Button>
-    </Box>
-  );
+		try {
+			const r = await sendJson(`/api/work-orders/${id}/pay-contractor`, 'POST');
+			router.push(`/apps/payment-vouchers/${r.paymentVoucher.id}`);
+		} catch (e) {
+			alert.showError('เกิดข้อผิดพลาด', e instanceof Error ? e.message : undefined);
+			setBusy(false);
+			setConfirm(false);
+		}
+	}
 
-  const st = statusStyle[wo.status] || { label: wo.status, bg: '#F1F5F9', color: '#64748B' };
-
-  const header = (
-    <div className="flex flex-auto flex-col py-4">
-      <Typography sx={{ fontSize: '14px', color: '#94A3B8', mb: 0.5 }}>เอกสาร &gt; WO &gt; {wo.woNumber}</Typography>
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          <IconButton onClick={() => router.push('/apps/work-orders')}><FuseSvgIcon>lucide:arrow-left</FuseSvgIcon></IconButton>
-          <Typography sx={{ fontSize: '28px', fontWeight: 800, color: '#0284C7' }}>{wo.woNumber}</Typography>
-          <Chip label={st.label} size="small" sx={{ bgcolor: st.bg, color: st.color, fontWeight: 700 }} />
-        </div>
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-          <Button variant="outlined" size="small" startIcon={<FuseSvgIcon size={16}>lucide:printer</FuseSvgIcon>}
-            onClick={() => setPrintOpen(true)} sx={{ borderRadius: '10px', textTransform: 'none' }}>พิมพ์ใบตอบรับงาน</Button>
-          <Button variant="outlined" size="small" startIcon={<FuseSvgIcon size={16}>lucide:truck</FuseSvgIcon>}
-            onClick={() => window.open(`/api/work-orders/${id}/delivery-note`, '_blank')}
-            sx={{ borderRadius: '10px', textTransform: 'none', borderColor: '#059669', color: '#059669' }}>ใบส่งมอบงาน</Button>
-          {wo.status === 'COMPLETED' && (
-            <Button variant="contained" size="small" disabled={paying}
-              startIcon={<FuseSvgIcon size={16}>lucide:banknote</FuseSvgIcon>}
-              onClick={handlePayContractor}
-              sx={{ borderRadius: '10px', textTransform: 'none', bgcolor: '#D97706', '&:hover': { bgcolor: '#B45309' } }}>
-              {paying ? 'กำลังดำเนินการ...' : 'ออกใบสำคัญจ่ายช่าง'}
-            </Button>
-          )}
-        </Box>
-      </div>
-    </div>
-  );
-
-  const content = (
-    <Paper className="p-6" elevation={0}>
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2, mb: 3 }}>
-        <Paper sx={{ p: 2, borderRadius: '12px', border: '1px solid #E2E8F0' }} elevation={0}>
-          <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#0284C7', mb: 1 }}>ข้อมูลงาน</Typography>
-          <Box sx={{ fontSize: '13px', display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            <div>วันที่: {fmtDate(wo.date)}</div>
-            <div>ลูกค้า: <strong>{wo.quotation?.customerGroup?.groupName || '-'}</strong></div>
-            <div>โครงการ: {wo.quotation?.projectName || wo.description || '-'}</div>
-            <div>อ้างอิง QT: {wo.quotation?.quotationNumber || '-'}</div>
-            {wo.poNumber && <div>P/O ลูกค้า: {wo.poNumber}</div>}
-          </Box>
-        </Paper>
-        <Paper sx={{ p: 2, borderRadius: '12px', border: '1px solid #E2E8F0' }} elevation={0}>
-          <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#0284C7', mb: 1 }}>ทีมช่าง / ยอดเงิน</Typography>
-          <Box sx={{ fontSize: '13px', display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            <div>ทีม: {wo.team?.teamName || wo.teamName || '-'}</div>
-            <div>หัวหน้าทีม: {wo.team?.leaderName || '-'}</div>
-            <div>ยอด WO: <strong>{fmt(wo.totalAmount)} บาท</strong></div>
-            {poTotal > 0 && <div>ยอด PO รวม: <strong style={{ color: '#7C3AED' }}>{fmt(poTotal)} บาท</strong></div>}
-          </Box>
-        </Paper>
-      </Box>
-
-      {wo.purchaseOrders && wo.purchaseOrders.length > 0 && (
-        <Paper sx={{ p: 2, borderRadius: '12px', border: '1px solid #E9D5FF', bgcolor: '#FAF5FF' }} elevation={0}>
-          <Typography sx={{ fontSize: '13px', fontWeight: 700, color: '#7C3AED', mb: 1.5 }}>ใบสั่งซื้อให้ช่าง (PO)</Typography>
-          {wo.purchaseOrders.map(po => (
-            <Box key={po.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', py: 0.75, borderBottom: '1px solid #EDE9FE' }}>
-              <Button size="small" onClick={() => router.push(`/apps/purchase-orders/${po.id}`)}
-                sx={{ textTransform: 'none', fontWeight: 600, color: '#7C3AED', p: 0, minWidth: 0 }}>{po.poNumber}</Button>
-              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                <Chip label={po.status} size="small" sx={{ height: 22, fontSize: '11px' }} />
-                <Typography sx={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmt(po.totalAmount)} บาท</Typography>
-              </Box>
-            </Box>
-          ))}
-        </Paper>
-      )}
-
-      <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
-        <Button variant="outlined" onClick={() => router.push('/apps/work-orders')}
-          sx={{ borderRadius: '10px', textTransform: 'none' }}>กลับรายการ WO</Button>
-        <Button variant="text" onClick={() => router.push(`/apps/reports`)}
-          sx={{ borderRadius: '10px', textTransform: 'none', color: '#64748B' }}>ดูรายงาน</Button>
-      </Box>
-    </Paper>
-  );
-
-  return (
-    <>
-      <Root header={header} content={content} scroll="content" />
-      <Dialog open={printOpen} onClose={() => setPrintOpen(false)} maxWidth={false} fullWidth
-        PaperProps={{ sx: { width: '90vw', maxWidth: 1100, height: '90vh', borderRadius: '16px', display: 'flex', flexDirection: 'column' } }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', px: 3, py: 1.5, borderBottom: '1px solid #E2E8F0' }}>
-          <Typography sx={{ fontWeight: 700, color: '#0284C7' }}>{wo.woNumber}</Typography>
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <Button onClick={() => setPrintOpen(false)} sx={{ textTransform: 'none' }}>ปิด</Button>
-            <Button variant="contained" onClick={() => { (document.getElementById('wo-detail-print') as HTMLIFrameElement)?.contentWindow?.print(); }}
-              startIcon={<FuseSvgIcon size={18}>lucide:printer</FuseSvgIcon>} sx={{ textTransform: 'none', bgcolor: '#0284C7' }}>พิมพ์</Button>
-          </Box>
-        </Box>
-        <Box sx={{ flex: 1, bgcolor: '#E2E8F0', display: 'flex' }}>
-          <iframe id="wo-detail-print" src={printOpen ? `/api/work-orders/${id}/pdf` : 'about:blank'}
-            style={{ flex: 1, border: 'none', margin: 16, maxWidth: 800, background: '#fff', borderRadius: 4 }} title="Print" />
-        </Box>
-      </Dialog>
-    </>
-  );
+	return (
+		<>
+			<PageHeader
+				title={
+					<span className="inline-flex items-center gap-2">
+						<IconButton
+							aria-label="กลับรายการ WO"
+							href="/apps/work-orders"
+						>
+							<ArrowLeft size={22} />
+						</IconButton>
+						{wo.woNumber}
+					</span>
+				}
+				badge={
+					<>
+						<StatusBadge
+							label={st?.name ?? wo.status}
+							color={st?.color}
+							bgColor={st?.bgColor}
+						/>
+						{wf && (
+							<StatusBadge
+								label={wf.label}
+								tone={wf.tone}
+							/>
+						)}
+					</>
+				}
+				subtitle={`วันที่ ${formatDateShort(wo.date)}`}
+				actions={
+					<>
+						<Button
+							variant="outline"
+							icon={<Printer size={18} />}
+							onClick={() => setPrint(true)}
+						>
+							พิมพ์ใบตอบรับงาน
+						</Button>
+						<Button
+							variant="outline"
+							icon={<Truck size={18} />}
+							onClick={() => window.open(`/api/work-orders/${id}/delivery-note`, '_blank')}
+						>
+							ใบส่งมอบงาน
+						</Button>
+						{wo.status === 'COMPLETED' && (
+							<Button
+								icon={<Banknote size={18} />}
+								onClick={() => setConfirm(true)}
+							>
+								ออกใบสำคัญจ่ายช่าง
+							</Button>
+						)}
+					</>
+				}
+			/>
+			<div className="grid grid-cols-[repeat(auto-fit,minmax(340px,1fr))] gap-6">
+				<Card>
+					<CardHeader title="ข้อมูลงาน" />
+					<dl>
+						<Row label="ลูกค้า">{wo.quotation?.customerGroup.groupName ?? '-'}</Row>
+						<Row label="โครงการ">{wo.quotation?.projectName || wo.description || '-'}</Row>
+						<Row label="อ้างอิง QT">{wo.quotation?.quotationNumber ?? '-'}</Row>
+						<Row label="PO ลูกค้า">
+							{wo.poNumber ? `${wo.poNumber}${wo.poDate ? ` (${formatDateShort(wo.poDate)})` : ''}` : '-'}
+						</Row>
+						<Row label="วันเริ่มงาน">{formatDateShort(wo.startDate)}</Row>
+						<Row label="กำหนดเสร็จ">{formatDateShort(wo.endDate)}</Row>
+						<Row label="ประกัน">
+							{wo.warrantyStartDate
+								? `${formatDateShort(wo.warrantyStartDate)} – ${formatDateShort(wo.warrantyEndDate)}`
+								: '-'}
+							{wo.warrantyMonths ? ` (${wo.warrantyMonths} เดือน)` : ''}
+						</Row>
+						<Row label="เงินประกันผลงาน (ก่อน VAT)">
+							{Number(wo.retentionAmount) > 0 ? <MoneyText value={Number(wo.retentionAmount)} /> : '-'}
+						</Row>
+					</dl>
+				</Card>
+				<Card>
+					<CardHeader title="ทีมช่าง / ยอดเงิน" />
+					<dl>
+						<Row label="ทีม">{wo.team?.teamName || wo.teamName || '-'}</Row>
+						<Row label="หัวหน้าทีม">{wo.team?.leaderName || '-'}</Row>
+						<Row label="มูลค่า WO (ก่อน VAT)">
+							<MoneyText value={wo.totalAmount} />
+						</Row>
+						{poTotal > 0 && (
+							<Row label="ยอด PO ช่างรวม">
+								<MoneyText
+									value={poTotal}
+									className="text-violet"
+								/>
+							</Row>
+						)}
+						{poTotal > 0 && (
+							<Row label="กำไรขั้นต้น (ประมาณ)">
+								<MoneyText
+									value={Number(wo.totalAmount) - poTotal}
+									className={Number(wo.totalAmount) - poTotal < 0 ? 'text-danger' : 'text-success'}
+								/>
+							</Row>
+						)}
+					</dl>
+				</Card>
+			</div>
+			<Card>
+				<CardHeader
+					title="ใบสั่งซื้อให้ช่าง (PO)"
+					action={
+						<Button
+							variant="dashed"
+							href={`/apps/purchase-orders/new?workOrderId=${id}`}
+						>
+							ออกใบสั่งซื้อช่าง
+						</Button>
+					}
+				/>
+				<DataTable
+					rows={pos}
+					rowKey={(p) => p.id}
+					empty="ยังไม่มีใบสั่งซื้อให้ช่าง"
+					columns={[
+						{
+							key: 'n',
+							header: 'เลข PO',
+							cell: (p) => (
+								<Link
+									href={`/apps/purchase-orders/${p.id}`}
+									className="font-semibold"
+								>
+									{p.poNumber}
+								</Link>
+							)
+						},
+						{
+							key: 's',
+							header: 'สถานะ',
+							cell: (p) => {
+								const m = PO_STATUS[p.status] ?? FALLBACK;
+								return (
+									<StatusBadge
+										label={m.label}
+										tone={m.tone}
+									/>
+								);
+							}
+						},
+						{ key: 'a', header: 'ยอดรวม', money: true, cell: (p) => formatMoney(p.totalAmount) }
+					]}
+				/>
+			</Card>
+			<PrintPreviewDialog
+				open={print}
+				onClose={() => setPrint(false)}
+				title={wo.woNumber}
+				src={`/api/work-orders/${id}/pdf`}
+			/>
+			<ConfirmDialog
+				open={confirm}
+				busy={busy}
+				title="ออกใบสำคัญจ่ายช่าง"
+				message={`ออกใบสำคัญจ่ายและบันทึก ${wo.woNumber} เป็นจ่ายแล้ว?`}
+				confirmLabel="ออกใบสำคัญจ่าย"
+				onClose={() => setConfirm(false)}
+				onConfirm={payContractor}
+			/>
+		</>
+	);
 }
-
-export default WorkOrderDetailPage;

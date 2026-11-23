@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>สร้างใบเสนอราคา NPK Service</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600&amp;family=Sarabun:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#519638}
+a{color:#2f6b1f}a:hover{color:#24561a}
+a:focus-visible,button:focus-visible{outline:2px solid #1b2189;outline-offset:2px}
+input:focus,select:focus,textarea:focus{outline:2px solid #1b2189;outline-offset:1px;border-color:#519638}
+.npk-nav a:focus-visible{outline-color:#0b1f05}
+.npk-nav a:hover{background:#6aab52}
+.npk-nav a[aria-current="page"]:hover{background:#ffffff}
+.npk-btn:hover{background:#336b21 !important}
+.npk-tbl th{font-family:Prompt,'Noto Sans Thai',sans-serif;font-weight:500;font-size:13px;line-height:20px;color:#57674f;text-align:left;padding:10px 8px;background:#f5faf3;white-space:nowrap}
+.npk-tbl td{font-size:14px;line-height:22px;padding:8px;border-top:1px solid #d7e6d0;vertical-align:middle}
+.npk-in{width:100%;box-sizing:border-box;height:44px;padding:0 12px;border:1px solid #879a7f;border-radius:10px;font-family:Sarabun,'Noto Sans Thai',sans-serif;font-size:15px;color:#1d2a1a;background:#ffffff}
+.npk-lbl{font-family:Prompt,'Noto Sans Thai',sans-serif;font-weight:500;font-size:14px;line-height:20px}
+.npk-del:hover{background:#fbe3e3 !important;color:#c4161c !important}
+@media (max-width: 820px){
+  .npk-side{flex-basis:100% !important;max-width:none !important}
+  .npk-content{border-radius:24px 24px 0 0 !important;padding:16px !important}
+}
+</style>
+</helmet>
+<div style="min-height: 100vh; display: flex; flex-wrap: wrap; background: #519638; font-family: Sarabun, 'Noto Sans Thai', system-ui, sans-serif; color: #1d2a1a;">
+
+  <aside class="npk-side" style="flex: 1 1 248px; max-width: 280px; box-sizing: border-box; padding: 24px 16px; color: #0b1f05; display: flex; flex-direction: column; gap: 8px;">
+    <div style="display: flex; align-items: center; gap: 12px; padding: 0 8px 16px;">
+      <div style="width: 52px; height: 52px; border-radius: 14px; background: #ffffff; display: flex; align-items: center; justify-content: center; flex: none;">
+        <img src="npk-logo.png" alt="โลโก้ NPK Service &amp; Supply" style="width: 38px; height: auto;">
+      </div>
+      <div>
+        <div style="font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 600; font-size: 19px; line-height: 24px;">NPK Service</div>
+        <div style="font-size: 13px; line-height: 18px;">Service &amp; Supply</div>
+      </div>
+    </div>
+    <nav class="npk-nav" aria-label="เมนูหลัก" style="display: flex; flex-direction: column; gap: 2px;">
+      <a href="Dashboard.dc.html" style="display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 12px; border-radius: 10px; color: #0b1f05; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 500; font-size: 15px; text-decoration: none;"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1"></rect><rect x="14" y="3" width="7" height="5" rx="1"></rect><rect x="14" y="12" width="7" height="9" rx="1"></rect><rect x="3" y="16" width="7" height="5" rx="1"></rect></svg>แดชบอร์ด</a>
+      <sc-for list="{{nav}}" as="g" hint-placeholder-count="5">
+        <div style="font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 500; font-size: 12px; line-height: 16px; letter-spacing: 0.08em; padding: 16px 12px 6px;">{{g.title}}</div>
+        <sc-for list="{{g.items}}" as="n" hint-placeholder-count="3">
+          <a href="{{n.href}}" aria-current="{{n.cur}}" style="display: flex; align-items: center; gap: 12px; min-height: 44px; padding: 0 12px; border-radius: 10px; background: {{n.bg}}; color: {{n.fg}}; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 500; font-size: 15px; text-decoration: none;"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex: none;"><path d="{{n.icon}}"></path></svg><span style="flex: 1;">{{n.label}}</span><sc-if value="{{n.count}}" hint-placeholder-val="{{false}}"><span style="min-width: 24px; height: 22px; padding: 0 6px; box-sizing: border-box; border-radius: 999px; background: #ecd914; color: #1d2a1a; font-size: 12px; font-weight: 600; display: flex; align-items: center; justify-content: center;">{{n.count}}</span></sc-if></a>
+        </sc-for>
+      </sc-for>
+      <div style="height: 1px; background: rgba(11,31,5,0.25); margin: 12px;"></div>
+      <a href="Main.dc.html" style="display: flex; align-items: center; gap: 12px; height: 44px; padding: 0 12px; border-radius: 10px; color: #0b1f05; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 500; font-size: 15px; text-decoration: none;"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"></path></svg>ออกจากระบบ</a>
+    </nav>
+  </aside>
+
+  <main class="npk-content" style="flex: 999 1 560px; min-width: 0; box-sizing: border-box; background: #f1f8ee; border-radius: 32px 0 0 0; padding: 24px 32px 48px; display: flex; flex-direction: column; gap: 24px;">
+
+    <header style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px rgba(29,42,26,0.06), 0 4px 16px rgba(29,42,26,0.05); padding: 12px 16px 12px 20px; display: flex; flex-wrap: wrap; align-items: center; gap: 16px;">
+      <nav aria-label="ตำแหน่งปัจจุบัน" style="flex: 1 1 320px; font-size: 15px; line-height: 22px; color: #57674f; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+        <a href="Dashboard.dc.html" style="text-decoration: none;">แดชบอร์ด</a>
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg>
+        <a href="Quotations.dc.html" style="text-decoration: none;">ใบเสนอราคา</a>
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"></path></svg>
+        <span aria-current="page" style="color: #1d2a1a; font-weight: 600;">สร้างใหม่</span>
+      </nav>
+      <div style="margin-left: auto; display: flex; align-items: center; gap: 12px;">
+        <button type="button" aria-label="การแจ้งเตือน 3 รายการ" style="position: relative; width: 44px; height: 44px; border: 0; border-radius: 999px; background: #e3f1dc; color: #2f6b1f; display: flex; align-items: center; justify-content: center; cursor: pointer;"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"></path></svg><span style="position: absolute; top: 4px; right: 4px; min-width: 18px; height: 18px; border-radius: 999px; background: #c4161c; color: #ffffff; font-size: 11px; font-weight: 600; display: flex; align-items: center; justify-content: center;">3</span></button>
+        <div aria-hidden="true" style="width: 44px; height: 44px; border-radius: 999px; background: #519638; color: #0b1f05; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 600; display: flex; align-items: center; justify-content: center;">AD</div>
+        <div>
+          <div style="font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 600; font-size: 15px; line-height: 22px;">[ชื่อผู้ใช้]</div>
+          <div style="font-size: 13px; line-height: 18px; color: #57674f;">ผู้ดูแลระบบ</div>
+        </div>
+      </div>
+    </header>
+
+    <div style="display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px;">
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
+          <h1 style="margin: 0; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 600; font-size: 26px; line-height: 36px;">สร้างใบเสนอราคา</h1>
+          <span style="display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 6px; background: #f0f5ee; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-size: 13px; line-height: 20px; font-weight: 500;"><span style="width: 6px; height: 6px; border-radius: 999px; background: #1d2a1a;"></span>ร่าง</span>
+        </div>
+        <p style="margin: 0; font-size: 15px; line-height: 24px; color: #57674f;">เลขที่ <b style="color: #1d2a1a;">QT-6911-013</b> · ระบบออกเลขให้อัตโนมัติเมื่อบันทึก</p>
+      </div>
+      <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <a href="Quotations.dc.html" style="height: 44px; padding: 0 18px; border-radius: 10px; color: #2f6b1f; display: flex; align-items: center; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 500; font-size: 15px; text-decoration: none;">ยกเลิก</a>
+        <a href="#preview" style="height: 44px; padding: 0 18px; border-radius: 10px; background: #ffffff; border: 1px solid #d7e6d0; box-sizing: border-box; color: #2f6b1f; display: flex; align-items: center; gap: 8px; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 500; font-size: 15px; text-decoration: none;"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"></path></svg>ดูตัวอย่าง PDF</a>
+        <a href="Quotations.dc.html" style="height: 44px; padding: 0 18px; border-radius: 10px; background: #e3f1dc; color: #2f6b1f; display: flex; align-items: center; gap: 8px; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 500; font-size: 15px; text-decoration: none;">บันทึกร่าง</a>
+        <a href="Quotations.dc.html" class="npk-btn" style="height: 44px; padding: 0 20px; border-radius: 10px; background: #3d7a28; color: #ffffff; display: flex; align-items: center; gap: 8px; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 500; font-size: 15px; text-decoration: none;"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"></path></svg>บันทึกและส่งลูกค้า</a>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start;">
+
+      <div style="flex: 2 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 24px;">
+
+        <section aria-labelledby="cust-title" style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px rgba(29,42,26,0.06), 0 4px 16px rgba(29,42,26,0.05); padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <h2 id="cust-title" style="margin: 0; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 600; font-size: 20px; line-height: 30px;">ข้อมูลลูกค้า</h2>
+            <a href="#new-customer" style="font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 500; font-size: 14px; text-decoration: none; display: flex; align-items: center; gap: 6px; min-height: 44px;"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"></path></svg>เพิ่มลูกค้าใหม่</a>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <label for="f-cust" class="npk-lbl">เลือกลูกค้า</label>
+            <select id="f-cust" class="npk-in" value="{{fv.cust}}" onChange="{{fs.cust}}">
+              <sc-for list="{{customers}}" as="c" hint-placeholder-count="5"><option value="{{c.id}}">{{c.name}}</option></sc-for>
+            </select>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px 24px; padding: 16px; border-radius: 12px; background: #f5faf3; font-size: 14px; line-height: 22px;">
+            <div><div style="color: #57674f;">ชื่อลูกค้า</div><div style="font-weight: 600;">{{cust.name}}</div></div>
+            <div><div style="color: #57674f;">เลขประจำตัวผู้เสียภาษี</div><div style="font-weight: 600;">{{cust.tax}}</div></div>
+            <div><div style="color: #57674f;">ที่อยู่</div><div>{{cust.addr}}</div></div>
+            <div><div style="color: #57674f;">ผู้ติดต่อ</div><div>{{cust.contact}}</div></div>
+          </div>
+        </section>
+
+        <section aria-labelledby="doc-title" style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px rgba(29,42,26,0.06), 0 4px 16px rgba(29,42,26,0.05); padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+          <h2 id="doc-title" style="margin: 0; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 600; font-size: 20px; line-height: 30px;">รายละเอียดเอกสาร</h2>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px 20px;">
+            <div style="display: flex; flex-direction: column; gap: 8px; grid-column: 1 / -1;">
+              <label for="f-project" class="npk-lbl">ชื่อโครงการ / งาน</label>
+              <input id="f-project" class="npk-in" type="text" value="{{fv.project}}" onChange="{{fs.project}}" placeholder="เช่น ซ่อมระบบปรับอากาศ อาคาร 2">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <label for="f-date" class="npk-lbl">วันที่เอกสาร</label>
+              <input id="f-date" class="npk-in" type="date" value="{{fv.date}}" onChange="{{fs.date}}">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <label for="f-valid" class="npk-lbl">ยืนราคา (วัน)</label>
+              <input id="f-valid" class="npk-in" type="number" min="1" value="{{fv.valid}}" onChange="{{fs.valid}}">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <label for="f-ref" class="npk-lbl">อ้างอิง (ถ้ามี)</label>
+              <input id="f-ref" class="npk-in" type="text" value="{{fv.ref}}" onChange="{{fs.ref}}" placeholder="เลขที่ใบขอราคาของลูกค้า">
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+              <label for="f-sales" class="npk-lbl">ผู้เสนอราคา</label>
+              <select id="f-sales" class="npk-in" value="{{fv.sales}}" onChange="{{fs.sales}}">
+                <option value="1">[ชื่อผู้ใช้]</option><option value="2">[พนักงานขาย 1]</option><option value="3">[พนักงานขาย 2]</option>
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <section aria-labelledby="items-title" style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px rgba(29,42,26,0.06), 0 4px 16px rgba(29,42,26,0.05); padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+            <h2 id="items-title" style="margin: 0; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 600; font-size: 20px; line-height: 30px;">รายการสินค้า / บริการ</h2>
+            <span style="font-size: 14px; color: #57674f;">{{itemCount}} รายการ · ราคายังไม่รวม VAT</span>
+          </div>
+          <div style="overflow-x: auto;">
+            <table class="npk-tbl" style="width: 100%; border-collapse: collapse; min-width: 760px;">
+              <thead><tr><th scope="col" style="width: 32px; text-align: center;">#</th><th scope="col">รายละเอียด</th><th scope="col" style="width: 90px;">จำนวน</th><th scope="col" style="width: 90px;">หน่วย</th><th scope="col" style="width: 140px;">ราคา/หน่วย</th><th scope="col" style="width: 130px; text-align: right;">จำนวนเงิน</th><th scope="col" style="width: 48px;"><span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);">ลบ</span></th></tr></thead>
+              <tbody>
+                <sc-for list="{{items}}" as="it" hint-placeholder-count="3">
+                  <tr>
+                    <td style="text-align: center; color: #57674f;">{{it.n}}</td>
+                    <td><input class="npk-in" type="text" value="{{it.d}}" onChange="{{it.setD}}" aria-label="รายละเอียด รายการที่ {{it.n}}" placeholder="รายละเอียดสินค้าหรือบริการ"></td>
+                    <td><input class="npk-in" type="number" min="0" value="{{it.qty}}" onChange="{{it.setQty}}" aria-label="จำนวน รายการที่ {{it.n}}" style="text-align: right;"></td>
+                    <td><input class="npk-in" type="text" value="{{it.unit}}" onChange="{{it.setUnit}}" aria-label="หน่วย รายการที่ {{it.n}}"></td>
+                    <td><input class="npk-in" type="number" min="0" step="0.01" value="{{it.price}}" onChange="{{it.setPrice}}" aria-label="ราคาต่อหน่วย รายการที่ {{it.n}}" style="text-align: right;"></td>
+                    <td style="text-align: right; font-weight: 600; white-space: nowrap;">{{it.total}}</td>
+                    <td><button type="button" class="npk-del" onClick="{{it.remove}}" aria-label="ลบรายการที่ {{it.n}}" style="width: 44px; height: 44px; border: 0; border-radius: 8px; background: transparent; color: #57674f; cursor: pointer; display: flex; align-items: center; justify-content: center;"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path></svg></button></td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+          <button type="button" onClick="{{addItem}}" style="align-self: flex-start; height: 44px; padding: 0 16px; border-radius: 10px; border: 1px dashed #519638; background: #f5faf3; color: #2f6b1f; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 500; font-size: 15px; display: flex; align-items: center; gap: 8px; cursor: pointer;"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"></path></svg>เพิ่มรายการ</button>
+        </section>
+      </div>
+
+      <div style="flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 24px;">
+        <section aria-labelledby="sum-title" style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px rgba(29,42,26,0.06), 0 4px 16px rgba(29,42,26,0.05); padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+          <h2 id="sum-title" style="margin: 0; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 600; font-size: 20px; line-height: 30px;">สรุปยอด</h2>
+          <div style="display: flex; justify-content: space-between; gap: 12px; font-size: 15px; line-height: 24px;"><span>รวมเป็นเงิน</span><span style="font-weight: 600;">{{sum.sub}}</span></div>
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 15px; line-height: 24px;">
+            <label for="f-disc">ส่วนลด (บาท)</label>
+            <input id="f-disc" class="npk-in" type="number" min="0" value="{{fv.disc}}" onChange="{{fs.disc}}" style="width: 140px; text-align: right;">
+          </div>
+          <div style="display: flex; justify-content: space-between; gap: 12px; font-size: 15px; line-height: 24px;"><span>ยอดหลังหักส่วนลด</span><span style="font-weight: 600;">{{sum.after}}</span></div>
+          <div style="display: flex; justify-content: space-between; gap: 12px; font-size: 15px; line-height: 24px;"><span>ภาษีมูลค่าเพิ่ม 7%</span><span style="font-weight: 600;">{{sum.vat}}</span></div>
+          <div style="border-top: 1px solid #d7e6d0; padding-top: 14px; display: flex; flex-direction: column; gap: 4px;">
+            <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 12px;"><span style="font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 600; font-size: 16px;">ยอดรวมทั้งสิ้น</span><span style="font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 600; font-size: 26px; line-height: 34px; color: #2f6b1f;">{{sum.grand}}</span></div>
+            <div style="font-size: 13px; line-height: 20px; color: #57674f; text-align: right;">({{sum.text}})</div>
+          </div>
+          <label style="display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 15px; line-height: 22px; cursor: pointer; padding: 0 12px; border-radius: 10px; background: #f5faf3;">
+            <input type="checkbox" checked="{{fv.wht}}" onChange="{{toggleWht}}" style="width: 20px; height: 20px; accent-color: #519638; margin: 0; flex: none;">
+            ลูกค้าหักภาษี ณ ที่จ่าย 3%
+          </label>
+          <sc-if value="{{fv.wht}}" hint-placeholder-val="{{false}}">
+            <div style="display: flex; flex-direction: column; gap: 8px; padding: 14px; border-radius: 12px; background: #fdeedd; font-size: 15px; line-height: 24px;">
+              <div style="display: flex; justify-content: space-between; gap: 12px;"><span>หัก ณ ที่จ่าย 3%</span><span style="font-weight: 600; color: #b8560f;">− {{sum.wht}}</span></div>
+              <div style="display: flex; justify-content: space-between; gap: 12px;"><span>ยอดที่ลูกค้าชำระจริง</span><span style="font-weight: 600;">{{sum.net}}</span></div>
+            </div>
+          </sc-if>
+        </section>
+
+        <section aria-labelledby="terms-title" style="background: #ffffff; border-radius: 16px; box-shadow: 0 1px 2px rgba(29,42,26,0.06), 0 4px 16px rgba(29,42,26,0.05); padding: 24px; display: flex; flex-direction: column; gap: 16px;">
+          <h2 id="terms-title" style="margin: 0; font-family: Prompt, 'Noto Sans Thai', sans-serif; font-weight: 600; font-size: 20px; line-height: 30px;">เงื่อนไขและหมายเหตุ</h2>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <label for="f-terms" class="npk-lbl">เงื่อนไขการชำระเงิน</label>
+            <select id="f-terms" class="npk-in" value="{{fv.terms}}" onChange="{{fs.terms}}">
+              <option value="cash">ชำระเมื่องานแล้วเสร็จ</option>
+              <option value="30">เครดิต 30 วัน</option>
+              <option value="50">มัดจำ 50% ส่วนที่เหลือเมื่องานเสร็จ</option>
+              <option value="60">เครดิต 60 วัน</option>
+            </select>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <label for="f-note" class="npk-lbl">หมายเหตุถึงลูกค้า</label>
+            <textarea id="f-note" value="{{fv.note}}" onChange="{{fs.note}}" rows="4" style="width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1px solid #879a7f; border-radius: 10px; font-family: Sarabun, 'Noto Sans Thai', sans-serif; font-size: 15px; line-height: 24px; color: #1d2a1a; resize: vertical;"></textarea>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <span class="npk-lbl">ไฟล์แนบ</span>
+            <label for="f-file" style="min-height: 88px; border: 1px dashed #879a7f; border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 12px; text-align: center; font-size: 14px; color: #57674f; cursor: pointer;">
+              <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"></path></svg>
+              <span><b style="color: #2f6b1f;">เลือกไฟล์</b> แบบแปลน รูปหน้างาน (PDF, JPG)</span>
+            </label>
+            <input id="f-file" type="file" multiple style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0);">
+          </div>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1500}}'>
+class Component extends DCLogic {
+  renderVals() {
+    var self = this;
+    var st = this.state || {};
+    var P = {
+      doc: 'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8zM14 2v6h6',
+      check: 'M9 11l3 3L22 4M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11',
+      cart: 'M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0',
+      done: 'M22 11.08V12a10 10 0 1 1-5.93-9.14M22 4L12 14.01l-3-3',
+      clock: 'M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20zM12 6v6l4 2',
+      card: 'M2 5h20v14H2zM2 10h20',
+      receipt: 'M4 2v20l3-2 3 2 3-2 3 2 3-2 1 1V2l-1 1-3-2-3 2-3-2-3 2-3-2zM8 8h8M8 12h8',
+      in: 'M12 5v14M5 12l7 7 7-7',
+      out: 'M12 19V5M5 12l7-7 7 7',
+      tax: 'M9 14l6-6M9.5 8.5h.01M14.5 13.5h.01M5 3h14v18l-3-2-2 2-2-2-2 2-2-2-3 2z',
+      chart: 'M18 20V10M12 20V4M6 20v-6',
+      users: 'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.87',
+      tool: 'M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.6 2.6-2.4-.6-.6-2.4z',
+      building: 'M3 21h18M5 21V7l7-4 7 4v14M9 9h1M14 9h1M9 13h1M14 13h1',
+      gear: 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM12 2v3M12 19v3M2 12h3M19 12h3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1'
+    };
+    var active = 'ใบเสนอราคา';
+    var navRaw = [
+      { title: 'เอกสาร', items: [{ label: 'ใบเสนอราคา', icon: P.doc, href: 'Quotations.dc.html' }, { label: 'ตอบรับทำงาน (WO/PO)', icon: P.check, count: 5, href: 'WorkOrders.dc.html' }, { label: 'ใบสั่งซื้อให้ช่าง', icon: P.cart }] },
+      { title: 'จัดการงาน', items: [{ label: 'งานเสร็จแล้วทั้งหมด', icon: P.done }, { label: 'งานเสร็จรอจ่ายช่าง', icon: P.clock, count: 8 }] },
+      { title: 'การเงิน', items: [{ label: 'ใบแจ้งหนี้', icon: P.card }, { label: 'ใบกำกับภาษี', icon: P.receipt }, { label: 'ใบสำคัญรับ', icon: P.in }, { label: 'ใบสำคัญจ่าย', icon: P.out }, { label: 'ออก 50 ทวิ', icon: P.tax }] },
+      { title: 'รายงาน', items: [{ label: 'สรุปรายงานรายปี', icon: P.chart }] },
+      { title: 'ข้อมูลหลัก', items: [{ label: 'ข้อมูลลูกค้า', icon: P.users }, { label: 'ข้อมูลทีมช่าง', icon: P.tool }, { label: 'ข้อมูลบริษัท', icon: P.building }, { label: 'ตั้งค่าสถานะ WO', icon: P.gear }] }
+    ];
+    var nav = navRaw.map(function (g) {
+      return { title: g.title, items: g.items.map(function (n) {
+        var on = n.label === active;
+        return Object.assign({}, n, { href: n.href || {"ใบสั่งซื้อให้ช่าง": "PurchaseOrders.dc.html", "งานเสร็จแล้วทั้งหมด": "CompletedWorks.dc.html", "งานเสร็จรอจ่ายช่าง": "PendingPayments.dc.html", "ใบแจ้งหนี้": "Invoices.dc.html", "ใบกำกับภาษี": "TaxInvoices.dc.html", "ใบสำคัญรับ": "ReceiptVouchers.dc.html", "ใบสำคัญจ่าย": "PaymentVouchers.dc.html", "ออก 50 ทวิ": "WithholdingTax.dc.html", "สรุปรายงานรายปี": "Reports.dc.html", "ข้อมูลลูกค้า": "Customers.dc.html", "ข้อมูลทีมช่าง": "Technicians.dc.html", "ข้อมูลบริษัท": "CompanySettings.dc.html", "ตั้งค่าสถานะ WO": "WorkOrderStatuses.dc.html"}[n.label] || '#menu', cur: on ? 'page' : 'false', bg: on ? '#ffffff' : 'transparent', fg: on ? '#2f6b1f' : '#0b1f05' });
+      }) };
+    });
+
+    var customers = [
+      { id: 'A', name: '[ลูกค้า A]' }, { id: 'B', name: '[ลูกค้า B]' }, { id: 'C', name: '[ลูกค้า C]' },
+      { id: 'D', name: '[ลูกค้า D]' }, { id: 'E', name: '[ลูกค้า E]' }
+    ];
+
+    var defaults = { cust: 'A', project: 'ซ่อมระบบปรับอากาศ อาคาร 2', date: '2026-11-09', valid: '30', ref: '', sales: '1', disc: '0', wht: false, terms: '30', note: 'ราคานี้รวมค่าแรงและค่าขนส่งแล้ว รับประกันงานติดตั้ง 1 ปี' };
+    var f = Object.assign({}, defaults, st.f || {});
+    var fs = {};
+    Object.keys(defaults).forEach(function (k) {
+      fs[k] = function (e) { var nf = Object.assign({}, f); nf[k] = e.target.value; self.setState({ f: nf }); };
+    });
+    var cust = customers.filter(function (c) { return c.id === f.cust; })[0] || customers[0];
+    var custInfo = { name: cust.name, tax: '[เลข 13 หลัก] · สำนักงานใหญ่', addr: '[ที่อยู่ของ' + cust.name.replace(/[\[\]]/g, '') + ']', contact: '[ชื่อผู้ติดต่อ] · [เบอร์โทร]' };
+
+    var items = st.items || [
+      { d: 'ค่าแรงซ่อมและติดตั้งระบบปรับอากาศ', qty: '1', unit: 'งาน', price: '45000' },
+      { d: 'คอมเพรสเซอร์ 24,000 BTU', qty: '2', unit: 'ตัว', price: '38500' },
+      { d: 'น้ำยา R32 และวัสดุสิ้นเปลือง', qty: '1', unit: 'ชุด', price: '12000' }
+    ];
+    var num = function (v) { var n = parseFloat(v); return isFinite(n) ? n : 0; };
+    var money = function (n) { return '฿' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
+    var setItem = function (i, key) {
+      return function (e) { var next = items.slice(); next[i] = Object.assign({}, next[i]); next[i][key] = e.target.value; self.setState({ items: next }); };
+    };
+    var sub = 0;
+    var rows = items.map(function (it, i) {
+      var t = num(it.qty) * num(it.price);
+      sub += t;
+      return Object.assign({}, it, {
+        n: i + 1, total: money(t),
+        setD: setItem(i, 'd'), setQty: setItem(i, 'qty'), setUnit: setItem(i, 'unit'), setPrice: setItem(i, 'price'),
+        remove: function () { var next = items.slice(); next.splice(i, 1); self.setState({ items: next }); }
+      });
+    });
+
+    var disc = Math.min(num(f.disc), sub);
+    var after = sub - disc;
+    var vat = Math.round(after * 0.07 * 100) / 100;
+    var grand = after + vat;
+    var wht = Math.round(after * 0.03 * 100) / 100;
+
+    var bahtText = function (amount) {
+      var digits = ['', 'หนึ่ง', 'สอง', 'สาม', 'สี่', 'ห้า', 'หก', 'เจ็ด', 'แปด', 'เก้า'];
+      var units = ['', 'สิบ', 'ร้อย', 'พัน', 'หมื่น', 'แสน'];
+      var read6 = function (s, tail) {
+        s = s.replace(/^0+/, '');
+        var out = '', len = s.length;
+        for (var i = 0; i < len; i++) {
+          var d = +s.charAt(i), pos = len - i - 1;
+          if (d === 0) continue;
+          if (pos === 0 && d === 1 && (len > 1 || tail)) out += 'เอ็ด';
+          else if (pos === 1 && d === 2) out += 'ยี่';
+          else if (pos === 1 && d === 1) out += '';
+          else out += digits[d];
+          out += units[pos];
+        }
+        return out;
+      };
+      var read = function (s, tail) {
+        if (s.length > 6) {
+          var hi = s.slice(0, -6), lo = s.slice(-6);
+          return read(hi, tail) + 'ล้าน' + read6(lo, true);
+        }
+        return read6(s, tail);
+      };
+      var cents = Math.round(amount * 100);
+      var baht = Math.floor(cents / 100), satang = cents % 100;
+      var b = baht > 0 ? read(String(baht), false) : 'ศูนย์';
+      return b + 'บาท' + (satang > 0 ? read6(String(satang), false) + 'สตางค์' : 'ถ้วน');
+    };
+
+    return {
+      nav: nav, customers: customers, cust: custInfo,
+      fv: f, fs: fs,
+      toggleWht: function (e) { var nf = Object.assign({}, f); nf.wht = e.target.checked; self.setState({ f: nf }); },
+      items: rows, itemCount: rows.length,
+      addItem: function () { self.setState({ items: items.concat([{ d: '', qty: '1', unit: 'ชิ้น', price: '0' }]) }); },
+      sum: { sub: money(sub), after: money(after), vat: money(vat), grand: money(grand), text: bahtText(grand), wht: money(wht), net: money(grand - wht) }
+    };
+  }
+}
+</script>
+</body>
+</html>

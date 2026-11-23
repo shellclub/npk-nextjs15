@@ -1,15 +1,6 @@
-'use client';
+import { redirect } from 'next/navigation';
 
-import authRoles from '@auth/authRoles';
-import AuthGuardRedirect from '@auth/AuthGuardRedirect';
-import SignUpPageView from '../../components/views/SignUpPageView';
-
-function Page() {
-	return (
-		<AuthGuardRedirect auth={authRoles.onlyGuest}>
-			<SignUpPageView />
-		</AuthGuardRedirect>
-	);
+// ไม่เปิดสมัครสมาชิกเอง — ให้ผู้ดูแลระบบสร้างบัญชีให้
+export default function SignUpPage() {
+	redirect('/sign-in');
 }
-
-export default Page;

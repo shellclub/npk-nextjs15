@@ -2,57 +2,70 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 
 // GET /api/work-orders/[id]/delivery-note — Generate delivery note PDF for completed work
-export async function GET(
-  _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params;
-    const wo = await prisma.workOrder.findUnique({
-      where: { id },
-      include: {
-        quotation: {
-          include: {
-            customerGroup: true,
-            branch: true,
-            items: { orderBy: { itemOrder: 'asc' } },
-          },
-        },
-        branch: true,
-        team: { select: { teamName: true, leaderName: true } },
-        createdBy: { select: { name: true } },
-      },
-    });
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+	try {
+		const { id } = await params;
+		const wo = await prisma.workOrder.findUnique({
+			where: { id },
+			include: {
+				quotation: {
+					include: {
+						customerGroup: true,
+						branch: true,
+						items: { orderBy: { itemOrder: 'asc' } }
+					}
+				},
+				branch: true,
+				team: { select: { teamName: true, leaderName: true } },
+				createdBy: { select: { name: true } }
+			}
+		});
 
-    if (!wo) {
-      return NextResponse.json({ error: 'Work order not found' }, { status: 404 });
-    }
+		if (!wo) {
+			return NextResponse.json({ error: 'Work order not found' }, { status: 404 });
+		}
 
-    const q = wo.quotation;
+		const q = wo.quotation;
 
-    function fmt(n: number | string | null | undefined) {
-      return Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    }
+		function fmt(n: number | string | null | undefined) {
+			return Number(n || 0).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+		}
 
-    function fmtDate(d: Date | string) {
-      const date = new Date(d);
-      const thMonths = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
-      return `${date.getDate()} ${thMonths[date.getMonth()]} ${date.getFullYear() + 543}`;
-    }
+		function fmtDate(d: Date | string) {
+			const date = new Date(d);
+			const thMonths = [
+				'มกราคม',
+				'กุมภาพันธ์',
+				'มีนาคม',
+				'เมษายน',
+				'พฤษภาคม',
+				'มิถุนายน',
+				'กรกฎาคม',
+				'สิงหาคม',
+				'กันยายน',
+				'ตุลาคม',
+				'พฤศจิกายน',
+				'ธันวาคม'
+			];
+			return `${date.getDate()} ${thMonths[date.getMonth()]} ${date.getFullYear() + 543}`;
+		}
 
-    // Build items
-    const items = q?.items || [];
-    let itemIdx = 0;
-    const itemRows = items.map((item) => {
-      const isHeader = item.itemType === 'HEADER';
-      if (isHeader) {
-        itemIdx = 0;
-        return `<tr style="background:#F1F8E9;">
+		// Build items
+		const items = q?.items || [];
+		let itemIdx = 0;
+		const itemRows = items
+			.map((item) => {
+				const isHeader = item.itemType === 'HEADER';
+
+				if (isHeader) {
+					itemIdx = 0;
+					return `<tr style="background:#F1F8E9;">
           <td colspan="5" style="padding:6px 10px;font-weight:700;font-size:13px;color:#1B5E20;border-bottom:1px solid #C8E6C9;">${item.description}</td>
         </tr>`;
-      }
-      itemIdx++;
-      return `<tr>
+				}
+
+				itemIdx++;
+				return `<tr>
         <td style="text-align:center;padding:5px 6px;border-bottom:1px solid #E2E8F0;font-size:12px;">${item.parentIndex != null ? `${item.parentIndex}.${itemIdx}` : itemIdx}</td>
         <td style="padding:5px 8px;border-bottom:1px solid #E2E8F0;font-size:12px;">${item.description}</td>
         <td style="text-align:center;padding:5px 6px;border-bottom:1px solid #E2E8F0;font-size:12px;">${Number(item.quantity)}</td>
@@ -61,15 +74,20 @@ export async function GET(
           <span style="display:inline-block;width:20px;height:20px;border:1.5px solid #999;border-radius:3px;"></span>
         </td>
       </tr>`;
-    }).join('');
+			})
+			.join('');
 
-    const customerName = q?.customerGroup?.groupName || '-';
-    const customerAddress = q?.address || q?.customerGroup?.headOfficeAddress || '-';
-    const branchDisplay = wo.branch ? `${wo.branch.code || ''} ${wo.branch.name}` : (q?.branch ? `${q.branch.code || ''} ${q.branch.name}` : '-');
-    const projectName = q?.projectName || wo.description || '-';
-    const totalAmount = Number(q?.totalAmount || wo.totalAmount);
+		const customerName = q?.customerGroup?.groupName || '-';
+		const customerAddress = q?.address || q?.customerGroup?.headOfficeAddress || '-';
+		const branchDisplay = wo.branch
+			? `${wo.branch.code || ''} ${wo.branch.name}`
+			: q?.branch
+				? `${q.branch.code || ''} ${q.branch.name}`
+				: '-';
+		const projectName = q?.projectName || wo.description || '-';
+		const totalAmount = Number(q?.totalAmount || wo.totalAmount);
 
-    const html = `<!DOCTYPE html>
+		const html = `<!DOCTYPE html>
 <html lang="th">
 <head>
   <meta charset="UTF-8">
@@ -189,10 +207,14 @@ export async function GET(
         <td class="label">ชื่อโครงการ/งาน :</td>
         <td class="value-green" colspan="3">${projectName}</td>
       </tr>
-      ${wo.startDate || wo.endDate ? `<tr>
+      ${
+			wo.startDate || wo.endDate
+				? `<tr>
         <td class="label">ระยะเวลางาน :</td>
         <td colspan="3">${wo.startDate ? fmtDate(wo.startDate) : '-'} ถึง ${wo.endDate ? fmtDate(wo.endDate) : '-'}</td>
-      </tr>` : ''}
+      </tr>`
+				: ''
+		}
     </table>
 
     <!-- Items Checklist -->
@@ -268,14 +290,14 @@ export async function GET(
 </body>
 </html>`;
 
-    return new NextResponse(html, {
-      headers: {
-        'Content-Type': 'text/html; charset=utf-8',
-        'Cache-Control': 'no-cache, no-store, must-revalidate',
-      },
-    });
-  } catch (error) {
-    console.error('GET /api/work-orders/[id]/delivery-note error:', error);
-    return NextResponse.json({ error: 'Failed to generate delivery note' }, { status: 500 });
-  }
+		return new NextResponse(html, {
+			headers: {
+				'Content-Type': 'text/html; charset=utf-8',
+				'Cache-Control': 'no-cache, no-store, must-revalidate'
+			}
+		});
+	} catch (error) {
+		console.error('GET /api/work-orders/[id]/delivery-note error:', error);
+		return NextResponse.json({ error: 'Failed to generate delivery note' }, { status: 500 });
+	}
 }

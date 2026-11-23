@@ -1,250 +1,281 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { Eye, Plus, Printer, Trash2 } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import Typography from '@mui/material/Typography';
-import Paper from '@mui/material/Paper';
-import Button from '@mui/material/Button';
-import Table from '@mui/material/Table';
-import TableBody from '@mui/material/TableBody';
-import TableCell from '@mui/material/TableCell';
-import TableContainer from '@mui/material/TableContainer';
-import TableHead from '@mui/material/TableHead';
-import TableRow from '@mui/material/TableRow';
-import Chip from '@mui/material/Chip';
-import TextField from '@mui/material/TextField';
-import InputAdornment from '@mui/material/InputAdornment';
-import IconButton from '@mui/material/IconButton';
-import Box from '@mui/material/Box';
-import Tooltip from '@mui/material/Tooltip';
-import CircularProgress from '@mui/material/CircularProgress';
-import MenuItem from '@mui/material/MenuItem';
-import Menu from '@mui/material/Menu';
-import ListItemIcon from '@mui/material/ListItemIcon';
-import ListItemText from '@mui/material/ListItemText';
-import Divider from '@mui/material/Divider';
-import Dialog from '@mui/material/Dialog';
-import DialogTitle from '@mui/material/DialogTitle';
-import DialogContent from '@mui/material/DialogContent';
-import DialogActions from '@mui/material/DialogActions';
-import FuseSvgIcon from '@fuse/core/FuseSvgIcon';
-import FusePageCarded from '@fuse/core/FusePageCarded';
-import { styled } from '@mui/material/styles';
-import { motion } from 'motion/react';
+import { useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+	ActionMenu,
+	Button,
+	Card,
+	ConfirmDialog,
+	DataTable,
+	FilterField,
+	FilterTabs,
+	MoneyText,
+	PageHeader,
+	Pagination,
+	PrintPreviewDialog,
+	SearchInput,
+	Select,
+	StatCard,
+	StatGrid,
+	StatusBadge,
+	TwoLine
+} from '@/components/ui';
 import { useAlert } from '@/components/shared/AlertProvider';
+import { formatDateShort, formatMoney, monthKey } from '@/lib/format';
+import { FALLBACK, PAYMENT_METHOD } from '@/lib/status';
+import { sendJson, useApi } from '@/lib/use-api';
 
-const Root = styled(FusePageCarded)(() => ({ '& .container': { maxWidth: '100%!important' } }));
-
-type PaymentVoucher = {
-  id: string; voucherNumber: string; date: string; payeeName: string;
-  amount: number; paymentMethod: string; description?: string | null;
-  withholdingTax?: { whtNumber: string; taxAmount: number; taxRate: number } | null;
+type Payment = {
+	id: string;
+	voucherNumber: string;
+	date: string;
+	payeeName: string;
+	description?: string | null;
+	amount: number;
+	paymentMethod: string;
+	withholdingTax?: { whtNumber: string; incomeType: string; taxAmount: number } | null;
 };
 
-const paymentMethodLabels: Record<string, string> = { CASH: 'เงินสด', TRANSFER: 'โอนเงิน', CHEQUE: 'เช็ค' };
-function fmt(n: number | string) { return Number(n).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-function fmtDate(d: string) { return new Date(d).toLocaleDateString('th-TH', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
+const PAGE_SIZE = 10;
+const TABS = ['ALL', 'TRANSFER', 'CHEQUE', 'CASH'] as const;
+type Tab = (typeof TABS)[number];
+const INCOME_TYPES = ['ค่าจ้าง', 'ค่าบริการ', 'ค่าเช่า', 'ค่าขนส่ง', 'ค่าโฆษณา', 'อื่นๆ'];
+const sum = (a: Payment[]) => a.reduce((s, r) => s + Number(r.amount), 0);
 
-function PaymentVouchersPage() {
-  const router = useRouter();
-  const alert = useAlert();
-  const [data, setData] = useState<PaymentVoucher[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [actionLoading, setActionLoading] = useState(false);
+export default function PaymentVouchersPage() {
+	const router = useRouter();
+	const alert = useAlert();
+	const qc = useQueryClient();
+	const { data, isLoading } = useApi<Payment[]>('/api/payment-vouchers');
+	const list = useMemo(() => (Array.isArray(data) ? data : []), [data]);
+	const [tab, setTab] = useState<Tab>('ALL');
+	const [q, setQ] = useState('');
+	const [income, setIncome] = useState('ALL');
+	const [page, setPage] = useState(1);
+	const [print, setPrint] = useState<Payment | null>(null);
+	const [del, setDel] = useState<Payment | null>(null);
 
-  // Menu
-  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
-  const [menuItem, setMenuItem] = useState<PaymentVoucher | null>(null);
+	const filtered = useMemo(() => {
+		const k = q.trim().toLowerCase();
 
-  // Delete dialog
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<PaymentVoucher | null>(null);
+		return list.filter(
+			(r) =>
+				(tab === 'ALL' || r.paymentMethod === tab) &&
+				(income === 'ALL' || r.withholdingTax?.incomeType === income) &&
+				(!k || `${r.voucherNumber} ${r.payeeName} ${r.description ?? ''}`.toLowerCase().includes(k))
+		);
+	}, [list, tab, q, income]);
+	const rows = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+	const nowKey = monthKey(new Date());
+	const withheld = list.filter((r) => r.withholdingTax);
 
-  // Print preview dialog
-  const [printOpen, setPrintOpen] = useState(false);
-  const [printId, setPrintId] = useState('');
-  const [printNumber, setPrintNumber] = useState('');
+	async function remove() {
+		if (!del) return;
 
-  const handleMenuOpen = (e: React.MouseEvent<HTMLElement>, item: PaymentVoucher) => { e.stopPropagation(); setMenuAnchor(e.currentTarget); setMenuItem(item); };
-  const handleMenuClose = () => { setMenuAnchor(null); setMenuItem(null); };
+		try {
+			await sendJson(`/api/payment-vouchers/${del.id}`, 'DELETE');
+			alert.showSuccess('ลบเรียบร้อย', del.voucherNumber);
+			await qc.invalidateQueries({ queryKey: ['/api/payment-vouchers'] });
+		} catch {
+			alert.showError('เกิดข้อผิดพลาด', 'ไม่สามารถลบได้');
+		}
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const p = new URLSearchParams();
-      if (search) p.set('search', search);
-      const r = await fetch(`/api/payment-vouchers?${p}`);
-      const d = await r.json();
-      setData(Array.isArray(d) ? d : []);
-    } catch { setData([]); } finally { setLoading(false); }
-  }, [search]);
+		setDel(null);
+	}
 
-  useEffect(() => { load(); }, [load]);
-
-  const handleDelete = async () => {
-    if (!deleteTarget) return;
-    setActionLoading(true);
-    try {
-      await fetch(`/api/payment-vouchers/${deleteTarget.id}`, { method: 'DELETE' });
-      alert.showSuccess('ลบเรียบร้อย', `${deleteTarget.voucherNumber} ถูกลบแล้ว`);
-      load();
-    } catch { alert.showError('เกิดข้อผิดพลาด', 'ไม่สามารถลบได้'); }
-    finally { setActionLoading(false); setDeleteOpen(false); }
-  };
-
-  const header = (
-    <div className="flex flex-auto flex-col py-4">
-      <Typography sx={{ fontSize: '14px', color: '#94A3B8', mb: 0.5 }}>การเงิน {'>'} ใบสำคัญจ่าย</Typography>
-      <div className="flex min-w-0 flex-auto flex-col gap-8 sm:flex-row sm:items-center">
-        <div className="flex flex-auto items-center gap-8">
-          <motion.span initial={{ x: -20 }} animate={{ x: 0, transition: { delay: 0.2 } }}>
-            <Typography sx={{ fontSize: '28px', fontWeight: 800, color: '#1E293B' }}>ใบสำคัญจ่าย</Typography>
-          </motion.span>
-          <div className="flex flex-1 items-center justify-end gap-12">
-            <TextField placeholder="ค้นหาเลขที่ใบสำคัญจ่าย, ผู้รับเงิน..." value={search} onChange={(e) => setSearch(e.target.value)} size="small"
-              sx={{ minWidth: 360, '& .MuiOutlinedInput-root': { borderRadius: '10px', fontSize: '14px', bgcolor: '#F8FAFC' } }}
-              InputProps={{ startAdornment: <InputAdornment position="start"><FuseSvgIcon size={18} color="action">lucide:search</FuseSvgIcon></InputAdornment> }} />
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0, transition: { delay: 0.2 } }}>
-              <Button variant="contained" size="large"
-                onClick={() => router.push('/apps/payment-vouchers/new')}
-                startIcon={<FuseSvgIcon size={20}>lucide:plus</FuseSvgIcon>}
-                sx={{ background: 'linear-gradient(135deg, #DC2626 0%, #B91C1C 100%)', borderRadius: '12px', px: 3, py: 1, fontSize: '15px', fontWeight: 700, textTransform: 'none', boxShadow: '0 4px 14px rgba(220,38,38,0.35)', '&:hover': { background: 'linear-gradient(135deg, #B91C1C 0%, #991B1B 100%)' } }}>
-                + บันทึกการจ่ายเงิน
-              </Button>
-            </motion.div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const content = (
-    <Paper className="flex h-full w-full flex-auto flex-col overflow-hidden rounded-b-none" elevation={0}>
-      {loading ? <Box sx={{ display: 'flex', justifyContent: 'center', py: 10 }}><CircularProgress sx={{ color: '#38BDF8' }} /></Box>
-        : data.length === 0 ? (
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 10 }}>
-            <FuseSvgIcon sx={{ color: '#CBD5E1', mb: 2 }} size={64}>lucide:wallet</FuseSvgIcon>
-            <Typography sx={{ fontSize: '18px', fontWeight: 600, color: '#64748B' }}>ยังไม่มีใบสำคัญจ่าย</Typography>
-          </Box>
-        ) : (
-          <>
-            <TableContainer sx={{ flex: 1 }}>
-              <Table stickyHeader size="small">
-                <TableHead>
-                  <TableRow sx={{ '& th': { fontSize: '13px', fontWeight: 700, color: '#475569', borderBottom: '2px solid #E2E8F0', py: 1.2, bgcolor: '#F8FAFC' } }}>
-                    <TableCell sx={{ width: 40 }}>#</TableCell>
-                    <TableCell>วันที่</TableCell>
-                    <TableCell>เลขที่ใบสำคัญจ่าย</TableCell>
-                    <TableCell>ผู้รับเงิน</TableCell>
-                    <TableCell>รายละเอียด</TableCell>
-                    <TableCell align="center">วิธีจ่าย</TableCell>
-                    <TableCell align="center">หัก ณ ที่จ่าย</TableCell>
-                    <TableCell align="right">จำนวนเงิน (บาท)</TableCell>
-                    <TableCell align="center" sx={{ width: 60 }} />
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {data.map((pv, idx) => (
-                    <TableRow key={pv.id} hover
-                      onClick={() => router.push(`/apps/payment-vouchers/${pv.id}`)}
-                      sx={{ cursor: 'pointer', '&:hover': { bgcolor: '#FFF5F5' }, '& td': { fontSize: '13px', color: '#334155', py: 0.8, borderBottom: '1px solid #F1F5F9' } }}>
-                      <TableCell sx={{ color: '#94A3B8', fontWeight: 500 }}>{idx + 1}</TableCell>
-                      <TableCell sx={{ whiteSpace: 'nowrap', fontWeight: 500 }}>{fmtDate(pv.date)}</TableCell>
-                      <TableCell><Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#DC2626' }}>{pv.voucherNumber}</Typography></TableCell>
-                      <TableCell sx={{ fontWeight: 500 }}>{pv.payeeName}</TableCell>
-                      <TableCell sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{pv.description || '-'}</TableCell>
-                      <TableCell align="center"><Chip label={paymentMethodLabels[pv.paymentMethod] || pv.paymentMethod} size="small" sx={{ bgcolor: '#FEF3C7', color: '#D97706', fontWeight: 600, fontSize: '11px', borderRadius: '8px' }} /></TableCell>
-                      <TableCell align="center">
-                        {pv.withholdingTax ? (
-                          <Chip label={`${pv.withholdingTax.taxRate}% (${fmt(pv.withholdingTax.taxAmount)})`} size="small"
-                            sx={{ bgcolor: '#F3E8FF', color: '#7C3AED', fontWeight: 600, fontSize: '11px', borderRadius: '8px' }} />
-                        ) : <Typography sx={{ fontSize: '12px', color: '#94A3B8' }}>-</Typography>}
-                      </TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', fontSize: '14px !important' }}>{fmt(pv.amount)}</TableCell>
-                      <TableCell align="center" onClick={(e) => e.stopPropagation()}>
-                        <Tooltip title="จัดการ" arrow>
-                          <IconButton size="small" onClick={(e) => handleMenuOpen(e, pv)}
-                            sx={{ color: '#64748B', borderRadius: '8px', '&:hover': { bgcolor: '#F1F5F9', color: '#DC2626' } }}>
-                            <FuseSvgIcon size={18}>lucide:ellipsis-vertical</FuseSvgIcon>
-                          </IconButton>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', px: 2, py: 1.5, borderTop: '1px solid #F1F5F9', bgcolor: '#FAFBFC' }}>
-              <Typography sx={{ fontSize: '14px', color: '#64748B' }}>แสดง {data.length} รายการ</Typography>
-              <Typography sx={{ fontSize: '15px', fontWeight: 600, color: '#DC2626' }}>ยอดรวมจ่าย <Box component="span" sx={{ fontSize: '17px', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>{fmt(data.reduce((s, p) => s + Number(p.amount), 0))}</Box> บาท</Typography>
-            </Box>
-          </>
-        )}
-
-      {/* Action Menu */}
-      <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={handleMenuClose}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        slotProps={{ paper: { sx: { borderRadius: '12px', minWidth: 200, boxShadow: '0 8px 30px rgba(0,0,0,0.12)', py: 0.5 } } }}>
-        <MenuItem onClick={() => { if (menuItem) router.push(`/apps/payment-vouchers/${menuItem.id}`); handleMenuClose(); }} sx={{ py: 1.2, gap: 1.5 }}>
-          <ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#0284C7' }}>lucide:eye</FuseSvgIcon></ListItemIcon>
-          <ListItemText>ดูรายละเอียด</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={() => { if (menuItem) { setPrintId(menuItem.id); setPrintNumber(menuItem.voucherNumber); setPrintOpen(true); } handleMenuClose(); }} sx={{ py: 1.2, gap: 1.5 }}>
-          <ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#DC2626' }}>lucide:printer</FuseSvgIcon></ListItemIcon>
-          <ListItemText>พิมพ์ใบสำคัญจ่าย</ListItemText>
-        </MenuItem>
-        <Divider sx={{ my: 0.5 }} />
-        <MenuItem onClick={() => { if (menuItem) { setDeleteTarget(menuItem); setDeleteOpen(true); } handleMenuClose(); }} sx={{ py: 1.2, gap: 1.5, color: '#DC2626' }}>
-          <ListItemIcon><FuseSvgIcon size={18} sx={{ color: '#DC2626' }}>lucide:trash-2</FuseSvgIcon></ListItemIcon>
-          <ListItemText primaryTypographyProps={{ color: '#DC2626' }}>ลบ</ListItemText>
-        </MenuItem>
-      </Menu>
-
-      {/* Delete Dialog */}
-      <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: '16px' } }}>
-        <DialogTitle sx={{ fontSize: '18px', fontWeight: 700, color: '#1E293B', display: 'flex', alignItems: 'center', gap: 1 }}>
-          <FuseSvgIcon sx={{ color: '#EF4444' }} size={24}>lucide:alert-triangle</FuseSvgIcon> ยืนยันการลบ
-        </DialogTitle>
-        <Divider />
-        <DialogContent sx={{ pt: 2.5 }}>
-          <Typography sx={{ fontSize: '15px', color: '#475569', mb: 1 }}>คุณต้องการลบใบสำคัญจ่าย:</Typography>
-          <Typography sx={{ fontSize: '16px', fontWeight: 700, color: '#DC2626' }}>{deleteTarget?.voucherNumber}</Typography>
-        </DialogContent>
-        <Divider />
-        <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
-          <Button onClick={() => setDeleteOpen(false)} variant="outlined" sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, color: '#64748B', borderColor: '#E2E8F0' }}>ยกเลิก</Button>
-          <Button onClick={handleDelete} variant="contained" disabled={actionLoading} sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 700, bgcolor: '#EF4444', '&:hover': { bgcolor: '#DC2626' } }}>{actionLoading ? 'กำลังดำเนินการ...' : 'ยืนยันลบ'}</Button>
-        </DialogActions>
-      </Dialog>
-    </Paper>
-  );
-
-  return (
-    <>
-      <Root header={header} content={content} scroll="content" />
-
-      {/* Print Preview Dialog */}
-      <Dialog open={printOpen} onClose={() => setPrintOpen(false)} maxWidth={false} fullWidth
-        PaperProps={{ sx: { borderRadius: '16px', width: '90vw', maxWidth: '1100px', height: '90vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' } }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 3, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', bgcolor: '#F8FAFC', flexShrink: 0 }}>
-          <Typography sx={{ fontSize: '16px', fontWeight: 700, color: '#DC2626' }}>{printNumber}</Typography>
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <Button variant="outlined" onClick={() => setPrintOpen(false)} sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, borderColor: '#E2E8F0', color: '#64748B' }}>ปิดหน้าต่าง</Button>
-            <Button variant="contained" startIcon={<FuseSvgIcon size={18}>lucide:printer</FuseSvgIcon>}
-              onClick={() => { const f = document.getElementById('pv-print-iframe') as HTMLIFrameElement; f?.contentWindow?.print(); }}
-              sx={{ borderRadius: '10px', textTransform: 'none', fontWeight: 600, background: 'linear-gradient(135deg,#DC2626,#B91C1C)' }}>พิมพ์</Button>
-          </Box>
-        </Box>
-        <Box sx={{ flex: 1, bgcolor: '#E2E8F0', overflow: 'hidden', display: 'flex' }}>
-          <iframe id="pv-print-iframe" src={printOpen && printId ? `/api/payment-vouchers/${printId}/pdf` : 'about:blank'}
-            style={{ flex: 1, border: 'none', background: '#fff', margin: '16px auto', maxWidth: '800px', boxShadow: '0 4px 20px rgba(0,0,0,0.15)', borderRadius: '4px' }}
-            title="Print Preview" />
-        </Box>
-      </Dialog>
-    </>
-  );
+	return (
+		<>
+			<PageHeader
+				title="ใบสำคัญจ่าย"
+				subtitle="บันทึกการจ่ายเงินให้ช่างและผู้รับเงิน พร้อมหัก ณ ที่จ่าย"
+				actions={
+					<Button
+						href="/apps/payment-vouchers/new"
+						icon={<Plus size={18} />}
+					>
+						ออกใบสำคัญจ่าย
+					</Button>
+				}
+			/>
+			<StatGrid>
+				<StatCard
+					tone="tint"
+					label="จ่ายเดือนนี้"
+					value={formatMoney(sum(list.filter((r) => monthKey(r.date) === nowKey)), 0)}
+				/>
+				<StatCard
+					label="จ่ายปีนี้"
+					color="ink"
+					value={formatMoney(sum(list.filter((r) => monthKey(r.date).slice(0, 4) === nowKey.slice(0, 4))), 0)}
+				/>
+				<StatCard
+					label="มีหัก ณ ที่จ่าย"
+					color="info"
+					value={`${withheld.length} ใบ`}
+					sub={`ภาษีที่หัก ${formatMoney(
+						withheld.reduce((s, r) => s + Number(r.withholdingTax?.taxAmount ?? 0), 0),
+						0
+					)}`}
+				/>
+			</StatGrid>
+			<Card>
+				<FilterTabs
+					tabs={TABS.map((t) => ({
+						value: t,
+						label: t === 'ALL' ? 'ทั้งหมด' : PAYMENT_METHOD[t].label,
+						count: t === 'ALL' ? list.length : list.filter((r) => r.paymentMethod === t).length
+					}))}
+					value={tab}
+					onChange={(v) => {
+						setTab(v);
+						setPage(1);
+					}}
+					label="กรองตามวิธีจ่าย"
+				/>
+				<div className="flex flex-wrap gap-4">
+					<FilterField
+						label="ค้นหา"
+						className="min-w-64 flex-1"
+					>
+						{(id) => (
+							<SearchInput
+								id={id}
+								value={q}
+								onChange={(e) => {
+									setQ(e.target.value);
+									setPage(1);
+								}}
+								placeholder="เลขที่ ผู้รับเงิน หรือรายละเอียด"
+							/>
+						)}
+					</FilterField>
+					<FilterField
+						label="ประเภทเงินได้"
+						className="w-56"
+					>
+						{(id) => (
+							<Select
+								id={id}
+								value={income}
+								onChange={(e) => {
+									setIncome(e.target.value);
+									setPage(1);
+								}}
+							>
+								<option value="ALL">ทุกประเภท</option>
+								{INCOME_TYPES.map((t) => (
+									<option key={t}>{t}</option>
+								))}
+							</Select>
+						)}
+					</FilterField>
+				</div>
+				<DataTable
+					loading={isLoading}
+					rows={rows}
+					rowKey={(r) => r.id}
+					empty="ยังไม่มีใบสำคัญจ่าย"
+					columns={[
+						{
+							key: 'no',
+							header: 'เลขที่',
+							cell: (r) => (
+								<Link
+									href={`/apps/payment-vouchers/${r.id}`}
+									className="font-semibold"
+								>
+									{r.voucherNumber}
+								</Link>
+							)
+						},
+						{
+							key: 'd',
+							header: 'วันที่',
+							cell: (r) => <span className="whitespace-nowrap">{formatDateShort(r.date)}</span>
+						},
+						{
+							key: 'p',
+							header: 'ผู้รับเงิน',
+							cell: (r) => (
+								<TwoLine
+									title={r.payeeName}
+									sub={r.description}
+								/>
+							)
+						},
+						{
+							key: 'm',
+							header: 'วิธีจ่าย',
+							cell: (r) => {
+								const m = PAYMENT_METHOD[r.paymentMethod] ?? FALLBACK;
+								return (
+									<StatusBadge
+										label={m.label}
+										tone={m.tone}
+									/>
+								);
+							}
+						},
+						{
+							key: 'w',
+							header: 'หัก ณ ที่จ่าย',
+							cell: (r) =>
+								r.withholdingTax ? (
+									<StatusBadge
+										label="50 ทวิ"
+										tone="info"
+									/>
+								) : (
+									<span className="text-ink-muted">ไม่หัก</span>
+								)
+						},
+						{ key: 'a', header: 'จำนวนเงิน', money: true, cell: (r) => <MoneyText value={r.amount} /> },
+						{
+							key: 'act',
+							header: <span className="sr-only">การดำเนินการ</span>,
+							align: 'right',
+							cell: (r) => (
+								<ActionMenu
+									actions={[
+										{
+											label: 'ดูรายละเอียด',
+											icon: Eye,
+											onClick: () => router.push(`/apps/payment-vouchers/${r.id}`)
+										},
+										{ label: 'พิมพ์ใบสำคัญจ่าย', icon: Printer, onClick: () => setPrint(r) },
+										{ label: 'ลบ', icon: Trash2, danger: true, onClick: () => setDel(r) }
+									]}
+								/>
+							)
+						}
+					]}
+				/>
+				<Pagination
+					page={page}
+					pageSize={PAGE_SIZE}
+					total={filtered.length}
+					onChange={setPage}
+				/>
+			</Card>
+			<PrintPreviewDialog
+				open={!!print}
+				onClose={() => setPrint(null)}
+				title={print?.voucherNumber ?? ''}
+				src={print ? `/api/payment-vouchers/${print.id}/pdf` : ''}
+			/>
+			<ConfirmDialog
+				open={!!del}
+				danger
+				title="ลบใบสำคัญจ่าย"
+				message={`ต้องการลบ ${del?.voucherNumber ?? ''} ใช่หรือไม่`}
+				confirmLabel="ลบ"
+				onClose={() => setDel(null)}
+				onConfirm={remove}
+			/>
+		</>
+	);
 }
-
-export default PaymentVouchersPage;

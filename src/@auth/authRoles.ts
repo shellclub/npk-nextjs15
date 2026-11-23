@@ -1,26 +1,9 @@
-/**
- * The authRoles object defines the authorization roles for the Fuse application.
- */
+/** กลุ่ม role ที่ใช้กับ AuthGuardRedirect (ค่า role เป็นตัวพิมพ์เล็กตาม UserRole ใน Prisma) */
 const authRoles = {
-	/**
-	 * The admin role grants access to users with the 'admin' role.
-	 */
-	admin: ['admin'],
-
-	/**
-	 * The staff role grants access to users with the 'admin' or 'staff' role.
-	 */
-	staff: ['admin', 'staff'],
-
-	/**
-	 * The user role grants access to users with the 'admin', 'staff', or 'user' role.
-	 */
-	user: ['admin', 'staff', 'user'],
-
-	/**
-	 * The onlyGuest role grants access to unauthenticated users.
-	 */
-	onlyGuest: []
+	/** ทุก role ที่เข้าระบบหลังบ้านได้ */
+	staff: ['admin', 'manager', 'staff', 'accountant'],
+	/** เฉพาะผู้ที่ยังไม่ล็อกอิน */
+	onlyGuest: [] as string[]
 };
 
 export default authRoles;

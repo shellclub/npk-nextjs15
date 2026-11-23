@@ -1,9 +1,8 @@
 'use client';
 
+import { TriangleAlert } from 'lucide-react';
+import Link from 'next/link';
 import { useEffect } from 'react';
-import { Typography, Button, Container } from '@mui/material';
-import Link from '@fuse/core/Link';
-import FuseSvgIcon from '@fuse/core/FuseSvgIcon';
 
 type ErrorProps = {
 	error: Error & { digest?: string };
@@ -16,47 +15,28 @@ export default function Error({ error, reset }: ErrorProps) {
 	}, [error]);
 
 	return (
-		<Container maxWidth="sm">
-			<div className="flex min-h-screen flex-col items-center justify-center text-center">
-				<FuseSvgIcon
-					className="mb-4"
-					color="error"
-					size={64}
+		<main className="bg-canvas text-ink flex min-h-screen flex-col items-center justify-center gap-4 px-4 text-center">
+			<TriangleAlert
+				aria-hidden="true"
+				className="text-danger size-14"
+			/>
+			<h1 className="font-display text-[26px] font-semibold">เกิดข้อผิดพลาดบางอย่าง</h1>
+			<p className="text-ink-muted max-w-md">{error.message || 'ระบบขัดข้อง กรุณาลองใหม่อีกครั้ง'}</p>
+			<div className="flex gap-3">
+				<Link
+					href="/"
+					className="bg-brand text-on-brand font-display inline-flex min-h-11 items-center rounded-full px-5 font-medium outline-offset-2 focus-visible:outline-2"
 				>
-					lucide:info
-				</FuseSvgIcon>
-				<Typography
-					className="mb-4 text-xl lg:text-3xl"
-					color="error.main"
+					กลับหน้าแรก
+				</Link>
+				<button
+					type="button"
+					onClick={reset}
+					className="bg-surface-2 text-ink font-display min-h-11 rounded-full px-5 font-medium outline-offset-2 focus-visible:outline-2"
 				>
-					Oops! Something went wrong
-				</Typography>
-				<Typography
-					className="mb-8"
-					color="text.secondary"
-				>
-					{error.message || 'An unexpected error occurred'}
-				</Typography>
-				<div className="flex gap-2">
-					<Button
-						component={Link}
-						to="/"
-						variant="contained"
-						color="primary"
-						size="small"
-					>
-						Go to homepage
-					</Button>
-					<Button
-						onClick={() => reset()}
-						variant="outlined"
-						color="secondary"
-						size="small"
-					>
-						Try again
-					</Button>
-				</div>
+					ลองอีกครั้ง
+				</button>
 			</div>
-		</Container>
+		</main>
 	);
 }

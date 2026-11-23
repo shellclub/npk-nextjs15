@@ -1,134 +1,161 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { recalcPOTotals } from '@/lib/po-totals';
+
+const COST_TYPES = ['LABOUR', 'MATERIAL', 'OTHER'];
 
 // GET /api/purchase-orders/[id]
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params;
-    const po = await prisma.purchaseOrder.findUnique({
-      where: { id },
-      include: {
-        workOrder: {
-          select: {
-            id: true,
-            woNumber: true,
-            poNumber: true,
-            poDate: true,
-            date: true,
-            description: true,
-            startDate: true,
-            endDate: true,
-            quotation: {
-              select: {
-                id: true,
-                quotationNumber: true,
-                projectName: true,
-                subtotal: true,
-                totalAmount: true,
-                contactPerson: true,
-                contactPhone: true,
-                customerGroup: { select: { groupName: true } },
-                branch: { select: { name: true, code: true } },
-              },
-            },
-          },
-        },
-        quotation: {
-          select: {
-            id: true,
-            quotationNumber: true,
-            projectName: true,
-            subtotal: true,
-            totalAmount: true,
-            contactPerson: true,
-            contactPhone: true,
-            customerGroup: { select: { groupName: true } },
-            branch: { select: { name: true, code: true } },
-            items: { orderBy: { itemOrder: 'asc' } },
-          },
-        },
-        team: true,
-        items: { orderBy: [{ itemOrder: 'asc' }, { createdAt: 'asc' }] },
-        adjustments: { orderBy: { createdAt: 'asc' } },
-      },
-    });
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+	try {
+		const { id } = await params;
+		const po = await prisma.purchaseOrder.findUnique({
+			where: { id },
+			include: {
+				workOrder: {
+					select: {
+						id: true,
+						woNumber: true,
+						poNumber: true,
+						poDate: true,
+						date: true,
+						description: true,
+						startDate: true,
+						endDate: true,
+						quotation: {
+							select: {
+								id: true,
+								quotationNumber: true,
+								projectName: true,
+								subtotal: true,
+								totalAmount: true,
+								contactPerson: true,
+								contactPhone: true,
+								customerGroup: { select: { groupName: true } },
+								branch: { select: { name: true, code: true } }
+							}
+						}
+					}
+				},
+				quotation: {
+					select: {
+						id: true,
+						quotationNumber: true,
+						projectName: true,
+						subtotal: true,
+						totalAmount: true,
+						contactPerson: true,
+						contactPhone: true,
+						customerGroup: { select: { groupName: true } },
+						branch: { select: { name: true, code: true } },
+						items: { orderBy: { itemOrder: 'asc' } }
+					}
+				},
+				team: true,
+				items: { orderBy: [{ itemOrder: 'asc' }, { createdAt: 'asc' }] },
+				adjustments: { orderBy: { createdAt: 'asc' } },
+				installments: {
+					orderBy: { seq: 'asc' },
+					include: { paymentVouchers: { select: { id: true, voucherNumber: true, amount: true } } }
+				}
+			}
+		});
 
-    if (!po) {
-      return NextResponse.json({ error: 'Purchase order not found' }, { status: 404 });
-    }
+		if (!po) {
+			return NextResponse.json({ error: 'Purchase order not found' }, { status: 404 });
+		}
 
-    return NextResponse.json(po);
-  } catch (error) {
-    console.error('GET /api/purchase-orders/[id] error:', error);
-    return NextResponse.json({ error: 'Failed to fetch purchase order' }, { status: 500 });
-  }
+		return NextResponse.json(po);
+	} catch (error) {
+		console.error('GET /api/purchase-orders/[id] error:', error);
+		return NextResponse.json({ error: 'Failed to fetch purchase order' }, { status: 500 });
+	}
 }
 
 // PATCH /api/purchase-orders/[id] — Update PO
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params;
-    const body = await request.json();
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+	try {
+		const { id } = await params;
+		const body = await request.json();
 
-    const existing = await prisma.purchaseOrder.findUnique({ where: { id } });
-    if (!existing) {
-      return NextResponse.json({ error: 'Purchase order not found' }, { status: 404 });
-    }
+		const existing = await prisma.purchaseOrder.findUnique({ where: { id } });
 
-    const po = await prisma.purchaseOrder.update({
-      where: { id },
-      data: {
-        workOrderId: body.workOrderId !== undefined ? (body.workOrderId || null) : undefined,
-        quotationId: body.quotationId !== undefined ? (body.quotationId || null) : undefined,
-        teamId: body.teamId !== undefined ? (body.teamId || null) : undefined,
-        date: body.date ? new Date(body.date) : undefined,
-        startDate: body.startDate !== undefined ? (body.startDate ? new Date(body.startDate) : null) : undefined,
-        endDate: body.endDate !== undefined ? (body.endDate ? new Date(body.endDate) : null) : undefined,
-        warrantyStartDate: body.warrantyStartDate !== undefined ? (body.warrantyStartDate ? new Date(body.warrantyStartDate) : null) : undefined,
-        warrantyEndDate: body.warrantyEndDate !== undefined ? (body.warrantyEndDate ? new Date(body.warrantyEndDate) : null) : undefined,
-        contractorQuoteUrl: body.contractorQuoteUrl !== undefined ? body.contractorQuoteUrl : undefined,
-        discountPercent: body.discountPercent !== undefined ? body.discountPercent : undefined,
-        vatPercent: body.vatPercent !== undefined ? body.vatPercent : undefined,
-        conditions: body.conditions !== undefined ? body.conditions : undefined,
-        status: body.status || undefined,
-        notes: body.notes !== undefined ? body.notes : undefined,
-      },
-      include: {
-        workOrder: true,
-        quotation: true,
-        team: true,
-        items: { orderBy: [{ itemOrder: 'asc' }, { createdAt: 'asc' }] },
-        adjustments: { orderBy: { createdAt: 'asc' } },
-      },
-    });
+		if (!existing) {
+			return NextResponse.json({ error: 'Purchase order not found' }, { status: 404 });
+		}
 
-    return NextResponse.json(po);
-  } catch (error) {
-    console.error('PATCH /api/purchase-orders/[id] error:', error);
-    return NextResponse.json({ error: 'Failed to update purchase order' }, { status: 500 });
-  }
+		const po = await prisma.purchaseOrder.update({
+			where: { id },
+			data: {
+				workOrderId: body.workOrderId !== undefined ? body.workOrderId || null : undefined,
+				quotationId: body.quotationId !== undefined ? body.quotationId || null : undefined,
+				teamId: body.teamId !== undefined ? body.teamId || null : undefined,
+				date: body.date ? new Date(body.date) : undefined,
+				startDate:
+					body.startDate !== undefined ? (body.startDate ? new Date(body.startDate) : null) : undefined,
+				endDate: body.endDate !== undefined ? (body.endDate ? new Date(body.endDate) : null) : undefined,
+				warrantyStartDate:
+					body.warrantyStartDate !== undefined
+						? body.warrantyStartDate
+							? new Date(body.warrantyStartDate)
+							: null
+						: undefined,
+				warrantyEndDate:
+					body.warrantyEndDate !== undefined
+						? body.warrantyEndDate
+							? new Date(body.warrantyEndDate)
+							: null
+						: undefined,
+				contractorQuoteUrl: body.contractorQuoteUrl !== undefined ? body.contractorQuoteUrl : undefined,
+				discountPercent: body.discountPercent !== undefined ? body.discountPercent : undefined,
+				vatPercent: body.vatPercent !== undefined ? body.vatPercent : undefined,
+				conditions: body.conditions !== undefined ? body.conditions : undefined,
+				costType: COST_TYPES.includes(body.costType) ? body.costType : undefined,
+				costCategory: body.costCategory !== undefined ? body.costCategory || null : undefined,
+				payeeName: body.payeeName !== undefined ? body.payeeName || null : undefined,
+				warrantyMonths:
+					body.warrantyMonths !== undefined
+						? body.warrantyMonths
+							? Number(body.warrantyMonths)
+							: null
+						: undefined,
+				whtPercent: body.whtPercent !== undefined ? Number(body.whtPercent) || 0 : undefined,
+				status: body.status || undefined,
+				notes: body.notes !== undefined ? body.notes : undefined
+			},
+			include: {
+				workOrder: true,
+				quotation: true,
+				team: true,
+				items: { orderBy: [{ itemOrder: 'asc' }, { createdAt: 'asc' }] },
+				adjustments: { orderBy: { createdAt: 'asc' } }
+			}
+		});
+
+		// % ส่วนลด/VAT/หัก ณ ที่จ่าย เปลี่ยน → คำนวณยอดใหม่ (ราคารายการที่ล็อคแล้วไม่ถูกแตะ)
+		if (body.discountPercent !== undefined || body.vatPercent !== undefined || body.whtPercent !== undefined) {
+			await recalcPOTotals(id);
+			const fresh = await prisma.purchaseOrder.findUnique({ where: { id } });
+			return NextResponse.json({ ...po, ...fresh });
+		}
+
+		return NextResponse.json(po);
+	} catch (error) {
+		console.error('PATCH /api/purchase-orders/[id] error:', error);
+		return NextResponse.json({ error: 'Failed to update purchase order' }, { status: 500 });
+	}
 }
 
 // DELETE /api/purchase-orders/[id] — Cancel
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params;
-    const po = await prisma.purchaseOrder.update({
-      where: { id },
-      data: { status: 'CANCELLED' },
-    });
-    return NextResponse.json(po);
-  } catch (error) {
-    console.error('DELETE /api/purchase-orders/[id] error:', error);
-    return NextResponse.json({ error: 'Failed to cancel purchase order' }, { status: 500 });
-  }
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+	try {
+		const { id } = await params;
+		const po = await prisma.purchaseOrder.update({
+			where: { id },
+			data: { status: 'CANCELLED' }
+		});
+		return NextResponse.json(po);
+	} catch (error) {
+		console.error('DELETE /api/purchase-orders/[id] error:', error);
+		return NextResponse.json({ error: 'Failed to cancel purchase order' }, { status: 500 });
+	}
 }

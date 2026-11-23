@@ -1,0 +1,69 @@
+/* NPK Service — Tailwind CSS v4 theme tokens
+ * Copy into src/app/globals.css. Fonts are wired from next/font in app/layout.tsx:
+ *   const prompt  = Prompt({ subsets: ['thai','latin'], weight: ['400','500','600'], variable: '--font-prompt' })
+ *   const sarabun = Sarabun({ subsets: ['thai','latin'], weight: ['400','600'], variable: '--font-sarabun' })
+ *   <html lang="th" className={`${prompt.variable} ${sarabun.variable}`}>
+ */
+@import "tailwindcss";
+
+@theme {
+  /* Typography */
+  --font-sans: var(--font-sarabun), "Noto Sans Thai", system-ui, sans-serif;   /* body, tables, inputs */
+  --font-display: var(--font-prompt), "Noto Sans Thai", sans-serif;            /* headings, labels, buttons */
+
+  /* Brand greens */
+  --color-brand: #519638;          /* sidebar, login panel, avatar */
+  --color-brand-hover: #6aab52;    /* sidebar item hover */
+  --color-brand-soft: #8cc477;     /* decorative circles */
+  --color-primary: #3d7a28;        /* primary buttons, chart income bar, active pill */
+  --color-primary-hover: #336b21;
+  --color-primary-ink: #2f6b1f;    /* links, accent numbers, active nav text */
+  --color-primary-ink-hover: #24561a;
+  --color-on-brand: #0b1f05;       /* text on brand green */
+  --color-accent: #ecd914;         /* yellow count badges, logo dot */
+
+  /* Surfaces */
+  --color-canvas: #f1f8ee;         /* content background */
+  --color-surface: #ffffff;        /* cards, top bar */
+  --color-surface-2: #f5faf3;      /* table header, input-ish wells, info boxes */
+  --color-tint: #e3f1dc;           /* soft buttons, highlighted KPI card, icon chips */
+  --color-track: #f0f5ee;          /* progress tracks, neutral badges, count chips */
+  --color-line: #d7e6d0;           /* borders, dividers, table rules */
+  --color-line-strong: #879a7f;    /* input borders */
+
+  /* Text */
+  --color-ink: #1d2a1a;            /* primary text */
+  --color-ink-muted: #57674f;      /* secondary text (passes 4.5:1 on white and canvas) */
+
+  /* Semantic (badge bg / fg pairs) */
+  --color-warn: #b8560f;      --color-warn-soft: #fdeedd;      /* overdue-soon, pending payout, cost */
+  --color-success: #13795b;   --color-success-soft: #dcf3ea;   /* approved, paid */
+  --color-info: #1f5aa6;      --color-info-soft: #e3eefb;      /* sent, partial */
+  --color-danger: #c4161c;    --color-danger-soft: #fbe3e3;    /* cancelled, overdue, notification dot */
+  --color-violet: #4338ca;    --color-violet-soft: #e0e7ff;    /* paid (completed works) */
+  --color-chart-expense: #e5ad45;                               /* chart expense / cost bar */
+
+  /* Focus */
+  --color-focus: #1b2189;
+
+  /* Radii */
+  --radius-sm: 6px;     /* badges */
+  --radius-md: 8px;     /* icon buttons */
+  --radius-lg: 10px;    /* buttons, inputs, nav items */
+  --radius-xl: 14px;    /* small stat cards, logo tile */
+  --radius-2xl: 16px;   /* cards, top bar */
+  --radius-3xl: 32px;   /* content area top-left, login cards */
+
+  /* Shadows */
+  --shadow-card: 0 1px 2px rgba(29, 42, 26, 0.06), 0 4px 16px rgba(29, 42, 26, 0.05);
+  --shadow-float: 0 8px 32px rgba(29, 42, 26, 0.14);
+}
+
+@layer base {
+  html { color: var(--color-ink); background: var(--color-brand); }
+  body { font-family: var(--font-sans); }
+  h1, h2, h3, label, button, th { font-family: var(--font-display); }
+  a { color: var(--color-primary-ink); }
+  a:hover { color: var(--color-primary-ink-hover); }
+  :focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
+}
